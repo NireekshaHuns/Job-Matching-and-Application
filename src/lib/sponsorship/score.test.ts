@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { sponsorTierEnum } from '@/server/db/schema';
 import { scoreSponsorship, type SponsorHistory } from './score';
 
 const NOW = 2026;
@@ -30,9 +31,24 @@ describe('scoreSponsorship', () => {
       'Open only to citizens or permanent residents.',
       'Green card required.',
       'We will not sponsor applicants for work visas.',
+      // Regression strings from code review — common ATS phrasings.
+      'We are not able to provide visa sponsorship.',
+      'We cannot provide sponsorship for this role.',
+      'We do not currently offer sponsorship.',
+      'Sponsorship is not available for this position.',
+      'This role is not eligible for visa sponsorship.',
+      'Must be authorized to work in the United States without requiring current or future sponsorship.',
     ])('excludes: %j', (jd) => {
       // Excluded wins even if the employer has heavy history.
       expect(tier(jd, heavyRecent)).toBe('Excluded');
+    });
+
+    it('inclusive EEO phrasing is NOT excluded (auditable, not silently dropped)', () => {
+      expect(
+        tier(
+          'We welcome applications from citizens or permanent residents and visa holders alike.',
+        ),
+      ).not.toBe('Excluded');
     });
   });
 
@@ -66,6 +82,27 @@ describe('scoreSponsorship', () => {
         }),
       ).toBe('Medium');
     });
+
+    it('heavy count exactly at the recency boundary -> High', () => {
+      // NOW - RECENT_YEARS = 2023 is the oldest year that still counts.
+      expect(
+        tier('Backend role.', {
+          sponsorCount: 200,
+          approvalRate: 0.9,
+          lastFiledYear: 2023,
+        }),
+      ).toBe('High');
+    });
+
+    it('heavy count one year past the boundary -> Medium', () => {
+      expect(
+        tier('Backend role.', {
+          sponsorCount: 200,
+          approvalRate: 0.9,
+          lastFiledYear: 2022,
+        }),
+      ).toBe('Medium');
+    });
   });
 
   describe('Low — silent JD, little/no history', () => {
@@ -94,8 +131,30 @@ describe('scoreSponsorship', () => {
     });
   });
 
-  it('always returns a reason string', () => {
-    const result = scoreSponsorship({ jdText: 'Anything.', history: null }, { currentYear: NOW });
-    expect(result.reason.length).toBeGreaterThan(0);
+  describe('output contract', () => {
+    const cases: Array<{ jd: string; history: SponsorHistory | null }> = [
+      { jd: 'We offer visa sponsorship.', history: null },
+      { jd: 'Must be a US citizen.', history: null },
+      { jd: 'Backend role.', history: heavyRecent },
+      { jd: 'Backend role.', history: someOld },
+      { jd: 'Backend role.', history: null },
+    ];
+
+    it.each(cases)('always returns a valid tier and a non-empty reason: %j', ({ jd, history }) => {
+      const result = scoreSponsorship({ jdText: jd, history }, { currentYear: NOW });
+      expect(sponsorTierEnum.enumValues).toContain(result.tier);
+      expect(result.reason.length).toBeGreaterThan(0);
+    });
+
+    it('tiers by history when the JD is empty', () => {
+      expect(tier('', someOld)).toBe('Medium');
+      expect(tier('', null)).toBe('Low');
+    });
+
+    it('works without opts (uses the current year by default)', () => {
+      // No currentYear passed — just assert it returns a valid tier, no throw.
+      const result = scoreSponsorship({ jdText: 'Backend role.', history: heavyRecent });
+      expect(sponsorTierEnum.enumValues).toContain(result.tier);
+    });
   });
 });

@@ -16,7 +16,7 @@ export type SponsorTier = (typeof sponsorTierEnum.enumValues)[number];
 
 /** Per-employer government sponsorship history, already aggregated. */
 export interface SponsorHistory {
-  /** Recency-weighted count of H1B filings / approvals. */
+  /** Aggregate H1B filing count (may be recency-weighted at ingestion time). */
   sponsorCount: number;
   /** USCIS approval rate, 0–1, or null when unknown. */
   approvalRate: number | null;
@@ -36,33 +36,42 @@ export interface SponsorScore {
   reason: string;
 }
 
-/** A recent filing counts toward "heavy history" only if within this window. */
+/** Filings no older than this many years before "now" count as recent. */
 const RECENT_YEARS = 3;
 /** Filing count at/above which recent history alone justifies `High`. */
 const HEAVY_SPONSOR_COUNT = 50;
 
 /**
- * Explicit disqualifiers. These are complete negative statements, so matching
- * any one means the employer will not sponsor for this role. Checked first.
+ * "This employer won't sponsor" phrasings. The negated forms use a windowed
+ * `[^.]{0,N}` gap so an adverb between the negator and the verb still matches
+ * ("do not currently offer sponsorship"), and the gap never crosses a sentence
+ * boundary (periods are excluded), so a negation in a different sentence can't
+ * poison a real offer.
  */
-const DISQUALIFIER_PATTERNS: RegExp[] = [
+const NO_SPONSORSHIP_PATTERNS: RegExp[] = [
   /\bno\s+(?:visa\s+|h-?1b\s+)?sponsorship\b/i,
-  /\b(?:do(?:es)?|will|would|can|could)\s*n[o']?t\s+(?:be\s+able\s+to\s+)?(?:offer\s+(?:visa\s+|h-?1b\s+)?sponsorship|sponsor)\b/i,
-  /\b(?:unable|not\s+able)\s+to\s+(?:offer\s+(?:visa\s+)?sponsorship|sponsor)\b/i,
-  /\bwithout\s+(?:visa\s+|the\s+need\s+for\s+)?sponsorship\b/i,
-  /\bnot\s+(?:offer|provide|providing|offering)\s+(?:visa\s+|h-?1b\s+)?sponsorship\b/i,
-  /\bmust\s+be\s+(?:a\s+)?(?:u\.?\s?s\.?|united\s+states)\s+citizen/i,
-  /\b(?:u\.?\s?s\.?|united\s+states)\s+citizenship\s+(?:is\s+)?required\b/i,
-  /\bcitizens?\s+or\s+(?:lawful\s+)?permanent\s+residents?\b/i,
-  /\bgreen\s+card\s+(?:holder|required)\b/i,
-  /\bauthoriz(?:ed|ation)\s+to\s+work\b[^.]{0,40}\bwithout\s+sponsorship\b/i,
+  /\b(?:cannot|can'?t|will\s+not|won'?t|do(?:es)?\s+not|don'?t|are\s+not|is\s+not|unable\s+to|not\s+able\s+to|not\s+eligible\s+for)\b[^.]{0,30}\bsponsor(?:ship|ing)?\b/i,
+  /\bsponsorship\b[^.]{0,25}\bnot\s+(?:available|offered|provided|possible|an\s+option)\b/i,
+  /\bwithout\s+(?:visa\s+|the\s+need\s+for\s+|requiring\s+)?(?:current\s+or\s+future\s+)?sponsorship\b/i,
+  /\bauthoriz(?:ed|ation)\s+to\s+work\b[^.]{0,60}\bwithout\b[^.]{0,25}\bsponsorship\b/i,
 ];
 
 /**
- * Explicit positive offers. Kept tied to visa/sponsorship wording so a phrase
- * like "we sponsor local meetups" doesn't count. Only checked after the
- * disqualifiers, so a negated form ("does not offer sponsorship") never reaches
- * here.
+ * "Must be a citizen / permanent resident" phrasings. The permanent-resident
+ * one requires a restriction cue ("only", "must be", ...) so inclusive EEO
+ * boilerplate ("we welcome citizens or permanent residents and visa holders")
+ * is not wrongly excluded.
+ */
+const CITIZENSHIP_PATTERNS: RegExp[] = [
+  /\bmust\s+be\s+(?:a\s+)?(?:u\.?\s?s\.?|united\s+states)\s+citizen/i,
+  /\b(?:u\.?\s?s\.?|united\s+states)\s+citizenship\s+(?:is\s+)?required\b/i,
+  /\bgreen\s+card\s+(?:holder|required)\b/i,
+  /\b(?:only|must\s+be|limited\s+to|restricted\s+to|open\s+only\s+to|requires?)\b[^.]{0,40}\bpermanent\s+residents?\b/i,
+];
+
+/**
+ * Explicit positive offers. Kept tied to visa/sponsorship wording, and only
+ * checked after the disqualifiers so a negated form never reaches here.
  */
 const OFFER_PATTERNS: RegExp[] = [
   /\b(?:visa\s+|h-?1b\s+)?sponsorship\s+(?:is\s+)?available\b/i,
@@ -70,7 +79,7 @@ const OFFER_PATTERNS: RegExp[] = [
   // "will sponsor community meetups" doesn't read as a visa offer.
   /\bwill\s+sponsor\b[^.]{0,40}\b(?:visa|h-?1b|candidate|applicant|employee|individual|work\s+authoriz|green\s+card|permanent\s+resid|you)/i,
   /\b(?:offer|offers|offering|provide|provides|providing)\s+(?:visa\s+|h-?1b\s+)?sponsorship\b/i,
-  /\bopen\s+to\s+sponsor(?:ing|ship)?\b/i,
+  /\bopen\s+to\s+(?:providing\s+)?(?:visa\s+)?sponsor(?:ing|ship)\b/i,
   /\bwe\s+sponsor\s+(?:work\s+)?visas?\b/i,
   /\bsponsor\s+(?:your\s+)?(?:work\s+)?visa\b/i,
   /\bh-?1b\s+sponsorship\b/i,
@@ -82,16 +91,20 @@ function matchesAny(text: string, patterns: RegExp[]): boolean {
 
 /**
  * Assign an H1B possibility tier to a job. Always returns a tier — unknown
- * sponsorship is tiered `Low`, never dropped.
+ * sponsorship is tiered `Low`, never dropped. Disqualifiers are checked before
+ * offers so an explicit refusal can never be read as an offer.
  */
 export function scoreSponsorship(input: ScoreInput, opts?: { currentYear?: number }): SponsorScore {
-  const jd = input.jdText ?? '';
+  const jd = input.jdText;
   const currentYear = opts?.currentYear ?? new Date().getUTCFullYear();
 
-  if (matchesAny(jd, DISQUALIFIER_PATTERNS)) {
+  if (matchesAny(jd, NO_SPONSORSHIP_PATTERNS)) {
+    return { tier: 'Excluded', reason: 'JD states it does not offer sponsorship.' };
+  }
+  if (matchesAny(jd, CITIZENSHIP_PATTERNS)) {
     return {
       tier: 'Excluded',
-      reason: 'JD explicitly excludes sponsorship (no sponsorship / citizenship required).',
+      reason: 'JD requires US citizenship or permanent residency.',
     };
   }
 
