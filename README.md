@@ -35,13 +35,13 @@ pnpm dev
 
 ## Commands
 
-| Task       | Command                                                       |
-| ---------- | ------------------------------------------------------------- |
-| Dev server | `pnpm dev`                                                    |
-| Test       | `pnpm test` · `pnpm test:watch` · `pnpm test <path>`          |
-| Quality    | `pnpm lint` · `pnpm typecheck` · `pnpm format`                |
-| Database   | `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:studio`     |
-| Pipeline   | `pnpm inngest:dev`                                            |
+| Task       | Command                                                   |
+| ---------- | --------------------------------------------------------- |
+| Dev server | `pnpm dev`                                                |
+| Test       | `pnpm test` · `pnpm test:watch` · `pnpm test <path>`      |
+| Quality    | `pnpm lint` · `pnpm typecheck` · `pnpm format`            |
+| Database   | `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:studio` |
+| Pipeline   | `pnpm inngest:dev`                                        |
 
 ## Status
 

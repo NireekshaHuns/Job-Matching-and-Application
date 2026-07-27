@@ -22,6 +22,10 @@ source of truth. Never `ALTER TABLE` by hand or edit generated SQL.
      versioned migration (preferred once a migration is committed).
    - The `pgvector` extension must exist: `CREATE EXTENSION IF NOT EXISTS vector;` (add as the
      first migration if not present).
+   - **Papercut:** drizzle-kit does NOT emit `CREATE EXTENSION`. It is hand-added as the first
+     line of migration `0000` and is not tracked in `meta/`. If you ever regenerate `0000`
+     (delete + `db:generate`), re-add that line at the top, before any `vector(...)` column or
+     `USING hnsw` index — Postgres needs the type/opclass to exist first.
 
 4. **Types regenerate automatically** — Drizzle infers TS types from the schema, so `import`
    the table and its `$inferSelect` / `$inferInsert` types. Run `pnpm typecheck` to confirm

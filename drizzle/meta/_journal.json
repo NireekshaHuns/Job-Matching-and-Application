@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785173485687,
+      "tag": "0000_careful_agent_brand",
+      "breakpoints": true
+    }
+  ]
+}
