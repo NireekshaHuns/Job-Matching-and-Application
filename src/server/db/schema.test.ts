@@ -14,12 +14,7 @@ import {
 describe('db schema', () => {
   describe('enums', () => {
     it('sponsor tier is High/Medium/Low/Excluded (never a blended number)', () => {
-      expect(sponsorTierEnum.enumValues).toEqual([
-        'High',
-        'Medium',
-        'Low',
-        'Excluded',
-      ]);
+      expect(sponsorTierEnum.enumValues).toEqual(['High', 'Medium', 'Low', 'Excluded']);
     });
 
     it('employment type only distinguishes full_time vs contract', () => {

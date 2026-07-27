@@ -36,21 +36,13 @@ export const EMBEDDING_DIMENSIONS = 1536;
 // ---------------------------------------------------------------------------
 
 /** Full-time direct-hire is kept; contract/staffing is filtered out downstream. */
-export const employmentTypeEnum = pgEnum('employment_type', [
-  'full_time',
-  'contract',
-]);
+export const employmentTypeEnum = pgEnum('employment_type', ['full_time', 'contract']);
 
 /**
  * H1B possibility tier. Never discard unknown sponsorship — tier it. Only
  * explicit disqualifiers map to `Excluded` (hidden by default, but retained).
  */
-export const sponsorTierEnum = pgEnum('sponsor_tier', [
-  'High',
-  'Medium',
-  'Low',
-  'Excluded',
-]);
+export const sponsorTierEnum = pgEnum('sponsor_tier', ['High', 'Medium', 'Low', 'Excluded']);
 
 /** Normalized role family assigned by the LLM classify step. */
 export const roleFamilyEnum = pgEnum('role_family', [
@@ -79,17 +71,10 @@ export const applicationStatusEnum = pgEnum('application_status', [
 ]);
 
 /** How an application row was created. */
-export const applicationSourceEnum = pgEnum('application_source', [
-  'manual',
-  'outlook',
-]);
+export const applicationSourceEnum = pgEnum('application_source', ['manual', 'outlook']);
 
 /** Channel used for hiring-manager outreach. */
-export const outreachChannelEnum = pgEnum('outreach_channel', [
-  'linkedin',
-  'email',
-  'other',
-]);
+export const outreachChannelEnum = pgEnum('outreach_channel', ['linkedin', 'email', 'other']);
 
 // ---------------------------------------------------------------------------
 // Tables
@@ -108,9 +93,7 @@ export const sponsors = pgTable('sponsors', {
   /** USCIS approval rate, 0–1. Null when unknown. */
   approvalRate: real('approval_rate'),
   lastFiledYear: integer('last_filed_year'),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** Resume "lenses"; each is embedded for per-resume relevance scoring. */
@@ -121,16 +104,9 @@ export const resumes = pgTable(
     label: text('label').notNull(),
     s3Key: text('s3_key').notNull(),
     embedding: vector('embedding', { dimensions: EMBEDDING_DIMENSIONS }),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('resumes_embedding_idx').using(
-      'hnsw',
-      t.embedding.op('vector_cosine_ops'),
-    ),
-  ],
+  (t) => [index('resumes_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops'))],
 );
 
 /**
@@ -160,18 +136,13 @@ export const jobs = pgTable(
     sponsorReason: text('sponsor_reason'),
     /** Denormalized from `sponsors` at enrichment time for fast board reads. */
     sponsorCount: integer('sponsor_count'),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('jobs_sponsor_tier_idx').on(t.sponsorTier),
     index('jobs_role_family_idx').on(t.roleFamily),
     // Approximate nearest-neighbour index for resume↔job similarity search.
-    index('jobs_embedding_idx').using(
-      'hnsw',
-      t.embedding.op('vector_cosine_ops'),
-    ),
+    index('jobs_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
   ],
 );
 
@@ -193,16 +164,11 @@ export const jobScores = pgTable(
     relevanceScore: integer('relevance_score').notNull(),
     /** Skills the JD requires that the resume is missing (e.g. ["Kafka", "Go"]). */
     skillGaps: jsonb('skill_gaps').$type<string[]>().notNull().default([]),
-    scoredAt: timestamp('scored_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    scoredAt: timestamp('scored_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('job_scores_job_resume_idx').on(t.jobId, t.resumeId),
-    check(
-      'job_scores_relevance_range',
-      sql`${t.relevanceScore} between 0 and 100`,
-    ),
+    check('job_scores_relevance_range', sql`${t.relevanceScore} between 0 and 100`),
   ],
 );
 
@@ -216,9 +182,7 @@ export const applications = pgTable('applications', {
     onDelete: 'set null',
   }),
   status: applicationStatusEnum('status').notNull().default('applied'),
-  appliedAt: timestamp('applied_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
   source: applicationSourceEnum('source').notNull().default('manual'),
 });
 
@@ -239,9 +203,7 @@ export const outreachLog = pgTable('outreach_log', {
   contactId: integer('contact_id')
     .notNull()
     .references(() => contacts.id, { onDelete: 'cascade' }),
-  contactedAt: timestamp('contacted_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  contactedAt: timestamp('contacted_at', { withTimezone: true }).notNull().defaultNow(),
   channel: outreachChannelEnum('channel').notNull(),
 });
 
