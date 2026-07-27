@@ -35,6 +35,9 @@ const TRAILING_SUFFIXES = new Set([
   'USA',
 ]);
 
+/** Combining diacritical marks, matched via escape so the source stays ASCII. */
+const COMBINING_MARKS = new RegExp('[\\u0300-\\u036f]', 'g');
+
 /**
  * Normalize a raw company name to its canonical join key. Returns an empty
  * string for empty/nullish input.
@@ -42,7 +45,8 @@ const TRAILING_SUFFIXES = new Set([
 export function normalizeCompanyName(raw: string | null | undefined): string {
   if (!raw) return '';
 
-  let s = raw.toUpperCase();
+  // Fold diacritics so "Nestlé" and "Nestle" share a key.
+  let s = raw.normalize('NFKD').replace(COMBINING_MARKS, '').toUpperCase();
 
   // Drop trailing "doing business as" / "formerly known as" clauses.
   s = s.replace(/\b(DBA|FKA|AKA|D\/B\/A|F\/K\/A)\b.*$/g, ' ');

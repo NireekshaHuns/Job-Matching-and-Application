@@ -40,6 +40,11 @@ describe('normalizeCompanyName', () => {
   it('never reduces a name to nothing even if it is only a suffix word', () => {
     expect(normalizeCompanyName('Limited')).toBe('LIMITED');
   });
+
+  it('folds diacritics so accented and plain spellings match', () => {
+    expect(normalizeCompanyName('Nestlé')).toBe('NESTLE');
+    expect(normalizeCompanyName('Nestlé')).toBe(normalizeCompanyName('Nestle'));
+  });
 });
 
 describe('companyKeysMatch', () => {
@@ -55,5 +60,10 @@ describe('companyKeysMatch', () => {
   it('never matches on empty keys', () => {
     expect(companyKeysMatch('', '')).toBe(false);
     expect(companyKeysMatch(null, undefined)).toBe(false);
+  });
+
+  it('matches across leading THE and trailing suffix differences', () => {
+    expect(companyKeysMatch('Limited', 'Limited Inc')).toBe(true);
+    expect(companyKeysMatch('The Coca Cola Company', 'Coca Cola')).toBe(true);
   });
 });
