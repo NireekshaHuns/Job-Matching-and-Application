@@ -10,9 +10,10 @@
  * (H1B possibility) and `job_scores.relevance_score` (resume match). They are
  * never blended into one stored value. See CLAUDE.md → Domain rules.
  */
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -113,15 +114,24 @@ export const sponsors = pgTable('sponsors', {
 });
 
 /** Resume "lenses"; each is embedded for per-resume relevance scoring. */
-export const resumes = pgTable('resumes', {
-  id: serial('id').primaryKey(),
-  label: text('label').notNull(),
-  s3Key: text('s3_key').notNull(),
-  embedding: vector('embedding', { dimensions: EMBEDDING_DIMENSIONS }),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const resumes = pgTable(
+  'resumes',
+  {
+    id: serial('id').primaryKey(),
+    label: text('label').notNull(),
+    s3Key: text('s3_key').notNull(),
+    embedding: vector('embedding', { dimensions: EMBEDDING_DIMENSIONS }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('resumes_embedding_idx').using(
+      'hnsw',
+      t.embedding.op('vector_cosine_ops'),
+    ),
+  ],
+);
 
 /**
  * Cleaned, enriched job postings — the board's core entity. Written once per
@@ -157,6 +167,11 @@ export const jobs = pgTable(
   (t) => [
     index('jobs_sponsor_tier_idx').on(t.sponsorTier),
     index('jobs_role_family_idx').on(t.roleFamily),
+    // Approximate nearest-neighbour index for resume↔job similarity search.
+    index('jobs_embedding_idx').using(
+      'hnsw',
+      t.embedding.op('vector_cosine_ops'),
+    ),
   ],
 );
 
@@ -182,7 +197,13 @@ export const jobScores = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex('job_scores_job_resume_idx').on(t.jobId, t.resumeId)],
+  (t) => [
+    uniqueIndex('job_scores_job_resume_idx').on(t.jobId, t.resumeId),
+    check(
+      'job_scores_relevance_range',
+      sql`${t.relevanceScore} between 0 and 100`,
+    ),
+  ],
 );
 
 /** Applications the user has submitted (manually or imported from Outlook). */

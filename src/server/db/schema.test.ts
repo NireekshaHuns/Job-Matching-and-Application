@@ -1,6 +1,7 @@
 import { getTableColumns } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import {
+  applications,
   EMBEDDING_DIMENSIONS,
   employmentTypeEnum,
   jobScores,
@@ -73,6 +74,16 @@ describe('db schema', () => {
       const cols = getTableColumns(jobScores);
       expect(cols).toHaveProperty('relevanceScore');
       expect(cols).not.toHaveProperty('sponsorTier');
+    });
+  });
+
+  describe('applications nullability', () => {
+    // A job is required, but resume_id is intentionally nullable so an
+    // application row survives (set null) if its resume is deleted.
+    it('requires a job but allows a null resume', () => {
+      const cols = getTableColumns(applications);
+      expect(cols.jobId.notNull).toBe(true);
+      expect(cols.resumeId.notNull).toBe(false);
     });
   });
 

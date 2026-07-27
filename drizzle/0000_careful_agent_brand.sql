@@ -29,7 +29,8 @@ CREATE TABLE "job_scores" (
 	"resume_id" integer NOT NULL,
 	"relevance_score" integer NOT NULL,
 	"skill_gaps" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"scored_at" timestamp with time zone DEFAULT now() NOT NULL
+	"scored_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "job_scores_relevance_range" CHECK ("job_scores"."relevance_score" between 0 and 100)
 );
 --> statement-breakpoint
 CREATE TABLE "jobs" (
@@ -87,4 +88,6 @@ ALTER TABLE "job_scores" ADD CONSTRAINT "job_scores_resume_id_resumes_id_fk" FOR
 ALTER TABLE "outreach_log" ADD CONSTRAINT "outreach_log_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "job_scores_job_resume_idx" ON "job_scores" USING btree ("job_id","resume_id");--> statement-breakpoint
 CREATE INDEX "jobs_sponsor_tier_idx" ON "jobs" USING btree ("sponsor_tier");--> statement-breakpoint
-CREATE INDEX "jobs_role_family_idx" ON "jobs" USING btree ("role_family");
+CREATE INDEX "jobs_role_family_idx" ON "jobs" USING btree ("role_family");--> statement-breakpoint
+CREATE INDEX "jobs_embedding_idx" ON "jobs" USING hnsw ("embedding" vector_cosine_ops);--> statement-breakpoint
+CREATE INDEX "resumes_embedding_idx" ON "resumes" USING hnsw ("embedding" vector_cosine_ops);
