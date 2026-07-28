@@ -1,0 +1,38 @@
+[
+  {
+    "company_name": "Stripe",
+    "title": "New Grad Software Engineer",
+    "url": "https://jobs.example.com/stripe/1",
+    "locations": ["New York, NY", "Remote in USA"],
+    "date_posted": 1721400000,
+    "active": true,
+    "is_visible": true,
+    "sponsorship": "Other"
+  },
+  {
+    "company_name": "Databricks",
+    "title": "Software Engineer - University Grad",
+    "url": "https://jobs.example.com/databricks/2",
+    "location": "San Francisco, CA",
+    "date_posted": 1721300000,
+    "active": true,
+    "is_visible": true,
+    "sponsorship": "U.S. Citizenship is Required"
+  },
+  {
+    "company_name": "Hidden Co",
+    "title": "Should Be Skipped",
+    "url": "https://jobs.example.com/hidden/3",
+    "date_posted": 1721200000,
+    "active": true,
+    "is_visible": false
+  },
+  {
+    "company_name": "Inactive Co",
+    "title": "Also Skipped",
+    "url": "https://jobs.example.com/inactive/4",
+    "date_posted": 1721100000,
+    "active": false,
+    "is_visible": true
+  }
+]

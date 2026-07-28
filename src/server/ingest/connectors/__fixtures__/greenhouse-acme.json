@@ -1,0 +1,21 @@
+{
+  "jobs": [
+    {
+      "id": 1001,
+      "title": "Senior Software Engineer, Backend",
+      "updated_at": "2026-07-20T12:00:00-04:00",
+      "location": { "name": "New York, NY" },
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/1001",
+      "content": "&lt;p&gt;Build &amp;amp; scale APIs.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Go&lt;/li&gt;&lt;li&gt;Postgres&lt;/li&gt;&lt;/ul&gt;"
+    },
+    {
+      "id": 1002,
+      "title": "Frontend Engineer",
+      "updated_at": "2026-07-18T09:30:00-04:00",
+      "location": { "name": "Remote - US" },
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/1002",
+      "content": "<p>React &amp; TypeScript role.</p>"
+    }
+  ],
+  "meta": { "total": 2 }
+}
