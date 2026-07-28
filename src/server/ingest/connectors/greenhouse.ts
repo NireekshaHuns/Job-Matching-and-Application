@@ -20,13 +20,25 @@ interface GreenhouseJob {
   updated_at?: string;
   absolute_url: string;
   location?: { name?: string } | null;
+  /** Present on many boards; used when top-level `location` is empty. */
+  offices?: Array<{ name?: string }>;
   content?: string;
+}
+
+/** Prefer the top-level location; fall back to joined office names. */
+function jobLocation(job: GreenhouseJob): string | null {
+  const primary = job.location?.name?.trim();
+  if (primary) return primary;
+  const offices = (job.offices ?? [])
+    .map((o) => o.name?.trim())
+    .filter((name): name is string => Boolean(name));
+  return offices.length > 0 ? offices.join(', ') : null;
 }
 
 const SOURCE = 'greenhouse';
 const API_BASE = 'https://boards-api.greenhouse.io/v1/boards';
 
-function decodeEntities(s: string): string {
+function decodeEntitiesOnce(s: string): string {
   return s
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -36,15 +48,33 @@ function decodeEntities(s: string): string {
     .replace(/&nbsp;/g, ' ');
 }
 
-/** Flatten (possibly entity-encoded) HTML to readable plain text. */
+/** Decode to a fixed point so multi-encoded entities (`&amp;amp;`) fully resolve. */
+function decodeEntities(s: string): string {
+  let current = s;
+  for (let i = 0; i < 5; i++) {
+    const next = decodeEntitiesOnce(current);
+    if (next === current) break;
+    current = next;
+  }
+  return current;
+}
+
+/**
+ * Flatten (possibly entity-encoded) HTML to readable plain text.
+ *
+ * Decodes entities to a fixed point so markup like `&lt;p&gt;` becomes a real
+ * tag, then strips only tag-shaped spans ONCE — a `<` must be followed by a
+ * letter or `/` to count as a tag, so prose like "use a < b" survives. There is
+ * no decode after stripping, so tags can't be re-created and destroyed. (Inline
+ * pseudo-tags like `<String>` may still be dropped; fine for classifier input.)
+ */
 export function htmlToText(html: string): string {
-  // Decode first so entity-encoded markup (`&lt;p&gt;`) becomes real tags.
   const decoded = decodeEntities(html);
   const withBreaks = decoded
     .replace(/<\s*br\s*\/?\s*>/gi, '\n')
     .replace(/<\/(p|div|li|ul|ol|h[1-6]|tr)\s*>/gi, '\n');
-  const stripped = withBreaks.replace(/<[^>]+>/g, ' ');
-  return decodeEntities(stripped)
+  const stripped = withBreaks.replace(/<\/?[a-zA-Z][^>]*>/g, ' ');
+  return stripped
     .replace(/[ \t]+/g, ' ')
     .split('\n')
     .map((line) => line.trim())
@@ -83,7 +113,7 @@ export function greenhouseConnector(
         for (const job of data.jobs ?? []) {
           const title = job.title?.trim() ?? '';
           if (!title || !job.absolute_url) continue;
-          const location = job.location?.name?.trim() || null;
+          const location = jobLocation(job);
 
           postings.push({
             source: SOURCE,
