@@ -56,4 +56,23 @@ describe('parseUscisRows', () => {
     const records = parseUscisRows([{ 'Fiscal Year': 'n/a', Employer: 'Bar' }]);
     expect(records).toHaveLength(0);
   });
+
+  it('skips rows whose fiscal year is out of a sane range', () => {
+    expect(parseUscisRows([{ 'Fiscal Year': '20241', Employer: 'Typo Co' }])).toHaveLength(0);
+    expect(parseUscisRows([{ 'Fiscal Year': '19', Employer: 'Truncated Co' }])).toHaveLength(0);
+  });
+
+  it('treats a partially-numeric count as 0 rather than truncating it', () => {
+    const [rec] = parseUscisRows([
+      { 'Fiscal Year': '2024', Employer: 'Dirty Co', 'Initial Approval': '12 (est)' },
+    ]);
+    expect(rec.initialApprovals).toBe(0);
+  });
+
+  it('handles a BOM-prefixed CSV file', () => {
+    const withBom = `﻿Fiscal Year,Employer,Initial Approval\n2024,Foo,7\n`;
+    const [rec] = parseUscisCsv(withBom);
+    expect(rec.employer).toBe('Foo');
+    expect(rec.initialApprovals).toBe(7);
+  });
 });
