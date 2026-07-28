@@ -15,7 +15,7 @@ const CHUNK_SIZE = 500;
 
 /**
  * Insert or update sponsor rows, keyed by `company_name_normalized`. Returns
- * the number of rows written.
+ * the number of rows sent for upsert (not a new-vs-updated breakdown).
  */
 export async function loadSponsors(db: DB, aggregates: SponsorAggregate[]): Promise<number> {
   let written = 0;
