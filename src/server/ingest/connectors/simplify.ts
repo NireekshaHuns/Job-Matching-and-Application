@@ -20,6 +20,8 @@ interface SimplifyListing {
   date_updated?: number;
   active?: boolean;
   is_visible?: boolean;
+  /** Carried through in `raw`; the connector never acts on it (enrichment does). */
+  sponsorship?: string;
 }
 
 const DEFAULT_SOURCE = 'github:simplify-newgrad';
@@ -76,7 +78,8 @@ export function simplifyNewGradConnector(
           location,
           url,
           jdText: '',
-          postedDate: toIsoDate(listing.date_posted ?? listing.date_updated),
+          // `||` not `??`: treat a 0 / missing date_posted as unknown and fall back.
+          postedDate: toIsoDate(listing.date_posted || listing.date_updated),
           fingerprint: postingFingerprint(company, title, location),
           raw: listing,
         });
