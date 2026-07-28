@@ -88,7 +88,8 @@ export const outreachChannelEnum = pgEnum('outreach_channel', ['linkedin', 'emai
 export const sponsors = pgTable('sponsors', {
   id: serial('id').primaryKey(),
   companyNameNormalized: text('company_name_normalized').notNull().unique(),
-  /** Recency-weighted count of H1B filings / approvals (written by the pipeline). */
+  /** Raw lifetime total of H1B approvals (written by the pipeline). Recency is
+   * applied at scoring time via `last_filed_year`, not baked into this count. */
   sponsorCount: integer('sponsor_count').notNull().default(0),
   /** USCIS approval rate, 0–1. Null when unknown. */
   approvalRate: real('approval_rate'),

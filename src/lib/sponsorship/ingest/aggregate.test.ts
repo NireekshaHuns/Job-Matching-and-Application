@@ -57,6 +57,15 @@ describe('aggregateSponsors', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('keeps a denials-only employer with a 0 count and 0 approval rate', () => {
+    const [deniedOnly] = aggregateSponsors([
+      rec({ employer: 'Never Approved Co', fiscalYear: 2024, initialDenials: 5 }),
+    ]);
+    expect(deniedOnly.sponsorCount).toBe(0);
+    expect(deniedOnly.approvalRate).toBe(0);
+    expect(deniedOnly.lastFiledYear).toBe(2024);
+  });
+
   it('uses the latest active fiscal year and null rate only when no decisions', () => {
     const result = aggregateSponsors([
       rec({ employer: 'X', fiscalYear: 2020, initialApprovals: 1 }),

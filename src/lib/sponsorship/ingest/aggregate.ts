@@ -1,6 +1,7 @@
 /**
- * Aggregate per-employer-per-year USCIS records into one row per employer,
- * keyed by the normalized company name so name variants collapse together.
+ * Aggregate USCIS records into one row per employer, keyed by the normalized
+ * company name so name variants collapse together. Multiple source rows for the
+ * same employer-year (the file can split by state/NAICS) are summed on purpose.
  *
  * Pure — reuses `normalizeCompanyName` (the same join key jobs are matched on).
  */
@@ -9,11 +10,18 @@ import type { UscisRecord } from './parse';
 
 export interface SponsorAggregate {
   companyNameNormalized: string;
-  /** Total approvals (initial + continuing) across all years. */
+  /**
+   * Raw lifetime total of approvals (initial + continuing) across all years.
+   * NOT recency-weighted — recency is applied at scoring time via
+   * `lastFiledYear` (see `scoreSponsorship`).
+   */
   sponsorCount: number;
   /** approvals / (approvals + denials), rounded to 4 dp; null if no decisions. */
   approvalRate: number | null;
-  /** Most recent fiscal year with any decision activity. */
+  /**
+   * Latest fiscal year with any decision activity. The Data Hub reports
+   * decisions, not filings, so this approximates "last filed year".
+   */
   lastFiledYear: number;
 }
 
