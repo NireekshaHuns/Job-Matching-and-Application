@@ -2,6 +2,11 @@
  * Application tracker. Records real applications (manual or, later, Outlook-
  * verified) with the resume version used, so you know exactly what you sent to
  * each company for interview prep.
+ *
+ * Single-user personal app: procedures are intentionally public (no auth). If
+ * this ever goes multi-user, the create/update/remove mutations gate first.
+ * Duplicate applications per job are allowed by design (you may apply again with
+ * a different resume); the board just shows the first as "Applied".
  */
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -23,6 +28,18 @@ export const updateApplicationInput = z.object({
   resumeLabel: z.string().max(200).nullish(),
   resumeSnapshot: z.string().nullish(),
 });
+export type UpdateApplicationInput = z.infer<typeof updateApplicationInput>;
+
+/** Pure: turn an update input into the set of columns to change (unit-tested). */
+export function buildApplicationUpdate(
+  input: UpdateApplicationInput,
+): Partial<typeof applications.$inferInsert> {
+  const set: Partial<typeof applications.$inferInsert> = {};
+  if (input.status !== undefined) set.status = input.status;
+  if (input.resumeLabel !== undefined) set.resumeLabel = input.resumeLabel;
+  if (input.resumeSnapshot !== undefined) set.resumeSnapshot = input.resumeSnapshot;
+  return set;
+}
 
 export const applicationsRouter = createTRPCRouter({
   list: publicProcedure.query(async ({ ctx }) => {
@@ -65,10 +82,7 @@ export const applicationsRouter = createTRPCRouter({
   }),
 
   update: publicProcedure.input(updateApplicationInput).mutation(async ({ ctx, input }) => {
-    const set: Partial<typeof applications.$inferInsert> = {};
-    if (input.status !== undefined) set.status = input.status;
-    if (input.resumeLabel !== undefined) set.resumeLabel = input.resumeLabel;
-    if (input.resumeSnapshot !== undefined) set.resumeSnapshot = input.resumeSnapshot;
+    const set = buildApplicationUpdate(input);
     if (Object.keys(set).length > 0) {
       await ctx.db.update(applications).set(set).where(eq(applications.id, input.id));
     }

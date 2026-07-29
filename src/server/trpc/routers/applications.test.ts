@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createApplicationInput, updateApplicationInput } from './applications';
+import {
+  buildApplicationUpdate,
+  createApplicationInput,
+  updateApplicationInput,
+} from './applications';
 
 describe('createApplicationInput', () => {
   it('requires a jobId and defaults status to applied', () => {
@@ -20,5 +24,19 @@ describe('updateApplicationInput', () => {
     expect(updateApplicationInput.parse({ id: 1, resumeSnapshot: null }).resumeSnapshot).toBeNull();
     expect(updateApplicationInput.parse({ id: 1, status: 'offer' }).status).toBe('offer');
     expect(updateApplicationInput.parse({ id: 1 })).toEqual({ id: 1 });
+  });
+});
+
+describe('buildApplicationUpdate', () => {
+  it('omits fields left undefined (no-op update)', () => {
+    expect(buildApplicationUpdate({ id: 1 })).toEqual({});
+  });
+
+  it('clears a field set to null and updates provided ones', () => {
+    expect(buildApplicationUpdate({ id: 1, resumeLabel: null })).toEqual({ resumeLabel: null });
+    expect(buildApplicationUpdate({ id: 1, status: 'offer', resumeSnapshot: 'x' })).toEqual({
+      status: 'offer',
+      resumeSnapshot: 'x',
+    });
   });
 });
