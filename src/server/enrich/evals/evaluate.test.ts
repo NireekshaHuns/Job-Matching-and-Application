@@ -12,6 +12,7 @@ function oracleClassify(posting: RawPosting): Promise<Classification> {
     roleFamily: match?.expected.roleFamily ?? 'other',
     seniority: match?.expected.seniority ?? 'other',
     skills: [],
+    softKeywords: [],
   });
 }
 
@@ -29,6 +30,7 @@ describe('evaluateClassifier', () => {
       roleFamily: 'backend',
       seniority: 'mid',
       skills: [],
+      softKeywords: [],
     });
     const result = await evaluateClassifier(alwaysBackendMid);
     expect(result.accuracy).toBeLessThan(1);

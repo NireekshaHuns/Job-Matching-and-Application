@@ -132,6 +132,10 @@ export const jobs = pgTable(
     employmentType: employmentTypeEnum('employment_type').notNull(),
     roleFamily: roleFamilyEnum('role_family'),
     seniority: seniorityEnum('seniority'),
+    /** Technical keywords from the JD — basis for resume keyword matching. */
+    techKeywords: jsonb('tech_keywords').$type<string[]>().notNull().default([]),
+    /** Soft-skill keywords the JD emphasizes. */
+    softKeywords: jsonb('soft_keywords').$type<string[]>().notNull().default([]),
     // H1B possibility score — kept separate from relevance (see job_scores).
     sponsorTier: sponsorTierEnum('sponsor_tier').notNull(),
     sponsorReason: text('sponsor_reason'),
