@@ -1,24 +1,19 @@
 'use client';
 
+import type { inferRouterOutputs } from '@trpc/server';
 import { useState } from 'react';
+import type { AppRouter } from '@/server/trpc/root';
 import { trpc } from '@/trpc/react';
 
 const STATUSES = ['saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn'] as const;
 type Status = (typeof STATUSES)[number];
 
-type Application = {
-  id: number;
-  status: Status;
-  appliedAt: Date;
-  source: 'manual' | 'outlook';
-  company: string;
-  title: string;
-  url: string;
-  resumeLabel: string | null;
-  resumeSnapshot: string | null;
-};
+// Derived from the router so the row type can never drift from the query.
+type Application = inferRouterOutputs<AppRouter>['applications']['list'][number];
 
 function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () => void }) {
+  // Local editor state; the parent remounts this row (via key) when the server
+  // row changes, so these re-seed from the fresh prop without a resync effect.
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState(app.resumeLabel ?? '');
   const [snapshot, setSnapshot] = useState(app.resumeSnapshot ?? '');
@@ -45,8 +40,9 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
         </div>
         <select
           value={app.status}
+          disabled={update.isPending}
           onChange={(e) => update.mutate({ id: app.id, status: e.target.value as Status })}
-          className="rounded border border-zinc-300 px-1 py-1 text-sm"
+          className="rounded border border-zinc-300 px-1 py-1 text-sm disabled:opacity-50"
         >
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -128,7 +124,11 @@ export default function Tracker() {
 
       <ul className="space-y-3">
         {query.data?.map((app) => (
-          <ApplicationRow key={app.id} app={app as Application} onChanged={onChanged} />
+          <ApplicationRow
+            key={`${app.id}:${app.resumeLabel ?? ''}:${app.resumeSnapshot ?? ''}`}
+            app={app}
+            onChanged={onChanged}
+          />
         ))}
       </ul>
     </main>

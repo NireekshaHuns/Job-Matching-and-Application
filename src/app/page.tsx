@@ -39,7 +39,18 @@ export default function Home() {
   const appliedQuery = trpc.applications.appliedJobIds.useQuery();
   const applied = new Set(appliedQuery.data ?? []);
   const markApplied = trpc.applications.create.useMutation({
-    onSuccess: () => utils.applications.appliedJobIds.invalidate(),
+    // Optimistically mark applied so the button flips immediately and a fast
+    // double-click can't create duplicate rows; roll back on error.
+    onMutate: async (vars) => {
+      await utils.applications.appliedJobIds.cancel();
+      const prev = utils.applications.appliedJobIds.getData();
+      utils.applications.appliedJobIds.setData(undefined, (old) => [...(old ?? []), vars.jobId]);
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) utils.applications.appliedJobIds.setData(undefined, ctx.prev);
+    },
+    onSettled: () => utils.applications.appliedJobIds.invalidate(),
   });
   const lensLabel = resumesQuery.data?.find((r) => r.id === resumeId)?.label;
   const jobsQuery = trpc.jobs.list.useQuery({
