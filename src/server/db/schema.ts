@@ -76,6 +76,12 @@ export const applicationSourceEnum = pgEnum('application_source', ['manual', 'ou
 /** Channel used for hiring-manager outreach. */
 export const outreachChannelEnum = pgEnum('outreach_channel', ['linkedin', 'email', 'other']);
 
+/** A base resume (hand-authored) vs. a tailored one generated for a job. */
+export const resumeKindEnum = pgEnum('resume_kind', ['base', 'tailored']);
+
+/** Whether a master-inventory skill is technical or a soft competency. */
+export const skillKindEnum = pgEnum('skill_kind', ['technical', 'soft']);
+
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
@@ -97,17 +103,55 @@ export const sponsors = pgTable('sponsors', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** Resume "lenses"; each is embedded for per-resume relevance scoring. */
+/**
+ * Resumes — base resumes (hand-authored LaTeX per role family) and, later,
+ * tailored ones generated per job. `content` holds the LaTeX/markdown text;
+ * `s3_key` is optional (a rendered PDF may or may not exist).
+ */
 export const resumes = pgTable(
   'resumes',
   {
     id: serial('id').primaryKey(),
     label: text('label').notNull(),
-    s3Key: text('s3_key').notNull(),
+    kind: resumeKindEnum('kind').notNull().default('base'),
+    roleFamily: roleFamilyEnum('role_family'),
+    /** LaTeX/markdown source of the resume. */
+    content: text('content'),
+    s3Key: text('s3_key'),
     embedding: vector('embedding', { dimensions: EMBEDDING_DIMENSIONS }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('resumes_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops'))],
+);
+
+/**
+ * Master skills inventory — the truthful superset of everything the user knows.
+ * Tailoring is bounded by this; it never surfaces a skill not present here.
+ */
+export const masterSkills = pgTable('master_skills', {
+  id: serial('id').primaryKey(),
+  /** Normalized (lowercased) skill/keyword; unique join key. */
+  skill: text('skill').notNull().unique(),
+  kind: skillKindEnum('kind').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Bullet bank — real accomplishment bullets, each tagged with the skills it
+ * demonstrates. Tailoring selects/reworders from these (never invents).
+ */
+export const resumeBullets = pgTable(
+  'resume_bullets',
+  {
+    id: serial('id').primaryKey(),
+    text: text('text').notNull(),
+    /** Skill/keyword tags this bullet demonstrates (lowercased). */
+    skills: jsonb('skills').$type<string[]>().notNull().default([]),
+    roleFamily: roleFamilyEnum('role_family'),
+    company: text('company'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('resume_bullets_role_family_idx').on(t.roleFamily)],
 );
 
 /**
@@ -273,3 +317,7 @@ export type Contact = typeof contacts.$inferSelect;
 export type NewContact = typeof contacts.$inferInsert;
 export type OutreachLogEntry = typeof outreachLog.$inferSelect;
 export type NewOutreachLogEntry = typeof outreachLog.$inferInsert;
+export type MasterSkill = typeof masterSkills.$inferSelect;
+export type NewMasterSkill = typeof masterSkills.$inferInsert;
+export type ResumeBullet = typeof resumeBullets.$inferSelect;
+export type NewResumeBullet = typeof resumeBullets.$inferInsert;
