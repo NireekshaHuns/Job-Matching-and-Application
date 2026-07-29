@@ -3,14 +3,16 @@
  * `buildConnectors` takes an injectable fetcher so it can be exercised with a
  * fixture client in tests.
  */
+import { ashbyConnector, type AshbyBoard } from './connectors/ashby';
 import { greenhouseConnector, type GreenhouseBoard } from './connectors/greenhouse';
+import { leverConnector, type LeverBoard } from './connectors/lever';
 import { simplifyNewGradConnector } from './connectors/simplify';
 import type { Fetcher, JobConnector } from './types';
 
 /**
- * Starter set of Greenhouse boards. Hand-seeded for now; a later ticket will
- * discover more tokens from the SimplifyJobs listing URLs. Tokens should be
- * validated against the live board API before relying on them.
+ * Hand-seeded starter tokens per ATS. A later ticket discovers more from the
+ * SimplifyJobs listing URLs + public seed lists. Validate tokens against the
+ * live API before relying on them (~20–40% churn at any time).
  */
 export const GREENHOUSE_BOARDS: GreenhouseBoard[] = [
   { token: 'stripe', company: 'Stripe' },
@@ -18,6 +20,21 @@ export const GREENHOUSE_BOARDS: GreenhouseBoard[] = [
   { token: 'airbnb', company: 'Airbnb' },
 ];
 
+export const LEVER_BOARDS: LeverBoard[] = [
+  { token: 'netflix', company: 'Netflix' },
+  { token: 'plaid', company: 'Plaid' },
+];
+
+export const ASHBY_BOARDS: AshbyBoard[] = [
+  { board: 'ramp', company: 'Ramp' },
+  { board: 'notion', company: 'Notion' },
+];
+
 export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnector[] {
-  return [greenhouseConnector(GREENHOUSE_BOARDS, fetcher), simplifyNewGradConnector({}, fetcher)];
+  return [
+    greenhouseConnector(GREENHOUSE_BOARDS, fetcher),
+    leverConnector(LEVER_BOARDS, fetcher),
+    ashbyConnector(ASHBY_BOARDS, fetcher),
+    simplifyNewGradConnector({}, fetcher),
+  ];
 }
