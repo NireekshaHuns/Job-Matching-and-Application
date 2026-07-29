@@ -65,12 +65,41 @@ export function escapeLike(term: string): string {
   return term.replace(/[\\%_]/g, '\\$&');
 }
 
+/**
+ * Combined-sort weights (display-only blend; scores are never merged into a
+ * stored value). One sponsor tier ≈ `TIER_WEIGHT` fit points, so tier stays
+ * dominant. Freshness is a gentle nudge that decays linearly from `FRESHNESS_MAX`
+ * (a brand-new post) to 0 over `FRESHNESS_WINDOW_DAYS`.
+ */
+export const TIER_WEIGHT = 100;
+export const FRESHNESS_MAX = 20;
+export const FRESHNESS_WINDOW_DAYS = 30;
+
+/** Linear recency boost: `FRESHNESS_MAX` at 0 days → 0 at the window edge. */
+export function freshnessBoost(ageDays: number): number {
+  if (ageDays <= 0) return FRESHNESS_MAX;
+  if (ageDays >= FRESHNESS_WINDOW_DAYS) return 0;
+  return FRESHNESS_MAX * (1 - ageDays / FRESHNESS_WINDOW_DAYS);
+}
+
+/**
+ * Pure combined-rank score the SQL below mirrors. Kept as a helper so the
+ * intended formula is unit-tested; the DB expression must stay in sync.
+ */
+export function combinedRank(input: { tierRank: number; fit: number; ageDays: number }): number {
+  return input.tierRank * TIER_WEIGHT + input.fit + freshnessBoost(input.ageDays);
+}
+
 const TIER_RANK = sql<number>`case ${jobs.sponsorTier}
   when 'High' then 3 when 'Medium' then 2 when 'Low' then 1 else 0 end`;
 const FIT = sql`${jobScores.relevanceScore} desc nulls last`;
 const POSTED = sql`${jobs.postedDate} desc nulls last`;
-// Display blend: one tier ≈ 100 fit points. Degrades to tier-major with no lens.
-const COMBINED = sql`(${TIER_RANK} * 100 + coalesce(${jobScores.relevanceScore}, 0)) desc`;
+// Age in days from the posted date (falling back to when we ingested the row).
+const AGE_DAYS = sql`extract(epoch from (now() - coalesce(${jobs.postedDate}::timestamptz, ${jobs.createdAt}))) / 86400.0`;
+// Mirrors freshnessBoost() in SQL: greatest(0, MAX * (1 - min(age, window)/window)).
+const FRESHNESS = sql`greatest(0::float, ${sql.raw(String(FRESHNESS_MAX))} * (1 - least(${AGE_DAYS}, ${sql.raw(String(FRESHNESS_WINDOW_DAYS))}::float) / ${sql.raw(String(FRESHNESS_WINDOW_DAYS))}::float))`;
+// Display blend (mirrors combinedRank): tier-major, then fit, then a freshness nudge.
+const COMBINED = sql`(${TIER_RANK} * ${sql.raw(String(TIER_WEIGHT))} + coalesce(${jobScores.relevanceScore}, 0) + ${FRESHNESS}) desc`;
 
 export const jobsRouter = createTRPCRouter({
   list: publicProcedure.input(jobListInput).query(async ({ ctx, input }) => {
