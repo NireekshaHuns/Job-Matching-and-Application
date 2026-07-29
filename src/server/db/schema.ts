@@ -237,6 +237,10 @@ export const applications = pgTable('applications', {
   resumeLabel: text('resume_label'),
   /** The actual resume text used for this application (for interview prep). */
   resumeSnapshot: text('resume_snapshot'),
+  /** Set when an Outlook "application received" email is matched to this row. */
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  /** Graph message id of the confirming email — dedupes reconcile + audits the match. */
+  confirmationEmailId: text('confirmation_email_id'),
 });
 
 /** Hiring-manager / recruiter contacts associated with a job. */
