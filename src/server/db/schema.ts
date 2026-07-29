@@ -222,22 +222,35 @@ export const jobScores = pgTable(
 );
 
 /** Applications the user has submitted (manually or imported from Outlook). */
-export const applications = pgTable('applications', {
-  id: serial('id').primaryKey(),
-  jobId: integer('job_id')
-    .notNull()
-    .references(() => jobs.id, { onDelete: 'cascade' }),
-  resumeId: integer('resume_id').references(() => resumes.id, {
-    onDelete: 'set null',
-  }),
-  status: applicationStatusEnum('status').notNull().default('applied'),
-  appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
-  source: applicationSourceEnum('source').notNull().default('manual'),
-  /** Label of the resume version used (e.g. "Backend — Stripe"). */
-  resumeLabel: text('resume_label'),
-  /** The actual resume text used for this application (for interview prep). */
-  resumeSnapshot: text('resume_snapshot'),
-});
+export const applications = pgTable(
+  'applications',
+  {
+    id: serial('id').primaryKey(),
+    jobId: integer('job_id')
+      .notNull()
+      .references(() => jobs.id, { onDelete: 'cascade' }),
+    resumeId: integer('resume_id').references(() => resumes.id, {
+      onDelete: 'set null',
+    }),
+    status: applicationStatusEnum('status').notNull().default('applied'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+    source: applicationSourceEnum('source').notNull().default('manual'),
+    /** Label of the resume version used (e.g. "Backend — Stripe"). */
+    resumeLabel: text('resume_label'),
+    /** The actual resume text used for this application (for interview prep). */
+    resumeSnapshot: text('resume_snapshot'),
+    /** Set when an Outlook "application received" email is matched to this row. */
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    /** Graph message id of the confirming email — dedupes reconcile + audits the match. */
+    confirmationEmailId: text('confirmation_email_id'),
+  },
+  (t) => [
+    // One confirming email can back at most one application (idempotency backstop).
+    uniqueIndex('applications_confirmation_email_idx')
+      .on(t.confirmationEmailId)
+      .where(sql`${t.confirmationEmailId} is not null`),
+  ],
+);
 
 /** Hiring-manager / recruiter contacts associated with a job. */
 export const contacts = pgTable('contacts', {
