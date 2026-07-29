@@ -60,7 +60,10 @@ export const WEAK_VERBS = [
   'supported',
 ];
 
-/** Fluff/cliches that should never appear. */
+/**
+ * Fluff/cliches that should never appear. ("dynamic" is deliberately excluded —
+ * it's a common technical adjective: dynamic programming, dynamic imports.)
+ */
 export const BUZZWORDS = [
   'synergy',
   'team player',
@@ -71,7 +74,6 @@ export const BUZZWORDS = [
   'results-driven',
   'self-starter',
   'think outside the box',
-  'dynamic',
   'go-to person',
   'rockstar',
   'ninja',
@@ -88,8 +90,8 @@ export const RESUME_RUBRIC_PROMPT = [
   '',
   'Bullets:',
   '- Use the Google XYZ formula: "Accomplished X as measured by Y by doing Z", aligned to the JD.',
-  '- Start every bullet with a strong builder verb (e.g. shipped, led, built, improved, automated).',
-  '- Never use bystander verbs (assisted, helped, worked on, responsible for). Take credit.',
+  `- Start every bullet with a strong builder verb (e.g. ${STRONG_VERBS.slice(0, 10).join(', ')}).`,
+  `- Never start with a bystander verb: ${WEAK_VERBS.join(', ')}. Take credit.`,
   '- Include real, specific metrics (latency, throughput, users, %, time saved).',
   '- Bullets must read like real engineering work, not homework assignments. Keep them full.',
   '',
@@ -97,6 +99,8 @@ export const RESUME_RUBRIC_PROMPT = [
   '- Weave the JD’s technical and soft keywords naturally throughout — never keyword-stuff.',
   '- Omit basic software-engineer expectations; only surface differentiating keywords.',
   '- Drop skills and content the JD does not need. Do not send a generic resume.',
+  '',
+  `Banned words (fluff/cliches): ${BUZZWORDS.join(', ')}.`,
   '',
   `Form: ${WORD_MIN}–${WORD_MAX} words; Arial/Calibri; consistent end punctuation across bullets;`,
   'bold organization names; list work experience as title first, then employer; tight layout',

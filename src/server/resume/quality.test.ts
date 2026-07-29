@@ -1,27 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { lintResume } from './quality';
 
-/** 12-word bullets: strong verb start, a metric, trailing period. */
+/**
+ * Distinct, realistic bullets with varied strong verbs (incl. ones NOT in the
+ * allowlist, e.g. Spearheaded/Refactored/Owned), each with a metric + period.
+ */
 const GOOD_BULLETS = [
-  '- Shipped a payments API that cut p99 latency by 40% for users.',
-  '- Led a migration that reduced infra cost by 30% across 12 services.',
-  '- Automated deployments that improved release speed by 50% for two platform teams.',
+  '- Shipped a payments API that cut p99 latency by 40% for active users.',
+  '- Led a data migration that reduced infrastructure cost by 30% across teams.',
+  '- Spearheaded a rewrite that improved request throughput by 3x for the platform.',
+  '- Refactored the auth service, cutting error rates by 25% within two weeks.',
+  '- Automated deployments that improved release frequency by 50% for platform teams.',
+  '- Migrated services to Kubernetes, reducing production incidents by 60% overall.',
+  '- Designed a caching layer that boosted cache hit rate to 95% in production.',
+  '- Owned the billing pipeline, improving invoice accuracy by 20% for customers.',
 ];
 
-/** Repeat good bullets to land within the 475–600 word target. */
-function goodResume(n = 42): string {
+/** Cycle distinct bullets to land within the 475–600 word target. */
+function goodResume(n = 44): string {
   const lines: string[] = [];
   for (let i = 0; i < n; i++) lines.push(GOOD_BULLETS[i % GOOD_BULLETS.length]);
   return lines.join('\n');
 }
 
 describe('lintResume', () => {
-  it('passes a well-formed resume', () => {
+  it('passes a well-formed resume with varied (incl. unlisted) strong verbs', () => {
     const report = lintResume(goodResume());
     expect(report.ok).toBe(true);
     expect(report.wordCount).toBeGreaterThanOrEqual(475);
     expect(report.wordCount).toBeLessThanOrEqual(600);
-    expect(report.bulletCount).toBe(42);
+    expect(report.bulletCount).toBe(44);
   });
 
   it('flags a resume that is too short', () => {
@@ -30,12 +38,31 @@ describe('lintResume', () => {
     expect(report.violations.some((v) => v.rule === 'word-count')).toBe(true);
   });
 
-  it('flags bystander verbs as errors', () => {
-    const report = lintResume(
+  it('flags bystander verbs as errors (single word and phrase)', () => {
+    const helped = lintResume(
       goodResume() + '\n- Helped with the backend and assisted the team daily.',
     );
-    expect(report.violations.some((v) => v.rule === 'weak-verb')).toBe(true);
-    expect(report.ok).toBe(false);
+    expect(helped.violations.some((v) => v.rule === 'weak-verb')).toBe(true);
+    expect(helped.ok).toBe(false);
+
+    const workedOn = lintResume('- Worked on the backend service for the platform team.');
+    expect(workedOn.violations.some((v) => v.rule === 'weak-verb')).toBe(true);
+  });
+
+  it('does not flag an unlisted-but-strong verb as weak', () => {
+    const report = lintResume('- Spearheaded a rewrite that cut latency by 40% for active users.');
+    expect(report.violations.some((v) => v.rule === 'weak-verb')).toBe(false);
+  });
+
+  it('does not count a bare year as a metric', () => {
+    const report = lintResume(
+      [
+        '- Graduated in 2024 from a university program.',
+        '- Founded a club in 2021 with peers.',
+      ].join('\n'),
+    );
+    // No real metrics -> metrics warn fires (years did not count).
+    expect(report.violations.some((v) => v.rule === 'metrics')).toBe(true);
   });
 
   it('warns when few bullets have metrics (homework-style bullets)', () => {
@@ -75,10 +102,17 @@ describe('lintResume', () => {
     expect(report.violations.some((v) => v.rule === 'keyword-coverage')).toBe(true);
   });
 
-  it('handles LaTeX \\item bullets', () => {
+  it('handles LaTeX \\item bullets and still detects the metric', () => {
     const report = lintResume(
       '\\item Shipped a \\textbf{payments} API that cut p99 latency by 40\\% for users.',
     );
     expect(report.bulletCount).toBe(1);
+    // 40% survived the LaTeX stripping, so no metrics warning.
+    expect(report.violations.some((v) => v.rule === 'metrics')).toBe(false);
+  });
+
+  it('does not flag "dynamic" (a technical adjective) as a buzzword', () => {
+    const report = lintResume('- Built a dynamic form renderer that cut load time by 30%.');
+    expect(report.violations.some((v) => v.rule === 'buzzword')).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RESUME_RUBRIC_PROMPT, WORD_MAX, WORD_MIN } from './rubric';
+import { BUZZWORDS, RESUME_RUBRIC_PROMPT, WEAK_VERBS, WORD_MAX, WORD_MIN } from './rubric';
 
 describe('RESUME_RUBRIC_PROMPT', () => {
   it('encodes the non-negotiable rules', () => {
@@ -10,6 +10,12 @@ describe('RESUME_RUBRIC_PROMPT', () => {
     expect(p).toContain('keyword-stuff');
     expect(p).toContain(`${WORD_MIN}`);
     expect(p).toContain(`${WORD_MAX}`);
+  });
+
+  it('tells the model exactly what the linter penalizes (no drift)', () => {
+    const p = RESUME_RUBRIC_PROMPT.toLowerCase();
+    for (const weak of WEAK_VERBS) expect(p).toContain(weak);
+    for (const buzz of BUZZWORDS) expect(p).toContain(buzz);
   });
 
   it('has a sane word target', () => {

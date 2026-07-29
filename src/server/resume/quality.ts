@@ -3,14 +3,7 @@
  * text (markdown or LaTeX). Pure and offline; the tailoring generator (Inc 4)
  * will run this on its own output and iterate until it passes.
  */
-import {
-  BUZZWORDS,
-  MIN_METRIC_RATIO,
-  STRONG_VERBS,
-  WEAK_VERBS,
-  WORD_MAX,
-  WORD_MIN,
-} from './rubric';
+import { BUZZWORDS, MIN_METRIC_RATIO, WEAK_VERBS, WORD_MAX, WORD_MIN } from './rubric';
 
 export interface LintViolation {
   rule: string;
@@ -41,8 +34,19 @@ export interface LintOptions {
 }
 
 const BULLET_RE = /^\s*(?:[-*•‣▪]|\\item)\s+(.*\S)\s*$/;
-const METRIC_RE =
-  /(\d+(?:\.\d+)?\s?%|\$\s?\d|\b\d+(?:\.\d+)?\s?(?:k|m|b|x|ms|s|sec|secs|min|mins|hrs?|hours?|days?|users?|customers?|requests?|rps|qps|gb|tb|lines?|teams?)\b|\bby\s+\d|\b\d{2,}\b)/i;
+
+// A metric is a percentage, a money amount, a number with a meaningful unit, or
+// a number introduced by by/to/from/under/over. Deliberately NOT a bare number
+// (years like "2024" and IDs/phone numbers are not achievements).
+const METRIC_RE = new RegExp(
+  [
+    String.raw`\d+(?:\.\d+)?\s?%`,
+    String.raw`\$\s?\d`,
+    String.raw`\b\d+(?:\.\d+)?\s?(?:k|m|b|x|ms|s|sec|secs|min|mins|hrs?|hours?|days?|weeks?|months?|users?|customers?|requests?|rps|qps|gb|tb|mb|lines?|teams?|people|engineers?|services?|apis?)\b`,
+    String.raw`\b(?:by|to|from|under|over)\s+\d`,
+  ].join('|'),
+  'i',
+);
 
 /** Remove LaTeX commands/braces so analysis sees plain text. */
 function stripLatex(s: string): string {
@@ -77,9 +81,17 @@ function firstWord(bullet: string): string {
   return m ? m[0].toLowerCase() : '';
 }
 
+const WEAK_SINGLE = new Set(WEAK_VERBS.filter((v) => !v.includes(' ')));
+const WEAK_PHRASES = WEAK_VERBS.filter((v) => v.includes(' '));
+
+/** Return the bystander verb a bullet starts with, or null. Token/phrase-aware. */
 function startsWithWeakVerb(bullet: string): string | null {
-  const lower = bullet.toLowerCase();
-  return WEAK_VERBS.find((v) => lower.startsWith(v)) ?? null;
+  const lower = bullet.toLowerCase().trim();
+  for (const phrase of WEAK_PHRASES) {
+    if (lower === phrase || lower.startsWith(`${phrase} `)) return phrase;
+  }
+  const first = firstWord(bullet);
+  return WEAK_SINGLE.has(first) ? first : null;
 }
 
 function hasMetric(bullet: string): boolean {
@@ -90,6 +102,16 @@ function endsWithPeriod(bullet: string): boolean {
   return /\.$/.test(bullet.trim());
 }
 
+/** Escape a keyword for use in a whole-word regex. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Whole-word (boundary-aware) presence, so "go" doesn't match "category". */
+function containsKeyword(hay: string, keyword: string): boolean {
+  return new RegExp(`(?<![a-z0-9])${escapeRegExp(keyword)}(?![a-z0-9])`, 'i').test(hay);
+}
+
 function computeCoverage(text: string, keywords: string[]): KeywordCoverage {
   const hay = stripLatex(text).toLowerCase();
   const matched: string[] = [];
@@ -97,14 +119,12 @@ function computeCoverage(text: string, keywords: string[]): KeywordCoverage {
   for (const kw of keywords) {
     const needle = kw.trim().toLowerCase();
     if (!needle) continue;
-    if (hay.includes(needle)) matched.push(needle);
+    if (containsKeyword(hay, needle)) matched.push(needle);
     else missing.push(needle);
   }
   const total = matched.length + missing.length;
   return { matched, missing, ratio: total === 0 ? 1 : matched.length / total };
 }
-
-const STRONG = new Set(STRONG_VERBS);
 
 export function lintResume(text: string, opts: LintOptions = {}): LintReport {
   const violations: LintViolation[] = [];
@@ -122,18 +142,15 @@ export function lintResume(text: string, opts: LintOptions = {}): LintReport {
   let metricBullets = 0;
   let periodBullets = 0;
   for (const bullet of bullets) {
+    // Only penalize genuine bystander starts. We don't require membership in a
+    // closed "strong verb" list (that thrashes the generator on valid verbs);
+    // strong verbs are guidance in the rubric prompt instead.
     const weak = startsWithWeakVerb(bullet);
     if (weak) {
       violations.push({
         rule: 'weak-verb',
         severity: 'error',
         message: `Bullet starts with bystander verb "${weak}": "${bullet.slice(0, 60)}"`,
-      });
-    } else if (!STRONG.has(firstWord(bullet))) {
-      violations.push({
-        rule: 'verb-strength',
-        severity: 'warn',
-        message: `Bullet may not start with a strong action verb: "${bullet.slice(0, 60)}"`,
       });
     }
     if (hasMetric(bullet)) metricBullets++;
@@ -160,7 +177,7 @@ export function lintResume(text: string, opts: LintOptions = {}): LintReport {
 
   const lowerText = stripLatex(text).toLowerCase();
   for (const word of BUZZWORDS) {
-    if (lowerText.includes(word)) {
+    if (containsKeyword(lowerText, word)) {
       violations.push({
         rule: 'buzzword',
         severity: 'warn',
