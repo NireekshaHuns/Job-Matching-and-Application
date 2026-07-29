@@ -3,10 +3,12 @@
  * job from a base resume + the truthful inventory, then self-checks it against
  * the Inc 1 quality linter, re-prompting on failures.
  *
- * Truthfulness is bounded structurally: the model is only ever given the
- * coverable keywords (job keywords the user actually has) and the user's real
- * bullets. True gaps are surfaced in the report, never sent to the model to
- * "cover". The network call is behind an injected ChatClient (fakes-first).
+ * Truthfulness: we never *ask* the model to introduce a job keyword the user
+ * lacks — the prompt only carries coverable keywords (job ∩ master) and the
+ * user's real bullets. The base resume and bullets are the user's own content,
+ * so anything they carry is truthful by construction. As a backstop, the report
+ * flags any true-gap keyword that nonetheless appears in the output, for review.
+ * The network call is behind an injected ChatClient (fakes-first).
  */
 import type { ChatClient } from '@/server/enrich/types';
 import { computeFit, resumeSkillsFromBullets, type BulletLike } from './fit';
@@ -103,6 +105,8 @@ export function buildTailorMessages(
 export interface TailorReport {
   coverableKeywords: string[];
   trueGaps: string[];
+  /** True-gap keywords that appear in the output anyway — verify these are real. */
+  unexpectedGaps: string[];
   attempts: number;
   lint: LintReport;
 }
@@ -120,9 +124,26 @@ function stripFences(s: string): string {
     .trim();
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** True-gap keywords (whole-word) that leaked into the generated resume. */
+function findUnexpectedGaps(latex: string, trueGaps: string[]): string[] {
+  const hay = latex.toLowerCase();
+  return trueGaps.filter((g) =>
+    new RegExp(`(?<![a-z0-9])${escapeRegExp(g.toLowerCase())}(?![a-z0-9])`).test(hay),
+  );
+}
+
+function errorCount(lint: LintReport): number {
+  return lint.violations.filter((v) => v.severity === 'error').length;
+}
+
 /**
  * Generate a tailored resume, re-prompting with linter violations until it
- * passes or `maxAttempts` is reached. Returns the best attempt with its report.
+ * passes or `maxAttempts` is reached. Returns the attempt with the fewest
+ * linter errors (not necessarily the last) plus its report.
  */
 export async function tailorResume(
   baseResumeLatex: string,
@@ -133,28 +154,30 @@ export async function tailorResume(
 ): Promise<TailorResult> {
   const maxAttempts = Math.max(1, opts.maxAttempts ?? 3);
   let violations: string[] = [];
-  let latex = '';
-  let lint: LintReport | undefined;
+  let best: { latex: string; lint: LintReport } | undefined;
   let attempts = 0;
 
   for (let i = 0; i < maxAttempts; i++) {
     attempts = i + 1;
-    latex = stripFences(
+    const latex = stripFences(
       await chat.complete(buildTailorMessages(baseResumeLatex, job, inputs, violations)),
     );
-    lint = lintResume(latex, { jdKeywords: inputs.coverableKeywords });
+    const lint = lintResume(latex, { jdKeywords: inputs.coverableKeywords });
+    if (!best || errorCount(lint) < errorCount(best.lint)) best = { latex, lint };
     if (lint.ok) break;
     violations = lint.violations.filter((v) => v.severity === 'error').map((v) => v.message);
   }
 
+  // best is always set: the loop runs at least once (maxAttempts >= 1).
+  const chosen = best as { latex: string; lint: LintReport };
   return {
-    latex,
+    latex: chosen.latex,
     report: {
       coverableKeywords: inputs.coverableKeywords,
       trueGaps: inputs.trueGaps,
+      unexpectedGaps: findUnexpectedGaps(chosen.latex, inputs.trueGaps),
       attempts,
-      // Non-null: the loop runs at least once (maxAttempts >= 1).
-      lint: lint as LintReport,
+      lint: chosen.lint,
     },
   };
 }

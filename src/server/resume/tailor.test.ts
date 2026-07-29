@@ -113,10 +113,38 @@ describe('tailorResume', () => {
     expect(latex).toContain('\\begin{document}');
   });
 
-  it('gives up after maxAttempts and returns the last attempt with its report', async () => {
+  it('gives up after maxAttempts and returns the best attempt with its report', async () => {
     const chat = makeChat(['\\item Helped out.']); // always bad
     const { report } = await tailorResume('base', job, inputs, chat.client, { maxAttempts: 2 });
     expect(report.attempts).toBe(2);
     expect(report.lint.ok).toBe(false);
+  });
+
+  it('does not re-prompt for warn-only output (breaks on attempt 1)', async () => {
+    // Passes structurally (ok:true) but has a buzzword warning.
+    const warnOnly = goodLatex().replace(
+      '\\end{document}',
+      '\\item Shipped features as a hardworking team player by 10%.\n\\end{document}',
+    );
+    const chat = makeChat([warnOnly]);
+    const { report } = await tailorResume('base', job, inputs, chat.client, { maxAttempts: 3 });
+    expect(report.attempts).toBe(1);
+    expect(report.lint.ok).toBe(true);
+  });
+
+  it('flags a true-gap keyword that leaks into the output', async () => {
+    const gapInputs: TailorInputs = {
+      coverableKeywords: ['go', 'kafka'],
+      trueGaps: ['rust'],
+      relevantBullets: [],
+    };
+    // The base resume legitimately mentions rust; it survives into the output.
+    const withRust = goodLatex().replace(
+      '\\end{document}',
+      '\\item Built a Rust service that cut latency by 20%.\n\\end{document}',
+    );
+    const chat = makeChat([withRust]);
+    const { report } = await tailorResume('base', job, gapInputs, chat.client);
+    expect(report.unexpectedGaps).toEqual(['rust']);
   });
 });
