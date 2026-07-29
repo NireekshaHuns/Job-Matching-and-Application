@@ -4,14 +4,27 @@
  *
  * All heavy imports (OpenAI SDK, db client, connectors) are dynamic and inside
  * the step, so merely registering this function never pulls secrets at import
- * time — the app boots fine without OPENAI_API_KEY set. The whole run is one
- * durable step for now (embeddings make per-posting step payloads large); it
- * can be split finer once a raw_jobs table exists.
+ * time — the app boots fine without OPENAI_API_KEY set. IMPORTANT: keep it that
+ * way — never add a static import of `@/server/db` (its index calls neon(env...)
+ * at load); import the schema (`@/server/db/schema`, env-free) instead.
+ *
+ * The whole run is one durable step for now (embeddings make per-posting step
+ * payloads large). Trade-off: any failure retries the entire fetch+classify+
+ * embed run, re-spending on postings already processed in that attempt (the
+ * insert dedup saves rows, not API spend). The planned raw_jobs claim pattern
+ * will let us split this into per-posting steps.
  */
 import { inngest } from '../client';
 
 export const enrichJobs = inngest.createFunction(
-  { id: 'enrich-jobs', triggers: [{ cron: '0 */6 * * *' }] },
+  {
+    id: 'enrich-jobs',
+    // Serialize runs: overlapping runs would each classify/embed the same new
+    // postings (spending before the insert-conflict catches the dupes). Manual
+    // `pnpm enrich` runs should likewise not overlap a scheduled run.
+    concurrency: { limit: 1 },
+    triggers: [{ cron: '0 */6 * * *' }],
+  },
   async ({ step }) => {
     return step.run('fetch-and-enrich', async () => {
       const { default: OpenAI } = await import('openai');
