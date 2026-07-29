@@ -6,6 +6,7 @@
 import type { NewJob } from '@/server/db/schema';
 import type { RawPosting } from '@/server/ingest/types';
 import type { Classification } from '../types';
+import { looksLikeStaffing } from './staffing';
 import type { SponsorMatch } from './sponsor-match';
 
 function looksRemote(posting: RawPosting): boolean {
@@ -32,7 +33,13 @@ export function buildJobRow(
     isRemote: looksRemote(posting),
     jdText: posting.jdText,
     embedding,
-    employmentType: classification.employmentType,
+    // A JD the LLM read as full-time but that carries staffing signals (C2C,
+    // "our client", W-2 contract) is a body-shop placement — force it to
+    // contract so the default full_time filter hides it (still auditable).
+    employmentType:
+      classification.employmentType === 'full_time' && looksLikeStaffing(posting.jdText)
+        ? 'contract'
+        : classification.employmentType,
     roleFamily: classification.roleFamily,
     seniority: classification.seniority,
     techKeywords: classification.skills,
