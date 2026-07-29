@@ -1,9 +1,9 @@
 /**
  * Job board queries. `list` returns enriched jobs with BOTH scores kept
  * separate: the H1B `sponsorTier` (on the job) and the resume `relevanceScore`
- * (left-joined from job_scores for a selected resume "lens"). A combined tier ×
- * fit ordering is offered only as the default sort — the scores are never merged
- * into one stored value.
+ * (left-joined from job_scores for a selected resume "lens"). The `combined`
+ * sort is a display-only blend (tier-weighted + fit); the scores are never
+ * merged into one stored value.
  */
 import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -34,38 +34,70 @@ export const jobListInput = z.object({
 
 export type JobListInput = z.infer<typeof jobListInput>;
 
-/** H1B tier as a sortable rank (High highest). */
+export interface JobQueryPlan {
+  /** Excluded visibility is governed ONLY by the toggle, independent of tier filters. */
+  hideExcluded: boolean;
+  sponsorTiers: JobListInput['sponsorTiers'] | null;
+  roleFamilies: JobListInput['roleFamilies'] | null;
+  seniorities: JobListInput['seniorities'] | null;
+  employmentType: (typeof employmentTypeEnum.enumValues)[number] | null;
+  remoteOnly: boolean;
+  search: string | null;
+  sort: JobListInput['sort'];
+}
+
+/** Pure translation of raw input into a query plan (unit-tested). */
+export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
+  return {
+    hideExcluded: !input.includeExcluded,
+    sponsorTiers: input.sponsorTiers?.length ? input.sponsorTiers : null,
+    roleFamilies: input.roleFamilies?.length ? input.roleFamilies : null,
+    seniorities: input.seniorities?.length ? input.seniorities : null,
+    employmentType: input.employmentType === 'all' ? null : input.employmentType,
+    remoteOnly: input.remoteOnly,
+    search: input.search ? input.search : null,
+    sort: input.sort,
+  };
+}
+
+/** Escape LIKE metacharacters so a search term is treated literally. */
+export function escapeLike(term: string): string {
+  return term.replace(/[\\%_]/g, '\\$&');
+}
+
 const TIER_RANK = sql<number>`case ${jobs.sponsorTier}
   when 'High' then 3 when 'Medium' then 2 when 'Low' then 1 else 0 end`;
 const FIT = sql`${jobScores.relevanceScore} desc nulls last`;
+const POSTED = sql`${jobs.postedDate} desc nulls last`;
+// Display blend: one tier ≈ 100 fit points. Degrades to tier-major with no lens.
+const COMBINED = sql`(${TIER_RANK} * 100 + coalesce(${jobScores.relevanceScore}, 0)) desc`;
 
 export const jobsRouter = createTRPCRouter({
   list: publicProcedure.input(jobListInput).query(async ({ ctx, input }) => {
+    const plan = resolveJobQueryPlan(input);
+
     const where = [];
-    if (!input.includeExcluded && !input.sponsorTiers?.length) {
-      where.push(sql`${jobs.sponsorTier} <> 'Excluded'`);
-    }
-    if (input.sponsorTiers?.length) where.push(inArray(jobs.sponsorTier, input.sponsorTiers));
-    if (input.roleFamilies?.length) where.push(inArray(jobs.roleFamily, input.roleFamilies));
-    if (input.seniorities?.length) where.push(inArray(jobs.seniority, input.seniorities));
-    if (input.employmentType !== 'all') {
-      where.push(eq(jobs.employmentType, input.employmentType));
-    }
-    if (input.remoteOnly) where.push(eq(jobs.isRemote, true));
-    if (input.search) {
-      where.push(
-        or(ilike(jobs.company, `%${input.search}%`), ilike(jobs.title, `%${input.search}%`)),
-      );
+    if (plan.hideExcluded) where.push(sql`${jobs.sponsorTier} <> 'Excluded'`);
+    if (plan.sponsorTiers) where.push(inArray(jobs.sponsorTier, plan.sponsorTiers));
+    if (plan.roleFamilies) where.push(inArray(jobs.roleFamily, plan.roleFamilies));
+    if (plan.seniorities) where.push(inArray(jobs.seniority, plan.seniorities));
+    if (plan.employmentType) where.push(eq(jobs.employmentType, plan.employmentType));
+    if (plan.remoteOnly) where.push(eq(jobs.isRemote, true));
+    if (plan.search) {
+      const esc = `%${escapeLike(plan.search)}%`;
+      where.push(or(ilike(jobs.company, esc), ilike(jobs.title, esc)));
     }
 
+    // Always end with a unique tiebreaker so limit/offset paging is stable.
+    const tiebreak = desc(jobs.id);
     const orderBy =
-      input.sort === 'fit'
-        ? [FIT, desc(jobs.postedDate)]
-        : input.sort === 'recent'
-          ? [desc(jobs.postedDate), desc(jobs.createdAt)]
-          : input.sort === 'sponsor'
-            ? [desc(TIER_RANK), FIT]
-            : [desc(TIER_RANK), FIT, desc(jobs.postedDate)]; // combined
+      plan.sort === 'fit'
+        ? [FIT, tiebreak]
+        : plan.sort === 'recent'
+          ? [POSTED, desc(jobs.createdAt), tiebreak]
+          : plan.sort === 'sponsor'
+            ? [desc(TIER_RANK), FIT, tiebreak]
+            : [COMBINED, tiebreak]; // combined
 
     // Left-join the lens's score only; with no lens, join on false so score is null.
     const lensOn =
