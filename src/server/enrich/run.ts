@@ -41,15 +41,23 @@ export async function loadSponsorLookup(db: DB): Promise<SponsorLookup> {
 /** Rows per insert — small because each row carries a 1536-float embedding. */
 const CHUNK_SIZE = 200;
 
-/** Insert enriched rows, ignoring any fingerprint that raced in meanwhile. */
+/**
+ * Insert enriched rows, ignoring any fingerprint that raced in meanwhile.
+ * Returns the number of rows ACTUALLY inserted (via RETURNING), so a race that
+ * drops a row is reflected honestly rather than counted as written.
+ */
 export async function insertJobs(db: DB, rows: NewJob[]): Promise<number> {
-  let written = 0;
+  let inserted = 0;
   for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
     const chunk = rows.slice(i, i + CHUNK_SIZE);
-    await db.insert(jobs).values(chunk).onConflictDoNothing({ target: jobs.fingerprint });
-    written += chunk.length;
+    const returned = await db
+      .insert(jobs)
+      .values(chunk)
+      .onConflictDoNothing({ target: jobs.fingerprint })
+      .returning({ fingerprint: jobs.fingerprint });
+    inserted += returned.length;
   }
-  return written;
+  return inserted;
 }
 
 export interface RunEnrichmentArgs {
