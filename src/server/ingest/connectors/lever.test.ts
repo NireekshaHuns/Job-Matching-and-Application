@@ -41,4 +41,10 @@ describe('leverConnector', () => {
     );
     expect(await connector.fetch()).toHaveLength(0);
   });
+
+  // Lever returns everything in one call — no pagination.
+  it('returns nothing for an empty board', async () => {
+    const connector = leverConnector([{ token: 'empty', company: 'Empty' }], fetcherReturning([]));
+    expect(await connector.fetch()).toHaveLength(0);
+  });
 });

@@ -14,7 +14,7 @@ export interface LeverBoard {
 }
 
 interface LeverPosting {
-  id: string;
+  id?: string;
   text?: string;
   hostedUrl?: string;
   applyUrl?: string;

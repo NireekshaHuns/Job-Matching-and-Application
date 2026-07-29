@@ -42,4 +42,17 @@ describe('ashbyConnector', () => {
     );
     expect(await connector.fetch()).toHaveLength(0);
   });
+
+  // One call returns all postings — no pagination.
+  it('returns nothing for an empty or malformed board without throwing', async () => {
+    expect(
+      await ashbyConnector([{ board: 'e', company: 'E' }], fetcherReturning({ jobs: [] })).fetch(),
+    ).toHaveLength(0);
+    expect(
+      await ashbyConnector(
+        [{ board: 'e', company: 'E' }],
+        fetcherReturning({ jobs: null }),
+      ).fetch(),
+    ).toHaveLength(0);
+  });
 });

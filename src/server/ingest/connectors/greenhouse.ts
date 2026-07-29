@@ -60,7 +60,7 @@ export function greenhouseConnector(
         }
         const data = (await res.json()) as { jobs?: GreenhouseJob[] };
 
-        for (const job of data.jobs ?? []) {
+        for (const job of Array.isArray(data.jobs) ? data.jobs : []) {
           const title = job.title?.trim() ?? '';
           if (!title || !job.absolute_url) continue;
           const location = jobLocation(job);

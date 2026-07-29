@@ -43,7 +43,7 @@ export function ashbyConnector(
         }
         const data = (await res.json()) as { jobs?: AshbyJob[] };
 
-        for (const job of data.jobs ?? []) {
+        for (const job of Array.isArray(data.jobs) ? data.jobs : []) {
           const title = job.title?.trim() ?? '';
           const url = job.jobUrl ?? job.applyUrl;
           if (!title || !url) continue;
