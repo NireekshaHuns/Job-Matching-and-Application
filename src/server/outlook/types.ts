@@ -8,6 +8,7 @@
 export interface OutlookMessage {
   /** Graph message id — stable, used to dedupe reconcile runs. */
   id: string;
+  /** `address` must be the bare email (e.g. `no-reply@x.io`), not `Name <addr>`. */
   from: { name: string; address: string };
   subject: string;
   /** Plain-text snippet Graph returns as `bodyPreview`. */

@@ -119,6 +119,54 @@ describe('matchConfirmationToApplication', () => {
     ];
     expect(matchConfirmationToApplication(msg(), confirmed)).toBeNull();
   });
+
+  it('does not match on a company only name-dropped in the body', () => {
+    const m = msg({
+      from: { name: 'Careers', address: 'jobs@acme.com' },
+      subject: 'Application received',
+      bodyPreview: 'You may also like roles at Stripe and Notion.',
+    });
+    expect(matchConfirmationToApplication(m, apps)).toBeNull();
+  });
+
+  it('picks the correct app when two share a first token (full key wins)', () => {
+    const shared: PendingApplication[] = [
+      { id: 1, company: 'American Express', confirmationEmailId: null },
+      { id: 2, company: 'American Airlines', confirmationEmailId: null },
+    ];
+    const m = msg({ subject: 'Thank you for applying to American Airlines', bodyPreview: '' });
+    expect(matchConfirmationToApplication(m, shared)?.id).toBe(2);
+  });
+
+  it('prefers the longer full key over a bare-brand one', () => {
+    const shared: PendingApplication[] = [
+      { id: 1, company: 'Apple Inc', confirmationEmailId: null },
+      { id: 2, company: 'Apple Bank', confirmationEmailId: null },
+    ];
+    const m = msg({ subject: 'Thanks for applying to Apple Bank', bodyPreview: '' });
+    expect(matchConfirmationToApplication(m, shared)?.id).toBe(2);
+  });
+
+  it('abstains when only a shared brand token matches (no full key)', () => {
+    const shared: PendingApplication[] = [
+      { id: 1, company: 'American Express', confirmationEmailId: null },
+      { id: 2, company: 'American Airlines', confirmationEmailId: null },
+    ];
+    const m = msg({ subject: 'Thank you for applying, American', bodyPreview: '' });
+    expect(matchConfirmationToApplication(m, shared)).toBeNull();
+  });
+
+  it('matches a 3-letter brand only on the full key, never the fallback', () => {
+    const ibm: PendingApplication[] = [{ id: 1, company: 'IBM', confirmationEmailId: null }];
+    // Full key present → matches.
+    expect(
+      matchConfirmationToApplication(msg({ subject: 'Thank you for applying to IBM' }), ibm)?.id,
+    ).toBe(1);
+    // Brand < 4 chars, so an unrelated "IBM"-free confirmation does not fall back.
+    expect(
+      matchConfirmationToApplication(msg({ subject: 'Thanks for applying', bodyPreview: '' }), ibm),
+    ).toBeNull();
+  });
 });
 
 describe('reconcileConfirmations', () => {

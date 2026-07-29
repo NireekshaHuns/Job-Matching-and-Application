@@ -16,12 +16,12 @@ import type { OutlookMessage } from './types';
  * confirmations. A message from one of these is treated as a confirmation on
  * the sender alone, since the body wording varies per employer template.
  */
+// Parent domains only — `isAtsSender` matches these and any subdomain, so
+// listing e.g. `hire.lever.co` alongside `lever.co` would be redundant.
 export const ATS_CONFIRMATION_DOMAINS = [
   'greenhouse.io',
   'greenhouse-mail.io',
-  'us.greenhouse-mail.io',
   'lever.co',
-  'hire.lever.co',
   'ashbyhq.com',
   'myworkday.com',
   'myworkdayjobs.com',
@@ -33,15 +33,20 @@ export const ATS_CONFIRMATION_DOMAINS = [
   'successfactors.com',
 ] as const;
 
-/** Confirmation wording for non-ATS senders (employer's own mail server). */
+/**
+ * Confirmation wording for non-ATS senders (employer's own mail server). Kept
+ * conservative: each phrase asserts *receipt*, so a single hit can flip status.
+ * "your application to" is deliberately excluded — it appears in rejections and
+ * status updates just as often ("your application to X was not selected").
+ */
 export const CONFIRMATION_PHRASES = [
   'thank you for applying',
   'thanks for applying',
   'application received',
   'we received your application',
+  "we've received your application",
   'we have received your application',
   'your application has been received',
-  'your application to',
   'application was submitted',
   'successfully submitted your application',
 ] as const;
@@ -91,46 +96,59 @@ export interface ConfirmationUpdate {
 }
 
 /**
- * Normalize free text to the same token space as company keys so a key like
- * "HOME DEPOT" can be found as a whole-token run inside it.
+ * Normalize the match text to the company-key token space. Only the sender
+ * display name and subject are used — NOT the body: a body snippet often name-
+ * drops unrelated companies (footers, "roles you might like"), which would
+ * mis-attribute the confirmation. `HOME DEPOT` etc. survive as whole-token runs.
  */
 function normalizedHaystack(msg: OutlookMessage): string {
-  const domainLabel = senderDomain(msg.from.address).split('.')[0] ?? '';
-  const text = `${msg.from.name} ${msg.subject} ${msg.bodyPreview} ${domainLabel}`;
-  return ` ${normalizeCompanyName(text)} `;
+  return ` ${normalizeCompanyName(`${msg.from.name} ${msg.subject}`)} `;
 }
 
 /** Shortest brand token we'll match on alone, to avoid generic hits ("labs", "inc"). */
 const MIN_BRAND_TOKEN = 4;
 
-/**
- * True when a company key appears in the haystack: either the full key (best),
- * or its leading brand token as a whole word. Emails often carry the brand only
- * ("Notion") while we store a fuller name ("Notion Labs"), so the brand-token
- * fallback catches those; the length floor keeps generic tokens from matching.
- */
-function companyAppearsIn(key: string, haystack: string): boolean {
-  if (!key) return false;
-  if (haystack.includes(` ${key} `)) return true;
-  const brand = key.split(' ')[0];
-  return brand.length >= MIN_BRAND_TOKEN && haystack.includes(` ${brand} `);
+/** Whole-token (contiguous) substring test against the space-padded haystack. */
+function keyAppears(key: string, haystack: string): boolean {
+  return key !== '' && haystack.includes(` ${key} `);
 }
 
 /**
- * Match a confirmation email to one of the given applications by company name
- * (appearing in the sender name, subject, body, or domain label). Returns the
- * first unconfirmed match, or null.
+ * Match a confirmation email to exactly one pending application by company
+ * name, or return null. Designed to never guess: a wrong confirmation is silent
+ * and (since reconcile claims each app once) unrecoverable, whereas a missed one
+ * is retried next run. So we ABSTAIN on ambiguity.
+ *
+ *  1. Full-key matches (the whole normalized company name appears): pick the
+ *     longest such key — "Apple Bank" beats a bare "Apple" — and abstain if two
+ *     different keys tie for longest.
+ *  2. Only if there is NO full-key match, fall back to the leading brand token
+ *     (≥4 chars, so 3-letter names like IBM match on full key only). Abstain
+ *     unless exactly one app matches — "American Express" vs "American Airlines"
+ *     both carry brand "AMERICAN", so a bare-brand email confirms neither.
  */
 export function matchConfirmationToApplication(
   msg: OutlookMessage,
   apps: PendingApplication[],
 ): PendingApplication | null {
   const haystack = normalizedHaystack(msg);
-  for (const app of apps) {
-    if (app.confirmationEmailId) continue;
-    if (companyAppearsIn(normalizeCompanyName(app.company), haystack)) return app;
+  const candidates = apps
+    .filter((a) => !a.confirmationEmailId)
+    .map((app) => ({ app, key: normalizeCompanyName(app.company) }))
+    .filter((c) => c.key !== '');
+
+  const full = candidates.filter((c) => keyAppears(c.key, haystack));
+  if (full.length > 0) {
+    full.sort((a, b) => b.key.length - a.key.length);
+    if (full.length > 1 && full[0].key.length === full[1].key.length) return null; // tie → abstain
+    return full[0].app;
   }
-  return null;
+
+  const brand = candidates.filter((c) => {
+    const token = c.key.split(' ')[0];
+    return token.length >= MIN_BRAND_TOKEN && keyAppears(token, haystack);
+  });
+  return brand.length === 1 ? brand[0].app : null;
 }
 
 /**
@@ -138,6 +156,11 @@ export function matchConfirmationToApplication(
  * update per newly-confirmed application. Idempotent: emails already recorded
  * on an application are skipped, and each application is claimed at most once
  * per run (first matching confirmation wins).
+ *
+ * The caller (Outlook-2 adapter) must persist each update conditionally
+ * (`WHERE confirmation_email_id IS NULL`) or in a single transaction so
+ * concurrent runs can't double-write; the DB also has a partial unique index on
+ * `confirmation_email_id` as a backstop.
  */
 export function reconcileConfirmations(
   messages: OutlookMessage[],
