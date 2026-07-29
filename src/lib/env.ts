@@ -16,6 +16,12 @@ const schema = z.object({
   OPENAI_EMBED_MODEL: z.string().default('text-embedding-3-small'),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
+  // Optional: only the Outlook confirmation poller uses Microsoft Graph. Empty
+  // strings (shipped blank in .env.example) are treated as absent so the app
+  // boots without them. MS_TENANT defaults to personal Microsoft accounts.
+  MS_CLIENT_ID: z.preprocess((v) => (v ? v : undefined), z.string().min(1).optional()),
+  MS_TENANT: z.string().default('consumers'),
+  MS_REFRESH_TOKEN: z.preprocess((v) => (v ? v : undefined), z.string().min(1).optional()),
 });
 
 export const env = schema.parse(process.env);
