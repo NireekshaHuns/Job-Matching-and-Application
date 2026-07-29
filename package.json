@@ -18,7 +18,8 @@
     "db:studio": "drizzle-kit studio",
     "inngest:dev": "inngest-cli dev -u http://localhost:3000/api/inngest",
     "ingest:uscis": "tsx scripts/ingest-uscis.ts",
-    "enrich": "tsx scripts/enrich.ts"
+    "enrich": "tsx scripts/enrich.ts",
+    "eval:classify": "tsx scripts/eval-classify.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
