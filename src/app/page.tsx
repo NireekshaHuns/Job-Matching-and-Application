@@ -34,7 +34,14 @@ export default function Home() {
   const [allEmployment, setAllEmployment] = useState(false);
 
   const deferredSearch = useDeferredValue(search);
+  const utils = trpc.useUtils();
   const resumesQuery = trpc.resumes.listBase.useQuery();
+  const appliedQuery = trpc.applications.appliedJobIds.useQuery();
+  const applied = new Set(appliedQuery.data ?? []);
+  const markApplied = trpc.applications.create.useMutation({
+    onSuccess: () => utils.applications.appliedJobIds.invalidate(),
+  });
+  const lensLabel = resumesQuery.data?.find((r) => r.id === resumeId)?.label;
   const jobsQuery = trpc.jobs.list.useQuery({
     search: deferredSearch || undefined,
     sort,
@@ -169,6 +176,22 @@ export default function Home() {
               <span className="text-xs text-zinc-400">
                 {job.source}
                 {job.postedDate ? ` · ${job.postedDate}` : ''}
+              </span>
+              <span className="ml-auto">
+                {applied.has(job.id) ? (
+                  <span className="text-xs font-medium text-green-700">Applied ✓</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      markApplied.mutate({ jobId: job.id, resumeId, resumeLabel: lensLabel })
+                    }
+                    disabled={markApplied.isPending}
+                    className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50 disabled:opacity-50"
+                  >
+                    Mark applied
+                  </button>
+                )}
               </span>
             </div>
 
