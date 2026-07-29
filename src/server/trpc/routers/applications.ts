@@ -50,6 +50,7 @@ export const applicationsRouter = createTRPCRouter({
         status: applications.status,
         appliedAt: applications.appliedAt,
         source: applications.source,
+        confirmedAt: applications.confirmedAt,
         resumeLabel: applications.resumeLabel,
         resumeSnapshot: applications.resumeSnapshot,
         company: jobs.company,
