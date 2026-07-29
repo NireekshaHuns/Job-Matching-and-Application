@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useDeferredValue, useState } from 'react';
 import { trpc } from '@/trpc/react';
 
 type SponsorTier = 'High' | 'Medium' | 'Low' | 'Excluded';
@@ -33,9 +33,10 @@ export default function Home() {
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [allEmployment, setAllEmployment] = useState(false);
 
+  const deferredSearch = useDeferredValue(search);
   const resumesQuery = trpc.resumes.listBase.useQuery();
   const jobsQuery = trpc.jobs.list.useQuery({
-    search: search || undefined,
+    search: deferredSearch || undefined,
     sort,
     resumeId,
     includeExcluded,
@@ -55,6 +56,7 @@ export default function Home() {
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 p-3 text-sm">
         <input
           type="search"
+          aria-label="Search company or title"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search company or title…"
@@ -146,7 +148,7 @@ export default function Home() {
               </div>
               <span
                 className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${
-                  TIER_STYLES[job.sponsorTier as SponsorTier]
+                  TIER_STYLES[job.sponsorTier as SponsorTier] ?? TIER_STYLES.Low
                 }`}
                 title={job.sponsorReason ?? undefined}
               >
