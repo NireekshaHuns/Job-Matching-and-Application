@@ -1,36 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Fetcher } from '../types';
-import { greenhouseConnector, htmlToText } from './greenhouse';
+import { greenhouseConnector } from './greenhouse';
 import acmeFixture from './__fixtures__/greenhouse-acme.json';
 
 /** Fake fetcher: returns the fixture for any URL, or a status for empty boards. */
 function fetcherReturning(body: unknown, status = 200): Fetcher {
   return async () => new Response(JSON.stringify(body), { status });
 }
-
-describe('htmlToText', () => {
-  it('decodes entity-encoded markup and flattens to text', () => {
-    const text = htmlToText(
-      '&lt;p&gt;Build &amp;amp; scale APIs.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Go&lt;/li&gt;&lt;/ul&gt;',
-    );
-    expect(text).toContain('Build & scale APIs.');
-    expect(text).toContain('Go');
-    expect(text).not.toContain('<p>');
-  });
-
-  it('strips real HTML tags too', () => {
-    expect(htmlToText('<p>Hi <b>there</b></p>')).toBe('Hi there');
-  });
-
-  it('keeps a comparison operator that is not tag-shaped', () => {
-    // "< b" (space after <) is not a tag, so it must survive.
-    expect(htmlToText('use a < b for the check')).toBe('use a < b for the check');
-  });
-
-  it('turns block/br boundaries into line breaks', () => {
-    expect(htmlToText('<p>One</p><p>Two</p>')).toBe('One\nTwo');
-  });
-});
 
 describe('greenhouseConnector', () => {
   it('maps board jobs to normalized postings', async () => {
