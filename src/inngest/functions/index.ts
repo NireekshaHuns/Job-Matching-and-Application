@@ -1,8 +1,8 @@
 import type { inngest } from '../client';
+import { enrichJobs } from './enrich';
 
 /**
- * Registry of Inngest functions served by the app. Empty during Phase 0;
- * ingestion (Epic 2) and enrichment (Epic 3) steps are appended here.
- * See the `enrichment-step` skill.
+ * Registry of Inngest functions served by the app. See the `enrichment-step`
+ * skill. Add new durable functions here.
  */
-export const functions: ReturnType<typeof inngest.createFunction>[] = [];
+export const functions: ReturnType<typeof inngest.createFunction>[] = [enrichJobs];
