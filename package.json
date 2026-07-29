@@ -21,7 +21,8 @@
     "enrich": "tsx scripts/enrich.ts",
     "eval:classify": "tsx scripts/eval-classify.ts",
     "inventory:load": "tsx scripts/load-inventory.ts",
-    "inventory:extract": "tsx scripts/extract-inventory.ts"
+    "inventory:extract": "tsx scripts/extract-inventory.ts",
+    "score:fits": "tsx scripts/score-fits.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
