@@ -22,6 +22,7 @@
     "eval:classify": "tsx scripts/eval-classify.ts",
     "inventory:load": "tsx scripts/load-inventory.ts",
     "inventory:extract": "tsx scripts/extract-inventory.ts",
+    "inventory:suggest": "tsx scripts/suggest-inventory.ts",
     "score:fits": "tsx scripts/score-fits.ts",
     "tailor": "tsx scripts/tailor.ts"
   },

@@ -61,6 +61,19 @@ function stripLatex(s: string): string {
     .trim();
 }
 
+/**
+ * Lighter strip for keyword matching: drop LaTeX commands, braces, and stray
+ * backslashes but KEEP tech symbols like # + . / (so "c#", "c++", ".net",
+ * "ci/cd" survive — including LaTeX-escaped "C\#" which becomes "C#").
+ */
+function stripForMatch(s: string): string {
+  return s
+    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
+    .replace(/[{}\\]/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
 function countWords(text: string): number {
   const tokens = stripLatex(text).match(/[A-Za-z0-9%$+.#-]+/g) ?? [];
   // Count only tokens with an alphanumeric char (excludes stray markers like "-").
@@ -117,7 +130,7 @@ function containsKeyword(hay: string, keyword: string): boolean {
 }
 
 function computeCoverage(text: string, keywords: string[]): KeywordCoverage {
-  const hay = stripLatex(text).toLowerCase();
+  const hay = stripForMatch(text).toLowerCase();
   const matched: string[] = [];
   const missing: string[] = [];
   for (const kw of keywords) {
