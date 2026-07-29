@@ -94,12 +94,18 @@ const TIER_RANK = sql<number>`case ${jobs.sponsorTier}
   when 'High' then 3 when 'Medium' then 2 when 'Low' then 1 else 0 end`;
 const FIT = sql`${jobScores.relevanceScore} desc nulls last`;
 const POSTED = sql`${jobs.postedDate} desc nulls last`;
-// Age in days from the posted date (falling back to when we ingested the row).
-const AGE_DAYS = sql`extract(epoch from (now() - coalesce(${jobs.postedDate}::timestamptz, ${jobs.createdAt}))) / 86400.0`;
-// Mirrors freshnessBoost() in SQL: greatest(0, MAX * (1 - min(age, window)/window)).
-const FRESHNESS = sql`greatest(0::float, ${sql.raw(String(FRESHNESS_MAX))} * (1 - least(${AGE_DAYS}, ${sql.raw(String(FRESHNESS_WINDOW_DAYS))}::float) / ${sql.raw(String(FRESHNESS_WINDOW_DAYS))}::float))`;
+// Whole-day age from the posted calendar date (falling back to the ingest date),
+// anchored to UTC so it never depends on the DB session timezone. `date - date`
+// yields an integer, so AGE_DAYS matches the `ageDays` freshnessBoost() takes —
+// which lets the SQL below mirror the pure helper EXACTLY for every value it can
+// produce (integer days). Keep the two in sync.
+const AGE_DAYS = sql`((now() at time zone 'UTC')::date - coalesce(${jobs.postedDate}, (${jobs.createdAt} at time zone 'UTC')::date))`;
+// clamp(age, 0, window): mirrors freshnessBoost()'s <=0 -> MAX and >=window -> 0 clamps.
+const CLAMPED_AGE = sql`least(greatest(${AGE_DAYS}, 0), ${FRESHNESS_WINDOW_DAYS})`;
+// FRESHNESS = MAX * (1 - clampedAge/window) — the linear decay, as float.
+const FRESHNESS = sql`(${FRESHNESS_MAX} * (1 - ${CLAMPED_AGE}::float / ${FRESHNESS_WINDOW_DAYS}))`;
 // Display blend (mirrors combinedRank): tier-major, then fit, then a freshness nudge.
-const COMBINED = sql`(${TIER_RANK} * ${sql.raw(String(TIER_WEIGHT))} + coalesce(${jobScores.relevanceScore}, 0) + ${FRESHNESS}) desc`;
+const COMBINED = sql`(${TIER_RANK} * ${TIER_WEIGHT} + coalesce(${jobScores.relevanceScore}, 0) + ${FRESHNESS}) desc`;
 
 export const jobsRouter = createTRPCRouter({
   list: publicProcedure.input(jobListInput).query(async ({ ctx, input }) => {
