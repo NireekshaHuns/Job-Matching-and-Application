@@ -33,7 +33,11 @@ export interface LintOptions {
   minKeywordCoverage?: number;
 }
 
-const BULLET_RE = /^\s*(?:[-*•‣▪]|\\item)\s+(.*\S)\s*$/;
+// Bullets: markdown markers, LaTeX \item, or common resume-template item macros
+// (Jake Gutierrez's \resumeItem{...}, moderncv \cvitem{}{}, etc.) so the
+// verb/metric/punctuation checks aren't silently skipped on real templates.
+const BULLET_RE =
+  /^\s*(?:[-*•‣▪]\s+|\\item\b\s*|\\(?:resumeitem|resumesubitem|cvitem|cvlistitem|entry|achievement)\s*\{)\s*(.*\S)\s*$/i;
 
 // A metric is a percentage, a money amount, a number with a meaningful unit, or
 // a number introduced by by/to/from/under/over. Deliberately NOT a bare number
@@ -136,6 +140,18 @@ export function lintResume(text: string, opts: LintOptions = {}): LintReport {
       rule: 'word-count',
       severity: 'error',
       message: `Resume is ${wordCount} words; target ${WORD_MIN}–${WORD_MAX}.`,
+    });
+  }
+
+  // Substantial text but no recognizable bullets => the verb/metric/punctuation
+  // checks below are skipped. Warn so a custom-macro template isn't silently
+  // rubber-stamped as clean.
+  if (bullets.length === 0 && wordCount >= 100) {
+    violations.push({
+      rule: 'no-bullets',
+      severity: 'warn',
+      message:
+        'No bullets detected — verb/metric/punctuation checks skipped (custom LaTeX item macro?).',
     });
   }
 

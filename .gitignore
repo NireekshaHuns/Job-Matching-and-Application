@@ -38,6 +38,9 @@ yarn-error.log*
 /inventory.json
 /inventory.draft.json
 
+# generated tailored resumes
+/tailored/
+
 # vercel
 .vercel
 

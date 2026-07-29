@@ -115,4 +115,17 @@ describe('lintResume', () => {
     const report = lintResume('- Built a dynamic form renderer that cut load time by 30%.');
     expect(report.violations.some((v) => v.rule === 'buzzword')).toBe(false);
   });
+
+  it('detects bullets written with a custom LaTeX item macro', () => {
+    // Jake Gutierrez template style — must still catch a bystander verb.
+    const report = lintResume('\\resumeItem{Helped with the backend for the team.}');
+    expect(report.bulletCount).toBe(1);
+    expect(report.violations.some((v) => v.rule === 'weak-verb')).toBe(true);
+  });
+
+  it('warns when substantial text has no detectable bullets', () => {
+    const prose = `${'word '.repeat(120)}`;
+    const report = lintResume(prose);
+    expect(report.violations.some((v) => v.rule === 'no-bullets')).toBe(true);
+  });
 });
