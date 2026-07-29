@@ -19,6 +19,7 @@
     "inngest:dev": "inngest-cli dev -u http://localhost:3000/api/inngest",
     "ingest:uscis": "tsx scripts/ingest-uscis.ts",
     "ats:discover": "tsx scripts/discover-ats.ts",
+    "outlook:auth": "tsx scripts/outlook-auth.ts",
     "enrich": "tsx scripts/enrich.ts",
     "eval:classify": "tsx scripts/eval-classify.ts",
     "inventory:load": "tsx scripts/load-inventory.ts",
