@@ -10,12 +10,20 @@ export const ROLE_PRESETS = {
   managers: ['engineering manager', 'hiring manager'],
 } as const;
 
-function booleanKeywords(company: string, roles: readonly string[]): string {
-  const roleClause = roles.map((r) => `"${r}"`).join(' OR ');
-  return `(${roleClause}) AND "${company}"`;
+/** Quote a phrase, stripping embedded double-quotes so the expression can't break. */
+function phrase(s: string): string {
+  return `"${s.replace(/"/g, '')}"`;
 }
 
-/** LinkedIn people search (user must be logged in). Keyword-only = ID-free/robust. */
+function booleanKeywords(company: string, roles: readonly string[]): string {
+  const roleClause = roles.map(phrase).join(' OR ');
+  return `(${roleClause}) AND ${phrase(company)}`;
+}
+
+/**
+ * LinkedIn people search (user must be logged in). Keyword-only = ID-free and
+ * robust; best-effort — LinkedIn may not honor Boolean operators perfectly.
+ */
 export function linkedinPeopleSearch(company: string, roles: readonly string[]): string {
   const kw = encodeURIComponent(booleanKeywords(company, roles));
   return `https://www.linkedin.com/search/results/people/?keywords=${kw}&origin=FACETED_SEARCH`;
@@ -23,8 +31,8 @@ export function linkedinPeopleSearch(company: string, roles: readonly string[]):
 
 /** Google X-ray over public LinkedIn profiles (no login needed). */
 export function googleXray(company: string, roles: readonly string[]): string {
-  const roleClause = roles.map((r) => `"${r}"`).join(' OR ');
-  const q = encodeURIComponent(`site:linkedin.com/in (${roleClause}) "${company}"`);
+  const roleClause = roles.map(phrase).join(' OR ');
+  const q = encodeURIComponent(`site:linkedin.com/in (${roleClause}) ${phrase(company)}`);
   return `https://www.google.com/search?q=${q}`;
 }
 

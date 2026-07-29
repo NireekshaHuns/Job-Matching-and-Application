@@ -18,6 +18,14 @@ describe('googleXray', () => {
   });
 });
 
+describe('encoding edge cases', () => {
+  it('encodes ampersands/spaces and strips embedded quotes', () => {
+    const url = linkedinPeopleSearch('A & B "Inc"', ['recruiter']);
+    const kw = decodeURIComponent(new URL(url).searchParams.get('keywords') ?? '');
+    expect(kw).toBe('("recruiter") AND "A & B Inc"');
+  });
+});
+
 describe('outreachLinks', () => {
   it('offers recruiter, manager, and x-ray links for a company', () => {
     const labels = outreachLinks('Acme').map((l) => l.label);
