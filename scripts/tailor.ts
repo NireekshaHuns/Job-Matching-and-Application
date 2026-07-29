@@ -7,6 +7,7 @@
  */
 import 'dotenv/config';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
@@ -18,14 +19,18 @@ import { selectTailoringInputs, tailorResume, type TailorBullet } from '@/server
 
 function arg(args: string[], flag: string): string | undefined {
   const i = args.indexOf(flag);
-  return i >= 0 ? args[i + 1] : undefined;
+  if (i < 0) return undefined;
+  const next = args[i + 1];
+  return next && !next.startsWith('-') ? next : undefined;
 }
 
 function slug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'resume'
+  );
 }
 
 async function main() {
@@ -118,7 +123,7 @@ async function main() {
   const { latex, report } = await tailorResume(base.content, job, inputs, chat);
 
   const out = outArg ?? `tailored/${slug(job.company)}-${jobId}.tex`;
-  mkdirSync('tailored', { recursive: true });
+  mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, `${latex}\n`);
 
   console.log(`Tailored "${base.label}" for ${job.title} @ ${job.company} -> ${out}`);
@@ -126,6 +131,8 @@ async function main() {
   console.log(`Woven keywords: ${report.coverableKeywords.join(', ') || '(none)'}`);
   if (report.trueGaps.length)
     console.log(`Not covered (you lack these): ${report.trueGaps.join(', ')}`);
+  if (report.unexpectedGaps.length)
+    console.log(`REVIEW — gaps that appeared in the output: ${report.unexpectedGaps.join(', ')}`);
   if (!report.lint.ok) {
     console.log('Remaining linter issues:');
     for (const v of report.lint.violations) console.log(`  - [${v.severity}] ${v.message}`);
