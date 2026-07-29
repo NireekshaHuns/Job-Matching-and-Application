@@ -7,7 +7,11 @@ import { z } from 'zod';
  */
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
-  OPENAI_API_KEY: z.string().min(1),
+  // Optional: only the opt-in enrich/tailor scripts + Inngest use OpenAI, and
+  // they read process.env directly. Keeping it optional (and treating an empty
+  // string as absent, since .env.example ships it blank) lets the web app + DB
+  // boot with just DATABASE_URL.
+  OPENAI_API_KEY: z.preprocess((v) => (v ? v : undefined), z.string().min(1).optional()),
   OPENAI_CLASSIFY_MODEL: z.string().default('gpt-4o-mini'),
   OPENAI_EMBED_MODEL: z.string().default('text-embedding-3-small'),
   INNGEST_EVENT_KEY: z.string().optional(),
