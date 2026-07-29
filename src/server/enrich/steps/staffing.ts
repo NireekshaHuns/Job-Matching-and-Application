@@ -15,12 +15,20 @@
 const STAFFING_PHRASES: RegExp[] = [
   /corp[\s-]?to[\s-]?corp/i,
   /\bc2c\b/i,
+  /\bc2h\b/i,
+  /contract[\s-]?to[\s-]?hire/i,
   /\b1099\b/i,
-  /w-?2\s+contract/i,
+  /w-?2\s+(?:contract|only|basis|position|role)/i,
+  /\bon\s+w-?2\b/i,
   /third[\s-]?party\s+(?:candidates?|vendors?|agenc)/i,
-  /our client (?:is )?(?:seeking|looking|hiring|needs|requires)/i,
+  // "our client(s) [is/are] [currently] seeking/looking/hiring" — the strong tell.
+  /our clients?\s+(?:is\s+|are\s+)?(?:currently\s+)?(?:seeking|looking|hiring)/i,
+  // Apposition: "our client, a Fortune 500 bank, needs/requires/is …".
+  /our client,[^.]{0,40}?\s(?:is|needs|requires|seeking|looking|hiring)\b/i,
   /on behalf of our client/i,
-  /end[\s-]?client/i,
+  // "end client" only as a staffing tell (interview/rate/requirement), not
+  // generic "serve the end client" prose.
+  /end[\s-]?client\s+(?:interview|rate|requirement|approval|round)/i,
   /(?:staffing|consulting)\s+(?:agency|firm)/i,
 ];
 
