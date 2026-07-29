@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "applications_confirmation_email_idx" ON "applications" USING btree ("confirmation_email_id") WHERE "applications"."confirmation_email_id" is not null;
