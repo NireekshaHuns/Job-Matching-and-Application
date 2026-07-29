@@ -6,8 +6,13 @@ import {
   employmentTypeEnum,
   jobScores,
   jobs,
+  masterSkills,
+  resumeBullets,
+  resumeKindEnum,
+  resumes,
   roleFamilyEnum,
   seniorityEnum,
+  skillKindEnum,
   sponsorTierEnum,
 } from './schema';
 
@@ -102,6 +107,28 @@ describe('db schema', () => {
       ]) {
         expect(cols).toHaveProperty(name);
       }
+    });
+  });
+
+  describe('resume inventory tables', () => {
+    it('has base/tailored and technical/soft enums', () => {
+      expect(resumeKindEnum.enumValues).toEqual(['base', 'tailored']);
+      expect(skillKindEnum.enumValues).toEqual(['technical', 'soft']);
+    });
+
+    it('master_skills and resume_bullets have their key columns', () => {
+      expect(getTableColumns(masterSkills)).toHaveProperty('skill');
+      expect(getTableColumns(masterSkills)).toHaveProperty('kind');
+      const bullet = getTableColumns(resumeBullets);
+      expect(bullet).toHaveProperty('text');
+      expect(bullet).toHaveProperty('skills');
+    });
+
+    it('resumes carries kind, role family, and content', () => {
+      const cols = getTableColumns(resumes);
+      expect(cols).toHaveProperty('kind');
+      expect(cols).toHaveProperty('roleFamily');
+      expect(cols).toHaveProperty('content');
     });
   });
 });
