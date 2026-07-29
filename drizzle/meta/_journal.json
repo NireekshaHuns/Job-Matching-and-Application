@@ -15,6 +15,13 @@
       "when": 1785331306988,
       "tag": "0001_bizarre_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785332671220,
+      "tag": "0002_outstanding_vapor",
+      "breakpoints": true
     }
   ]
 }

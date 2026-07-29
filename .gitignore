@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# personal master inventory (the template is committed)
+/inventory.json
+
 # vercel
 .vercel
 
