@@ -40,6 +40,20 @@ function toSet(values: string[]): Set<string> {
 
 export function computeFit({ jobKeywords, resumeSkills, masterSkills }: FitInput): FitResult {
   const job = [...toSet(jobKeywords)];
+
+  // No extracted keywords = no signal. Score 0 (not 100) so failed/sparse
+  // extractions don't float to the top of a relevance-sorted board.
+  if (job.length === 0) {
+    return {
+      relevanceScore: 0,
+      achievableScore: 0,
+      matched: [],
+      missing: [],
+      missingAddable: [],
+      missingGap: [],
+    };
+  }
+
   const resumeSet = toSet(resumeSkills);
   const masterSet = toSet(masterSkills);
 
@@ -48,7 +62,7 @@ export function computeFit({ jobKeywords, resumeSkills, masterSkills }: FitInput
   const missingAddable = missing.filter((k) => masterSet.has(k));
   const missingGap = missing.filter((k) => !masterSet.has(k));
 
-  const pct = (n: number) => (job.length === 0 ? 100 : Math.round((n / job.length) * 100));
+  const pct = (n: number) => Math.round((n / job.length) * 100);
 
   return {
     relevanceScore: pct(matched.length),
@@ -68,7 +82,7 @@ export interface BulletLike {
 /**
  * The skills a base resume can present = union of bullet-bank skills whose
  * role_family matches the resume's (role-agnostic bullets, role_family=null,
- * always count).
+ * always count). A generalist resume (roleFamily=null) sees ALL bullets.
  */
 export function resumeSkillsFromBullets(
   bullets: BulletLike[],
@@ -76,7 +90,7 @@ export function resumeSkillsFromBullets(
 ): string[] {
   const out = new Set<string>();
   for (const b of bullets) {
-    if (b.roleFamily === null || b.roleFamily === roleFamily) {
+    if (roleFamily === null || b.roleFamily === null || b.roleFamily === roleFamily) {
       for (const s of b.skills) {
         const n = s.trim().toLowerCase();
         if (n) out.add(n);

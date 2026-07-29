@@ -15,10 +15,25 @@ describe('computeFit', () => {
     expect(fit.achievableScore).toBe(75); // 3/4 reachable truthfully
   });
 
-  it('returns 100 when the job lists no keywords', () => {
-    const fit = computeFit({ jobKeywords: [], resumeSkills: [], masterSkills: [] });
-    expect(fit.relevanceScore).toBe(100);
-    expect(fit.achievableScore).toBe(100);
+  it('scores 0 when the job lists no keywords (no signal, not a perfect match)', () => {
+    const fit = computeFit({ jobKeywords: [], resumeSkills: ['go'], masterSkills: ['go'] });
+    expect(fit.relevanceScore).toBe(0);
+    expect(fit.achievableScore).toBe(0);
+  });
+
+  it('rounds coverage to the nearest integer', () => {
+    const oneOfThree = computeFit({
+      jobKeywords: ['a', 'b', 'c'],
+      resumeSkills: ['a'],
+      masterSkills: [],
+    });
+    expect(oneOfThree.relevanceScore).toBe(33);
+    const twoOfThree = computeFit({
+      jobKeywords: ['a', 'b', 'c'],
+      resumeSkills: ['a', 'b'],
+      masterSkills: [],
+    });
+    expect(twoOfThree.relevanceScore).toBe(67);
   });
 
   it('normalizes case/whitespace on both sides', () => {
@@ -44,5 +59,14 @@ describe('resumeSkillsFromBullets', () => {
 
   it('excludes other roles', () => {
     expect(resumeSkillsFromBullets(bullets, 'frontend').sort()).toEqual(['git', 'react']);
+  });
+
+  it('a generalist (null role) resume sees all bullets', () => {
+    expect(resumeSkillsFromBullets(bullets, null).sort()).toEqual([
+      'git',
+      'go',
+      'postgresql',
+      'react',
+    ]);
   });
 });
