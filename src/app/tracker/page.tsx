@@ -181,7 +181,11 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
           </a>
           <div className="text-sm text-zinc-600">
             {app.company} · applied {new Date(app.appliedAt).toLocaleDateString()}
-            {app.source === 'outlook' ? ' · ✉ confirmed' : ''}
+            {app.confirmedAt && (
+              <span className="ml-1 text-green-700">
+                · ✉ confirmed {new Date(app.confirmedAt).toLocaleDateString()}
+              </span>
+            )}
           </div>
         </div>
         <select

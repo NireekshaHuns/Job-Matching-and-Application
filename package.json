@@ -20,6 +20,7 @@
     "ingest:uscis": "tsx scripts/ingest-uscis.ts",
     "ats:discover": "tsx scripts/discover-ats.ts",
     "outlook:auth": "tsx scripts/outlook-auth.ts",
+    "outlook:reconcile": "tsx scripts/outlook-reconcile.ts",
     "enrich": "tsx scripts/enrich.ts",
     "eval:classify": "tsx scripts/eval-classify.ts",
     "inventory:load": "tsx scripts/load-inventory.ts",
