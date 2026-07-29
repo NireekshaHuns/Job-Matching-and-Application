@@ -8,10 +8,12 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { DB } from '@/server/db';
 import { applications, jobs } from '@/server/db/schema';
-import { reconcileConfirmations, type PendingApplication } from './confirm';
+import {
+  reconcileConfirmations,
+  type ConfirmationUpdate,
+  type PendingApplication,
+} from './confirm';
 import type { MailClient } from './types';
-
-type BatchStatement = Parameters<DB['batch']>[0][number];
 
 const DAY_MS = 86_400_000;
 const DEFAULT_MAX_LOOKBACK_DAYS = 60;
@@ -82,22 +84,32 @@ export async function runOutlookReconcile(args: RunOutlookReconcileArgs): Promis
 
   const messages = await args.mail.listMessages({ sinceIso });
   const updates = reconcileConfirmations(messages, pending);
+  const confirmed = await writeConfirmations(args.db, updates);
 
-  if (updates.length > 0) {
-    // Conditional writes (WHERE confirmation_email_id IS NULL) so a concurrent
-    // run — or the same email seen twice — can never overwrite a confirmation.
-    const writes: BatchStatement[] = updates.map((u) =>
-      args.db
-        .update(applications)
-        .set({
-          confirmedAt: new Date(u.confirmedAt),
-          confirmationEmailId: u.confirmationEmailId,
-          source: 'outlook',
-        })
-        .where(and(eq(applications.id, u.applicationId), isNull(applications.confirmationEmailId))),
-    );
-    await args.db.batch(writes as [BatchStatement, ...BatchStatement[]]);
-  }
+  return { pending: pending.length, messages: messages.length, confirmed };
+}
 
-  return { pending: pending.length, messages: messages.length, confirmed: updates.length };
+/**
+ * Persist confirmations atomically. Each UPDATE guards on
+ * `confirmation_email_id IS NULL` so a concurrent run — or the same email seen
+ * twice — can never overwrite a confirmation (neon-http `db.batch` runs the lot
+ * in one transaction). Returns the number of updates issued. NOTE: `confirmedAt`
+ * and `confirmationEmailId` must always be set together — `loadPendingApplications`
+ * reads on the former while the guard keys on the latter.
+ */
+export async function writeConfirmations(db: DB, updates: ConfirmationUpdate[]): Promise<number> {
+  if (updates.length === 0) return 0; // db.batch requires a non-empty tuple
+  const writes = updates.map((u) =>
+    db
+      .update(applications)
+      .set({
+        confirmedAt: new Date(u.confirmedAt),
+        confirmationEmailId: u.confirmationEmailId,
+        source: 'outlook',
+      })
+      .where(and(eq(applications.id, u.applicationId), isNull(applications.confirmationEmailId))),
+  );
+  const [first, ...rest] = writes; // provably non-empty here → no cast needed
+  await db.batch([first, ...rest]);
+  return updates.length;
 }

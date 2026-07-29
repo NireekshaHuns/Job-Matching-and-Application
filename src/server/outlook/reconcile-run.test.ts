@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { reconcileSinceIso } from './reconcile-run';
+import { describe, expect, it, vi } from 'vitest';
+import type { DB } from '@/server/db';
+import { reconcileSinceIso, writeConfirmations } from './reconcile-run';
+import type { ConfirmationUpdate } from './confirm';
 
 const DAY = 86_400_000;
 const NOW = Date.parse('2026-07-27T00:00:00Z');
@@ -21,5 +23,39 @@ describe('reconcileSinceIso', () => {
 
   it('never looks into the future if an appliedAt is somehow ahead of now', () => {
     expect(reconcileSinceIso([NOW + 10 * DAY], NOW, 60)).toBe(new Date(NOW).toISOString());
+  });
+});
+
+describe('writeConfirmations', () => {
+  /** Minimal fake DB recording the update/batch calls the writer makes. */
+  function fakeDb() {
+    const batch = vi.fn<(queries: unknown[]) => Promise<unknown[]>>(async () => []);
+    const update = vi.fn(() => ({ set: () => ({ where: () => ({ stmt: true }) }) }));
+    return { db: { update, batch } as unknown as DB, update, batch };
+  }
+
+  const update: ConfirmationUpdate = {
+    applicationId: 1,
+    confirmedAt: '2026-07-20T10:00:00Z',
+    confirmationEmailId: 'e1',
+  };
+
+  it('no-ops (no db.batch) when there are no updates', async () => {
+    const { db, update: upd, batch } = fakeDb();
+    expect(await writeConfirmations(db, [])).toBe(0);
+    expect(upd).not.toHaveBeenCalled();
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('issues one conditional update per confirmation in a single batch', async () => {
+    const { db, update: upd, batch } = fakeDb();
+    const n = await writeConfirmations(db, [
+      update,
+      { ...update, applicationId: 2, confirmationEmailId: 'e2' },
+    ]);
+    expect(n).toBe(2);
+    expect(upd).toHaveBeenCalledTimes(2);
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0].length).toBe(2);
   });
 });
