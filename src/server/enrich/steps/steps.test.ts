@@ -161,4 +161,36 @@ describe('buildJobRow', () => {
     expect(row.softKeywords).toEqual(['ownership']);
     expect(row).not.toHaveProperty('relevanceScore');
   });
+
+  it('overrides a full_time label to contract when the JD reads as a staffing placement', () => {
+    const row = buildJobRow(
+      posting({ jdText: 'Our client is seeking a Go engineer. Corp-to-corp only.' }),
+      { tier: 'Medium', reason: 'why', sponsorCount: 1 },
+      {
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: ['go'],
+        softKeywords: [],
+      },
+      null,
+    );
+    expect(row.employmentType).toBe('contract');
+  });
+
+  it('leaves a genuine full_time role untouched', () => {
+    const row = buildJobRow(
+      posting({ jdText: 'Join our platform team building payments in Go.' }),
+      { tier: 'Medium', reason: 'why', sponsorCount: 1 },
+      {
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: ['go'],
+        softKeywords: [],
+      },
+      null,
+    );
+    expect(row.employmentType).toBe('full_time');
+  });
 });
