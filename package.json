@@ -24,7 +24,8 @@
     "inventory:extract": "tsx scripts/extract-inventory.ts",
     "inventory:suggest": "tsx scripts/suggest-inventory.ts",
     "score:fits": "tsx scripts/score-fits.ts",
-    "tailor": "tsx scripts/tailor.ts"
+    "tailor": "tsx scripts/tailor.ts",
+    "resume:pdf": "tsx scripts/compile-resume.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

@@ -15,6 +15,8 @@ import OpenAI from 'openai';
 import * as schema from '@/server/db/schema';
 import { jobs, masterSkills, resumeBullets, resumes } from '@/server/db/schema';
 import { openaiChat } from '@/server/enrich/openai';
+import { compileToPdf } from '@/server/resume/compile';
+import { realCompileDeps } from '@/server/resume/latex-runner';
 import { selectTailoringInputs, tailorResume, type TailorBullet } from '@/server/resume/tailor';
 
 function arg(args: string[], flag: string): string | undefined {
@@ -136,6 +138,15 @@ async function main() {
   if (!report.lint.ok) {
     console.log('Remaining linter issues:');
     for (const v of report.lint.violations) console.log(`  - [${v.severity}] ${v.message}`);
+  }
+
+  if (args.includes('--pdf')) {
+    try {
+      const pdf = await compileToPdf(out, realCompileDeps);
+      console.log(`Compiled -> ${pdf}`);
+    } catch (e) {
+      console.warn(`PDF compile skipped: ${e instanceof Error ? e.message : e}`);
+    }
   }
 }
 
