@@ -2,6 +2,7 @@ import { createCallerFactory, createTRPCRouter } from './trpc';
 import { applicationsRouter } from './routers/applications';
 import { healthRouter } from './routers/health';
 import { jobsRouter } from './routers/jobs';
+import { outreachRouter } from './routers/outreach';
 import { resumesRouter } from './routers/resumes';
 
 export const appRouter = createTRPCRouter({
@@ -9,6 +10,7 @@ export const appRouter = createTRPCRouter({
   jobs: jobsRouter,
   resumes: resumesRouter,
   applications: applicationsRouter,
+  outreach: outreachRouter,
 });
 
 export type AppRouter = typeof appRouter;
