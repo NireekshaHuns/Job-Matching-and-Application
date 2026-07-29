@@ -23,6 +23,8 @@ export const ENGINES: LatexEngine[] = [
     buildArgs: (tex, out) => ['-pdf', '-interaction=nonstopmode', `-outdir=${out}`, tex],
   },
   {
+    // Last resort: single-pass only, so cross-references/TOC may be stale.
+    // Fine for a one-page resume; tectonic/latexmk auto-rerun.
     name: 'pdflatex',
     buildArgs: (tex, out) => ['-interaction=nonstopmode', `-output-directory=${out}`, tex],
   },
@@ -49,6 +51,9 @@ const INSTALL_HINT =
 
 /** Compile `texPath` to a sibling PDF. Returns the PDF path. */
 export async function compileToPdf(texPath: string, deps: CompileDeps): Promise<string> {
+  if (!/\.tex$/i.test(texPath)) {
+    throw new Error(`Expected a .tex file, got: ${texPath}`);
+  }
   const engine = resolveEngine(deps.has);
   if (!engine) throw new Error(INSTALL_HINT);
 

@@ -27,6 +27,13 @@ describe('resolveEngine', () => {
     ]);
     const pdflatex = resolveEngine((c) => c === 'pdflatex')!;
     expect(pdflatex.buildArgs('a.tex', 'out')).toContain('-output-directory=out');
+    const latexmk = resolveEngine((c) => c === 'latexmk')!;
+    expect(latexmk.buildArgs('a.tex', 'out')).toEqual([
+      '-pdf',
+      '-interaction=nonstopmode',
+      '-outdir=out',
+      'a.tex',
+    ]);
   });
 });
 
@@ -50,5 +57,19 @@ describe('compileToPdf', () => {
     await expect(compileToPdf('x.tex', { has: hasAll, run })).rejects.toThrow(
       /Undefined control sequence/,
     );
+  });
+
+  it('rejects input that is not a .tex file', async () => {
+    await expect(compileToPdf('resume', { has: hasAll, run: okRun })).rejects.toThrow(
+      /Expected a \.tex file/,
+    );
+  });
+
+  it.each([
+    ['tailored/RESUME.TEX', 'tailored/RESUME.pdf'],
+    ['my.resume.v2.tex', 'my.resume.v2.pdf'],
+  ])('derives the sibling pdf path for %s', async (tex, pdf) => {
+    const run = vi.fn(async () => ({ ok: true, stderr: '' }));
+    expect(await compileToPdf(tex, { has: hasAll, run })).toBe(pdf);
   });
 });
