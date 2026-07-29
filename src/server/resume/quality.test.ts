@@ -128,4 +128,11 @@ describe('lintResume', () => {
     const report = lintResume(prose);
     expect(report.violations.some((v) => v.rule === 'no-bullets')).toBe(true);
   });
+
+  it('matches regex-special keywords (c++, c#, .net, ci/cd) without throwing', () => {
+    const report = lintResume('- Built systems in C++ and C# on .NET with CI/CD by 30%.', {
+      jdKeywords: ['c++', 'c#', '.net', 'ci/cd'],
+    });
+    expect(report.keywordCoverage?.matched.sort()).toEqual(['.net', 'c#', 'c++', 'ci/cd']);
+  });
 });

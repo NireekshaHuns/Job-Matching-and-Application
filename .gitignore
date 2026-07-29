@@ -37,6 +37,7 @@ yarn-error.log*
 # personal master inventory + drafts (the template is committed)
 /inventory.json
 /inventory.draft.json
+/inventory.suggested.json
 
 # generated tailored resumes
 /tailored/
