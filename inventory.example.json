@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to inventory.json (git-ignored) and fill with YOUR real skills, bullets, and base resumes. This is the truthful superset the tailoring engine draws from — never list a skill you don't have. Load with: pnpm inventory:load inventory.json",
+  "_comment": "Copy to inventory.json (git-ignored) and fill with YOUR real skills, bullets, and base resumes. This is the truthful superset the tailoring engine draws from — never list a skill you don't have. Every bullet's skills tags must appear in skills[]. Load with: pnpm inventory:load inventory.json --yes",
   "skills": [
     { "skill": "go", "kind": "technical" },
     { "skill": "typescript", "kind": "technical" },
