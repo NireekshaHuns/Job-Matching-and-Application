@@ -11,22 +11,29 @@ import { simplifyNewGradConnector } from './connectors/simplify';
 import type { DiscoveredBoards } from './discover';
 import type { Fetcher, JobConnector } from './types';
 
-/** File written by `pnpm ats:discover` (git-ignored); merged over the seeds. */
+/** File written by `pnpm ats:discover` (git-ignored); merged with the seeds. */
 const DISCOVERED_FILE = 'ats-boards.json';
 
-function loadDiscoveredBoards(): Partial<DiscoveredBoards> {
+/** Read the discovered-boards file (cwd-relative); degrade to `{}` if absent/malformed. */
+export function loadDiscoveredBoards(file: string = DISCOVERED_FILE): Partial<DiscoveredBoards> {
   try {
-    if (!existsSync(DISCOVERED_FILE)) return {};
-    return JSON.parse(readFileSync(DISCOVERED_FILE, 'utf8')) as Partial<DiscoveredBoards>;
+    if (!existsSync(file)) return {};
+    return JSON.parse(readFileSync(file, 'utf8')) as Partial<DiscoveredBoards>;
   } catch {
     return {};
   }
 }
 
-/** Merge seed + discovered boards, deduped by the given key. */
-function mergeBoards<T>(seed: T[], discovered: T[] | undefined, key: (b: T) => string): T[] {
+/**
+ * Merge seed + discovered boards, deduped by the given key. Seeds win on a key
+ * collision: they are the curated, code-reviewed source of truth, whereas the
+ * discovered file is machine-generated and its `company` label can drift (which
+ * would change job fingerprints). Discovery only *adds* boards, never overrides.
+ */
+export function mergeBoards<T>(seed: T[], discovered: T[] | undefined, key: (b: T) => string): T[] {
   const byKey = new Map<string, T>();
-  for (const b of [...seed, ...(discovered ?? [])]) byKey.set(key(b).toLowerCase(), b);
+  // Discovered first, then seed, so seed entries overwrite on collision.
+  for (const b of [...(discovered ?? []), ...seed]) byKey.set(key(b).toLowerCase(), b);
   return [...byKey.values()];
 }
 
