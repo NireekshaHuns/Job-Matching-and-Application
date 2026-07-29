@@ -38,6 +38,9 @@ export function buildClassifyMessages(posting: RawPosting): {
   return { system: CLASSIFY_SYSTEM_PROMPT, user };
 }
 
+/** Keep skills bounded; deduped first, so this is 30 UNIQUE skills. */
+const MAX_SKILLS = 30;
+
 /** Normalize skills: trim, lowercase, drop empties, dedupe, cap length. */
 function normalizeSkills(skills: string[]): string[] {
   const seen = new Set<string>();
@@ -45,17 +48,19 @@ function normalizeSkills(skills: string[]): string[] {
     const v = s.trim().toLowerCase();
     if (v) seen.add(v);
   }
-  return [...seen].slice(0, 30);
+  return [...seen].slice(0, MAX_SKILLS);
 }
 
-/** Parse and validate the model's raw JSON output into a `Classification`. */
+/**
+ * Parse and validate the model's raw JSON output into a `Classification`.
+ * Extracts the first {...} block so leading prose or ```json fences (from
+ * non-strict models) don't break JSON.parse. The real adapter forces a strict
+ * JSON object, so this is defensive.
+ */
 export function parseClassification(raw: string): Classification {
-  // Tolerate ```json fences some models add.
-  const cleaned = raw
-    .replace(/^\s*```(?:json)?/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
-  const parsed = classificationSchema.parse(JSON.parse(cleaned));
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON object found in classifier output');
+  const parsed = classificationSchema.parse(JSON.parse(match[0]));
   return { ...parsed, skills: normalizeSkills(parsed.skills) };
 }
 

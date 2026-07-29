@@ -5,6 +5,11 @@
  */
 import type { RawPosting } from '@/server/ingest/types';
 
+/**
+ * "First occurrence" is deterministic: connectors are fetched in registry order
+ * and concatenated, so earlier-registered sources (e.g. official ATS feeds) win
+ * over later ones for a shared fingerprint.
+ */
 export function dedupPostings(postings: RawPosting[]): RawPosting[] {
   const seen = new Set<string>();
   const out: RawPosting[] = [];

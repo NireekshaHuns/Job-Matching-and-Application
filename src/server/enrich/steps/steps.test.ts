@@ -76,6 +76,11 @@ describe('parseClassification / classifyPosting', () => {
     expect(c.roleFamily).toBe('backend');
   });
 
+  it('tolerates leading prose before the JSON object', () => {
+    const c = parseClassification('Here is the JSON:\n' + validJson);
+    expect(c.roleFamily).toBe('backend');
+  });
+
   it('rejects an invalid enum value', () => {
     const bad = JSON.stringify({
       employmentType: 'full_time',

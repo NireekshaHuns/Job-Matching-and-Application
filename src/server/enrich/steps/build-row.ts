@@ -9,7 +9,10 @@ import type { Classification } from '../types';
 import type { SponsorMatch } from './sponsor-match';
 
 function looksRemote(posting: RawPosting): boolean {
-  return /\bremote\b/i.test(`${posting.location ?? ''} ${posting.title}`);
+  const location = posting.location ?? '';
+  // Look at the location field only, and don't treat "no/not remote" as remote.
+  if (/\b(no|not|non)[-\s]?remote\b/i.test(location)) return false;
+  return /\bremote\b/i.test(location);
 }
 
 export function buildJobRow(
