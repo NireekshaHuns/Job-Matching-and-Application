@@ -9,7 +9,7 @@
  * inventory.json, and run `pnpm inventory:load inventory.json --yes`.
  */
 import 'dotenv/config';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import OpenAI from 'openai';
 import { openaiChat } from '@/server/enrich/openai';
 import { extractInventory } from '@/server/resume/extract';
@@ -20,13 +20,22 @@ async function main() {
   const input = args.find((a) => !a.startsWith('-'));
   const outIdx = args.findIndex((a) => a === '-o' || a === '--out');
   const out = outIdx >= 0 ? args[outIdx + 1] : 'inventory.draft.json';
+  const force = args.includes('--force');
 
-  if (!input) {
-    console.error('usage: pnpm inventory:extract <resume.pdf|.txt> [-o out.json]');
+  if (!input || (outIdx >= 0 && !out)) {
+    console.error('usage: pnpm inventory:extract <resume.pdf|.txt> [-o out.json] [--force]');
     process.exit(1);
   }
   if (!process.env.OPENAI_API_KEY) {
     console.error('OPENAI_API_KEY is not set (check .env).');
+    process.exit(1);
+  }
+  if (!existsSync(input)) {
+    console.error(`Input file not found: ${input}`);
+    process.exit(1);
+  }
+  if (existsSync(out) && !force) {
+    console.error(`${out} already exists — pass --force to overwrite, or -o <other>.`);
     process.exit(1);
   }
 
@@ -36,13 +45,18 @@ async function main() {
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const chat = openaiChat(openai, process.env.OPENAI_CLASSIFY_MODEL ?? 'gpt-4o-mini');
-  const inventory = await extractInventory(resumeText, chat);
+  const { inventory, reconciledSkills } = await extractInventory(resumeText, chat);
 
   writeFileSync(out, `${JSON.stringify(inventory, null, 2)}\n`);
   console.log(
-    `Drafted ${inventory.skills.length} skills and ${inventory.bullets.length} bullets -> ${out}.\n` +
-      `Review it (trim/fix, add base-resume LaTeX), then: pnpm inventory:load ${out} --yes`,
+    `Drafted ${inventory.skills.length} skills and ${inventory.bullets.length} bullets -> ${out}.`,
   );
+  if (reconciledSkills.length > 0) {
+    console.log(
+      `Auto-added ${reconciledSkills.length} skill(s) from bullet tags — review these: ${reconciledSkills.join(', ')}`,
+    );
+  }
+  console.log(`Then: review it (add base-resume LaTeX) and run: pnpm inventory:load ${out} --yes`);
 }
 
 main().catch((err) => {
