@@ -86,14 +86,18 @@ export const outreachRouter = createTRPCRouter({
     return { ok: true };
   }),
 
-  /** Count of outreach touches logged today — the daily outreach nudge. */
-  todayCount: publicProcedure.query(async ({ ctx }) => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const [row] = await ctx.db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(outreachLog)
-      .where(gte(outreachLog.contactedAt, start));
-    return row?.n ?? 0;
-  }),
+  /**
+   * Count outreach touches since `sinceMs` — the daily nudge. The client passes
+   * its own local midnight so the count resets at the user's midnight, not the
+   * server's (Vercel runs in UTC).
+   */
+  todayCount: publicProcedure
+    .input(z.object({ sinceMs: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      const [row] = await ctx.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(outreachLog)
+        .where(gte(outreachLog.contactedAt, new Date(input.sinceMs)));
+      return row?.n ?? 0;
+    }),
 });

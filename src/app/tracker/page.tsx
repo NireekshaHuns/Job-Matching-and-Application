@@ -47,7 +47,7 @@ function OutreachPanel({
             rel="noopener noreferrer"
             className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50"
           >
-            {link.label} ↗
+            {link.label} <span aria-hidden>↗</span>
           </a>
         ))}
       </div>
@@ -90,6 +90,7 @@ function OutreachPanel({
               </button>
               <button
                 type="button"
+                aria-label={`Remove ${c.name}`}
                 onClick={() => removeContact.mutate({ id: c.id })}
                 className="rounded border border-red-200 px-1.5 py-0.5 text-xs text-red-700 hover:bg-red-50"
               >
@@ -260,7 +261,9 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
 export default function Tracker() {
   const utils = trpc.useUtils();
   const query = trpc.applications.list.useQuery();
-  const todayQuery = trpc.outreach.todayCount.useQuery();
+  // Client-local midnight so "today" resets at the user's midnight, not UTC.
+  const [sinceMs] = useState(() => new Date().setHours(0, 0, 0, 0));
+  const todayQuery = trpc.outreach.todayCount.useQuery({ sinceMs });
   const onChanged = () => {
     utils.applications.list.invalidate();
     utils.outreach.todayCount.invalidate();
