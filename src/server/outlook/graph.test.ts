@@ -49,6 +49,14 @@ describe('URL builders', () => {
     expect(url.searchParams.get('$top')).toBe('25');
     expect(url.searchParams.get('$select')).toContain('bodyPreview');
   });
+
+  it('percent-encodes OData spaces as %20, never "+"', () => {
+    // Graph rejects the `+`-for-space form that URLSearchParams emits by default.
+    const raw = buildMessagesUrl({ sinceIso: '2026-07-01T00:00:00Z' });
+    expect(raw).toContain('receivedDateTime%20ge%20');
+    expect(raw).toContain('receivedDateTime%20desc');
+    expect(raw).not.toContain('+');
+  });
 });
 
 describe('mapGraphMessage', () => {
@@ -180,5 +188,42 @@ describe('graphMailClient', () => {
     const msgs = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
     expect(msgs.map((m) => m.id)).toEqual(['a', 'b']);
     expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes the token and retries once on a 401', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, { ok: false, status: 401 }))
+      .mockResolvedValueOnce(
+        jsonResponse({ value: [{ id: 'a', receivedDateTime: '2026-07-20T10:00:00Z' }] }),
+      );
+    const getAccessToken = vi.fn(async () => 'AT');
+    const client = graphMailClient({
+      fetch: fetchFn as unknown as typeof fetch,
+      getAccessToken,
+      maxPages: 5,
+    });
+    const msgs = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
+    expect(msgs.map((m) => m.id)).toEqual(['a']);
+    expect(getAccessToken).toHaveBeenCalledTimes(2);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips items missing id or receivedDateTime', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({
+        value: [
+          { id: 'a', receivedDateTime: '2026-07-20T10:00:00Z' },
+          { receivedDateTime: '2026-07-19T10:00:00Z' }, // no id
+          { id: 'c' }, // no receivedDateTime
+        ],
+      }),
+    );
+    const client = graphMailClient({
+      fetch: fetchFn as unknown as typeof fetch,
+      getAccessToken: async () => 'AT',
+    });
+    const msgs = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
+    expect(msgs.map((m) => m.id)).toEqual(['a']);
   });
 });

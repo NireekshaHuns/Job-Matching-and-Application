@@ -22,7 +22,11 @@ export function tokenEndpoint(tenant: string): string {
   return `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
 }
 
-/** Authorize URL for the one-time interactive login (auth-code + PKCE). */
+/**
+ * Authorize URL for the one-time interactive login (auth-code + PKCE). No CSRF
+ * `state` param: this is a local manual-paste flow (redirect to http://localhost,
+ * user copies the code by hand), so there's no cross-site callback to protect.
+ */
 export function authorizeUrl(opts: {
   clientId: string;
   tenant: string;
@@ -112,7 +116,9 @@ export function buildMessagesUrl(opts: { sinceIso: string; top?: number }): stri
     $orderby: 'receivedDateTime desc',
     $top: String(opts.top ?? 50),
   });
-  return `${GRAPH_MESSAGES_ENDPOINT}?${params}`;
+  // URLSearchParams encodes spaces as `+`, but OData ($filter/$orderby) requires
+  // `%20` in the query component — Graph rejects the `+` form. Fix it here.
+  return `${GRAPH_MESSAGES_ENDPOINT}?${params.toString().replace(/\+/g, '%20')}`;
 }
 
 /** Shape of a Graph message with the fields we `$select`. */
@@ -153,21 +159,39 @@ export function graphMailClient(deps: {
 }): MailClient {
   return {
     async listMessages({ sinceIso }) {
-      const accessToken = await deps.getAccessToken();
+      let accessToken = await deps.getAccessToken();
       const maxPages = deps.maxPages ?? 10;
       const messages: OutlookMessage[] = [];
       let url: string | undefined = buildMessagesUrl({ sinceIso });
 
+      const get = (u: string) =>
+        deps.fetch(u, { headers: { authorization: `Bearer ${accessToken}` } });
+
       for (let page = 0; url && page < maxPages; page++) {
-        const res: Response = await deps.fetch(url, {
-          headers: { authorization: `Bearer ${accessToken}` },
-        });
+        let res: Response = await get(url);
+        // The access token can expire mid-run on a large mailbox; refresh once
+        // and retry the page. (Throttling — 429 with Retry-After — is left to
+        // the caller/poller to handle by re-running later.)
+        if (res.status === 401) {
+          accessToken = await deps.getAccessToken();
+          res = await get(url);
+        }
         if (!res.ok) {
           throw new Error(`Graph messages request failed (${res.status}): ${await res.text()}`);
         }
         const body = (await res.json()) as MessagesPage;
-        for (const m of body.value ?? []) messages.push(mapGraphMessage(m));
+        // Skip malformed items so a missing id/receivedDateTime never becomes a
+        // bogus `confirmedAt` downstream.
+        for (const m of body.value ?? []) {
+          if (m.id && m.receivedDateTime) messages.push(mapGraphMessage(m));
+        }
         url = body['@odata.nextLink'];
+        if (url && page === maxPages - 1) {
+          // Newest-first, so the dropped tail is the OLDEST in the window.
+          console.warn(
+            `graphMailClient: hit maxPages=${maxPages}; older messages since ${sinceIso} were not fetched`,
+          );
+        }
       }
       return messages;
     },
