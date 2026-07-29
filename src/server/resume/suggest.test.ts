@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseInventory } from './inventory';
 import { SKILL_CATALOG } from './skill-catalog';
 import { suggestSkills } from './suggest';
 
@@ -30,6 +31,12 @@ describe('SKILL_CATALOG', () => {
     const byName = new Map(SKILL_CATALOG.map((s) => [s.skill, s.kind]));
     expect(byName.get('communication')).toBe('soft');
     expect(byName.get('jira')).toBe('technical');
+  });
+
+  it('is loadable as an inventory (survives parseInventory, incl. c++/c#/.net)', () => {
+    const inv = parseInventory({ skills: SKILL_CATALOG });
+    expect(inv.skills).toHaveLength(SKILL_CATALOG.length);
+    expect(inv.skills.map((s) => s.skill)).toEqual(expect.arrayContaining(['c++', 'c#', '.net']));
   });
 });
 
@@ -72,10 +79,37 @@ describe('suggestSkills', () => {
     expect(out.filter((s) => s.skill === 'jira')).toHaveLength(1);
   });
 
-  it('sorts technical before soft', () => {
-    const out = suggestSkills({ catalog, jobTechKeywords: [], jobSoftKeywords: [], existing: [] });
-    const firstSoft = out.findIndex((s) => s.kind === 'soft');
-    const lastTech = out.map((s) => s.kind).lastIndexOf('technical');
-    expect(lastTech).toBeLessThan(firstSoft);
+  it('sorts technical before soft, alphabetical within kind', () => {
+    const out = suggestSkills({
+      catalog: [
+        { skill: 'zebra', kind: 'technical' },
+        { skill: 'apple', kind: 'technical' },
+        { skill: 'ownership', kind: 'soft' },
+      ],
+      jobTechKeywords: [],
+      jobSoftKeywords: [],
+      existing: [],
+    });
+    expect(out.map((s) => s.skill)).toEqual(['apple', 'zebra', 'ownership']);
+  });
+
+  it('tags a keyword in both job lists as technical (tech wins the tie)', () => {
+    const out = suggestSkills({
+      catalog: [],
+      jobTechKeywords: ['devops'],
+      jobSoftKeywords: ['devops'],
+      existing: [],
+    });
+    expect(out).toEqual([{ skill: 'devops', kind: 'technical' }]);
+  });
+
+  it('drops empty/whitespace keywords', () => {
+    const out = suggestSkills({
+      catalog: [],
+      jobTechKeywords: ['', '   '],
+      jobSoftKeywords: [],
+      existing: [],
+    });
+    expect(out).toEqual([]);
   });
 });

@@ -5,6 +5,9 @@
  * a comprehensive candidate list the user prunes to what they've actually done.
  *
  * This is a suggestion source, not a claim — the user decides what stays.
+ * Bare single-letter languages ("c", "r") are intentionally omitted — they're
+ * low-signal and fragile for word-boundary keyword matching; add them by hand
+ * if needed (e.g. "c language").
  */
 import type { InventorySkill } from './inventory';
 
@@ -14,7 +17,6 @@ const TECHNICAL: string[] = [
   'java',
   'javascript',
   'typescript',
-  'c',
   'c++',
   'c#',
   'go',
@@ -24,7 +26,6 @@ const TECHNICAL: string[] = [
   'swift',
   'scala',
   'php',
-  'r',
   'sql',
   'bash',
   'html',

@@ -22,7 +22,9 @@ function norm(s: string): string {
 /**
  * Build the de-duplicated candidate list. Catalog entries seed the kind;
  * job keywords add anything the catalog missed (soft vs technical by source).
- * Existing skills are excluded. Sorted: technical first, then alphabetical.
+ * First write wins, so precedence is catalog > tech > soft — i.e. a keyword in
+ * both job lists is tagged technical. Existing skills are excluded. Sorted:
+ * technical first, then alphabetical within kind.
  */
 export function suggestSkills(input: SuggestInput): InventorySkill[] {
   const existing = new Set(input.existing.map(norm));
