@@ -42,6 +42,9 @@ yarn-error.log*
 # generated tailored resumes
 /tailored/
 
+# discovered ATS tokens (regenerate with pnpm ats:discover)
+/ats-boards.json
+
 # vercel
 .vercel
 
