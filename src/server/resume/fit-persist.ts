@@ -31,8 +31,15 @@ export async function scoreFits(db: DB): Promise<number> {
     roleFamily: b.roleFamily,
   }));
 
+  // Only base resumes are scored — tailored resumes are generated per job, not
+  // reusable lenses to rank against.
   const rows = baseResumes.flatMap((resume) => {
     const resumeSkills = resumeSkillsFromBullets(bulletList, resume.roleFamily);
+    if (resumeSkills.length === 0) {
+      console.warn(
+        `[score:fits] base resume ${resume.id} has no bullet skills — it will score 0 for every job. Add role-tagged bullets to the inventory.`,
+      );
+    }
     return jobRows.map((job) => {
       const fit = computeFit({
         jobKeywords: [...job.techKeywords, ...job.softKeywords],

@@ -75,6 +75,34 @@ describe('scoreFits', () => {
     expect(fake.upserts[0].conflict).toBeTruthy();
   });
 
+  it('upserts in 500-row chunks across the cross-product', async () => {
+    const jobRows = Array.from({ length: 200 }, (_, i) => ({
+      id: i + 1,
+      techKeywords: ['go'],
+      softKeywords: [],
+    }));
+    const byTable = new Map<unknown, unknown[]>([
+      [masterSkills, [{ skill: 'go' }]],
+      [resumeBullets, [{ skills: ['go'], roleFamily: null }]],
+      [
+        resumes,
+        [
+          { id: 1, roleFamily: 'backend' },
+          { id: 2, roleFamily: 'frontend' },
+          { id: 3, roleFamily: null },
+        ],
+      ],
+      [jobs, jobRows],
+    ]);
+    const fake = makeFakeDb(byTable);
+
+    const count = await scoreFits(fake.db); // 3 resumes × 200 jobs = 600
+    expect(count).toBe(600);
+    expect(fake.upserts).toHaveLength(2); // 500 + 100
+    expect(fake.upserts[0].values).toHaveLength(500);
+    expect(fake.upserts[1].values).toHaveLength(100);
+  });
+
   it('does nothing when there are no jobs', async () => {
     const byTable = new Map<unknown, unknown[]>([
       [masterSkills, [{ skill: 'go' }]],
