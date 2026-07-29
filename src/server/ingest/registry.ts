@@ -3,11 +3,39 @@
  * `buildConnectors` takes an injectable fetcher so it can be exercised with a
  * fixture client in tests.
  */
+import { existsSync, readFileSync } from 'node:fs';
 import { ashbyConnector, type AshbyBoard } from './connectors/ashby';
 import { greenhouseConnector, type GreenhouseBoard } from './connectors/greenhouse';
 import { leverConnector, type LeverBoard } from './connectors/lever';
 import { simplifyNewGradConnector } from './connectors/simplify';
+import type { DiscoveredBoards } from './discover';
 import type { Fetcher, JobConnector } from './types';
+
+/** File written by `pnpm ats:discover` (git-ignored); merged with the seeds. */
+const DISCOVERED_FILE = 'ats-boards.json';
+
+/** Read the discovered-boards file (cwd-relative); degrade to `{}` if absent/malformed. */
+export function loadDiscoveredBoards(file: string = DISCOVERED_FILE): Partial<DiscoveredBoards> {
+  try {
+    if (!existsSync(file)) return {};
+    return JSON.parse(readFileSync(file, 'utf8')) as Partial<DiscoveredBoards>;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Merge seed + discovered boards, deduped by the given key. Seeds win on a key
+ * collision: they are the curated, code-reviewed source of truth, whereas the
+ * discovered file is machine-generated and its `company` label can drift (which
+ * would change job fingerprints). Discovery only *adds* boards, never overrides.
+ */
+export function mergeBoards<T>(seed: T[], discovered: T[] | undefined, key: (b: T) => string): T[] {
+  const byKey = new Map<string, T>();
+  // Discovered first, then seed, so seed entries overwrite on collision.
+  for (const b of [...(discovered ?? []), ...seed]) byKey.set(key(b).toLowerCase(), b);
+  return [...byKey.values()];
+}
 
 /**
  * Hand-seeded starter tokens per ATS. A later ticket discovers more from the
@@ -31,10 +59,15 @@ export const ASHBY_BOARDS: AshbyBoard[] = [
 ];
 
 export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnector[] {
+  const discovered = loadDiscoveredBoards();
+  const greenhouse = mergeBoards(GREENHOUSE_BOARDS, discovered.greenhouse, (b) => b.token);
+  const lever = mergeBoards(LEVER_BOARDS, discovered.lever, (b) => b.token);
+  const ashby = mergeBoards(ASHBY_BOARDS, discovered.ashby, (b) => b.board);
+
   return [
-    greenhouseConnector(GREENHOUSE_BOARDS, fetcher),
-    leverConnector(LEVER_BOARDS, fetcher),
-    ashbyConnector(ASHBY_BOARDS, fetcher),
+    greenhouseConnector(greenhouse, fetcher),
+    leverConnector(lever, fetcher),
+    ashbyConnector(ashby, fetcher),
     simplifyNewGradConnector({}, fetcher),
   ];
 }
