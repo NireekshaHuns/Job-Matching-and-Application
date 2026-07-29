@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "title": "Software Engineer, Backend",
+      "location": "San Francisco, CA",
+      "isRemote": false,
+      "jobUrl": "https://jobs.ashbyhq.com/acme/1",
+      "descriptionPlain": "Own services in Go. Kafka experience a plus.",
+      "publishedDate": "2026-07-18"
+    },
+    {
+      "title": "Full Stack Engineer",
+      "location": "",
+      "isRemote": true,
+      "jobUrl": "https://jobs.ashbyhq.com/acme/2",
+      "descriptionHtml": "<p>React &amp; Node.js.</p>",
+      "publishedDate": "2026-07-15"
+    }
+  ]
+}
