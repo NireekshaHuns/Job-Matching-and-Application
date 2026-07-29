@@ -97,6 +97,8 @@ describe('db schema', () => {
         'seniority',
         'sponsorTier',
         'isRemote',
+        'techKeywords',
+        'softKeywords',
       ]) {
         expect(cols).toHaveProperty(name);
       }

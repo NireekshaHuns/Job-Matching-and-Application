@@ -15,8 +15,18 @@ export interface Classification {
   employmentType: EmploymentType;
   roleFamily: RoleFamily;
   seniority: Seniority;
-  /** Required/known skills mentioned in the posting (deduped, lowercased). */
+  /**
+   * Technical keywords — concrete technologies/tools named in the posting
+   * (deduped, lowercased). Persisted as `jobs.tech_keywords`; the basis for
+   * resume keyword matching.
+   */
   skills: string[];
+  /**
+   * Soft keywords — competencies the posting emphasizes (e.g. "ownership",
+   * "cross-functional collaboration"), excluding basic expectations. Persisted
+   * as `jobs.soft_keywords`.
+   */
+  softKeywords: string[];
 }
 
 /** Minimal chat interface — returns the model's raw text (expected JSON). */

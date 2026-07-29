@@ -15,6 +15,7 @@ const classificationSchema = z.object({
   roleFamily: z.enum(roleFamilyEnum.enumValues),
   seniority: z.enum(seniorityEnum.enumValues),
   skills: z.array(z.string()).default([]),
+  softKeywords: z.array(z.string()).default([]),
 });
 
 export const CLASSIFY_SYSTEM_PROMPT = [
@@ -23,7 +24,8 @@ export const CLASSIFY_SYSTEM_PROMPT = [
   `- employmentType: one of ${employmentTypeEnum.enumValues.join(', ')} (contract/staffing/C2C/1099 => "contract", direct-hire => "full_time").`,
   `- roleFamily: one of ${roleFamilyEnum.enumValues.join(', ')}.`,
   `- seniority: one of ${seniorityEnum.enumValues.join(', ')} ("entry" = new-grad/junior, "mid" = a few years, everything senior/staff/lead/manager => "other").`,
-  '- skills: array of concrete technologies/skills named in the posting (e.g. ["go", "kafka", "react"]). Empty array if none.',
+  '- skills: array of concrete technical keywords — technologies/tools/languages named (e.g. ["go", "kafka", "react"]). Exclude generic basics. Empty array if none.',
+  '- softKeywords: array of soft skills/competencies the posting emphasizes (e.g. ["ownership", "cross-functional collaboration", "mentorship"]). Exclude basic expectations. Empty array if none.',
 ].join('\n');
 
 export function buildClassifyMessages(posting: RawPosting): {
@@ -38,17 +40,17 @@ export function buildClassifyMessages(posting: RawPosting): {
   return { system: CLASSIFY_SYSTEM_PROMPT, user };
 }
 
-/** Keep skills bounded; deduped first, so this is 30 UNIQUE skills. */
-const MAX_SKILLS = 30;
+/** Keep keyword lists bounded; deduped first, so this is UNIQUE keywords. */
+const MAX_KEYWORDS = 30;
 
-/** Normalize skills: trim, lowercase, drop empties, dedupe, cap length. */
-function normalizeSkills(skills: string[]): string[] {
+/** Normalize a keyword list: trim, lowercase, drop empties, dedupe, cap length. */
+function normalizeKeywords(keywords: string[]): string[] {
   const seen = new Set<string>();
-  for (const s of skills) {
-    const v = s.trim().toLowerCase();
+  for (const k of keywords) {
+    const v = k.trim().toLowerCase();
     if (v) seen.add(v);
   }
-  return [...seen].slice(0, MAX_SKILLS);
+  return [...seen].slice(0, MAX_KEYWORDS);
 }
 
 /**
@@ -61,7 +63,11 @@ export function parseClassification(raw: string): Classification {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('No JSON object found in classifier output');
   const parsed = classificationSchema.parse(JSON.parse(match[0]));
-  return { ...parsed, skills: normalizeSkills(parsed.skills) };
+  return {
+    ...parsed,
+    skills: normalizeKeywords(parsed.skills),
+    softKeywords: normalizeKeywords(parsed.softKeywords),
+  };
 }
 
 export async function classifyPosting(

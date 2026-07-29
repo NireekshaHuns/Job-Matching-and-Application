@@ -35,6 +35,8 @@ export function buildJobRow(
     employmentType: classification.employmentType,
     roleFamily: classification.roleFamily,
     seniority: classification.seniority,
+    techKeywords: classification.skills,
+    softKeywords: classification.softKeywords,
     sponsorTier: sponsor.tier,
     sponsorReason: sponsor.reason,
     sponsorCount: sponsor.sponsorCount,
