@@ -63,12 +63,26 @@ describe('parseClassification / classifyPosting', () => {
     roleFamily: 'backend',
     seniority: 'entry',
     skills: ['Go', 'go', ' Kafka '],
+    softKeywords: ['Ownership', 'ownership'],
   });
 
-  it('parses valid JSON and normalizes skills', () => {
+  it('parses valid JSON and normalizes skills + soft keywords', () => {
     const c = parseClassification(validJson);
     expect(c.employmentType).toBe('full_time');
     expect(c.skills).toEqual(['go', 'kafka']);
+    expect(c.softKeywords).toEqual(['ownership']);
+  });
+
+  it('defaults soft keywords to [] when omitted', () => {
+    const c = parseClassification(
+      JSON.stringify({
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: [],
+      }),
+    );
+    expect(c.softKeywords).toEqual([]);
   });
 
   it('tolerates a ```json fenced response', () => {
@@ -131,12 +145,20 @@ describe('buildJobRow', () => {
     const row = buildJobRow(
       posting(),
       { tier: 'High', reason: 'why', sponsorCount: 10 },
-      { employmentType: 'full_time', roleFamily: 'backend', seniority: 'entry', skills: ['go'] },
+      {
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: ['go'],
+        softKeywords: ['ownership'],
+      },
       null,
     );
     expect(row.fingerprint).toBe('STRIPE|software engineer|remote us');
     expect(row.sponsorTier).toBe('High');
     expect(row.isRemote).toBe(true);
+    expect(row.techKeywords).toEqual(['go']);
+    expect(row.softKeywords).toEqual(['ownership']);
     expect(row).not.toHaveProperty('relevanceScore');
   });
 });
