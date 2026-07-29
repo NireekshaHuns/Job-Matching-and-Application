@@ -233,6 +233,10 @@ export const applications = pgTable('applications', {
   status: applicationStatusEnum('status').notNull().default('applied'),
   appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
   source: applicationSourceEnum('source').notNull().default('manual'),
+  /** Label of the resume version used (e.g. "Backend — Stripe"). */
+  resumeLabel: text('resume_label'),
+  /** The actual resume text used for this application (for interview prep). */
+  resumeSnapshot: text('resume_snapshot'),
 });
 
 /** Hiring-manager / recruiter contacts associated with a job. */

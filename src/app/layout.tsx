@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import Link from 'next/link';
 import './globals.css';
 import { TRPCReactProvider } from '@/trpc/react';
 
@@ -26,7 +27,20 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
-        <TRPCReactProvider>{children}</TRPCReactProvider>
+        <TRPCReactProvider>
+          <nav className="border-b border-zinc-200">
+            <div className="mx-auto flex w-full max-w-5xl items-center gap-4 px-6 py-3 text-sm">
+              <span className="font-semibold">H1B Board</span>
+              <Link href="/" className="text-zinc-600 hover:text-zinc-900">
+                Board
+              </Link>
+              <Link href="/tracker" className="text-zinc-600 hover:text-zinc-900">
+                Tracker
+              </Link>
+            </div>
+          </nav>
+          {children}
+        </TRPCReactProvider>
       </body>
     </html>
   );
