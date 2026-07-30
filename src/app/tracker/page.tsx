@@ -18,10 +18,12 @@ type Application = inferRouterOutputs<AppRouter>['applications']['list'][number]
 function OutreachPanel({
   jobId,
   company,
+  role,
   onLogged,
 }: {
   jobId: number;
   company: string;
+  role?: string;
   onLogged: () => void;
 }) {
   const utils = trpc.useUtils();
@@ -37,6 +39,23 @@ function OutreachPanel({
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
+
+  // The currently-drafted outreach email (editable before the user copies it),
+  // plus which contact a draft is being generated for (so only that button waits).
+  const [draft, setDraft] = useState<{
+    subject: string;
+    body: string;
+    source: 'llm' | 'template';
+  } | null>(null);
+  const [pendingContactId, setPendingContactId] = useState<number | null>(null);
+  const draftEmail = trpc.outreach.draftEmail.useMutation({
+    onSuccess: (d) => setDraft(d),
+    onSettled: () => setPendingContactId(null),
+  });
+  const draftForContact = (c: { id: number; name: string; title: string | null }) => {
+    setPendingContactId(c.id);
+    draftEmail.mutate({ company, role, contactName: c.name, contactTitle: c.title ?? undefined });
+  };
 
   return (
     <div className="mt-3 space-y-3 border-t border-zinc-100 pt-3">
@@ -78,6 +97,14 @@ function OutreachPanel({
             <span className="ml-auto flex gap-1">
               <button
                 type="button"
+                disabled={pendingContactId === c.id}
+                onClick={() => draftForContact(c)}
+                className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {pendingContactId === c.id ? 'Drafting…' : 'Draft email'}
+              </button>
+              <button
+                type="button"
                 onClick={() => logTouch.mutate({ contactId: c.id, channel: 'linkedin' })}
                 className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-zinc-50"
               >
@@ -102,6 +129,59 @@ function OutreachPanel({
           </li>
         ))}
       </ul>
+
+      {draftEmail.isError && (
+        <p className="text-sm text-red-600">Failed to draft email: {draftEmail.error.message}</p>
+      )}
+
+      {draft && (
+        <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-zinc-500">
+              Draft email{' '}
+              {draft.source === 'template' ? '(template — set OPENAI_API_KEY for AI)' : '(AI)'}
+            </span>
+            <button
+              type="button"
+              aria-label="Close draft"
+              onClick={() => setDraft(null)}
+              className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-white"
+            >
+              ✕
+            </button>
+          </div>
+          <input
+            value={draft.subject}
+            onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
+            aria-label="Email subject"
+            className="w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+          />
+          <textarea
+            value={draft.body}
+            onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+            aria-label="Email body"
+            rows={10}
+            className="w-full rounded border border-zinc-300 px-2 py-1 font-mono text-xs"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                navigator.clipboard?.writeText(`Subject: ${draft.subject}\n\n${draft.body}`)
+              }
+              className="rounded bg-zinc-900 px-3 py-1 text-xs text-white"
+            >
+              Copy
+            </button>
+            <a
+              href={`mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
+              className="rounded border border-zinc-300 px-3 py-1 text-xs hover:bg-white"
+            >
+              Open in email
+            </a>
+          </div>
+        </div>
+      )}
 
       <form
         className="flex flex-wrap gap-2"
@@ -226,7 +306,12 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
       </div>
 
       {outreachOpen && (
-        <OutreachPanel jobId={app.jobId} company={app.company} onLogged={onChanged} />
+        <OutreachPanel
+          jobId={app.jobId}
+          company={app.company}
+          role={app.title}
+          onLogged={onChanged}
+        />
       )}
 
       {open && (
