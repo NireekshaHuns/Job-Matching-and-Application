@@ -99,13 +99,18 @@ export default function LandingPage() {
             </p>
             <div className="mt-3 space-y-3 text-sm">
               <div className="flex items-center gap-2">
-                <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                <span
+                  aria-hidden
+                  className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700"
+                >
                   Fit 82%
                 </span>
                 <span className="text-zinc-600">How well the JD matches your skills.</span>
               </div>
               <div className="text-zinc-600">
-                <span className="text-xs text-zinc-500">Missing: Kafka, Go</span>
+                <span aria-hidden className="text-xs text-zinc-500">
+                  Missing: Kafka, Go
+                </span>
                 <p className="mt-1">
                   The exact skills a JD wants that your résumé doesn&apos;t show.
                 </p>

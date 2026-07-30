@@ -9,7 +9,11 @@ export const TIER_STYLES: Record<SponsorTier, string> = {
   Excluded: 'bg-red-100 text-red-800 border-red-200',
 };
 
-/** One-line meaning of each tier (mirrors src/lib/sponsorship/score.ts). */
+/**
+ * Plain-English explainer copy for the landing page — intentionally independent
+ * from the runtime `reason` strings in src/lib/sponsorship/score.ts (which are
+ * per-job and data-driven). Not meant to be kept byte-identical with those.
+ */
 export const TIER_MEANINGS: Record<SponsorTier, string> = {
   High: 'JD offers sponsorship, or a heavy H1B filing history.',
   Medium: 'Sponsored before, but the JD is silent on it.',

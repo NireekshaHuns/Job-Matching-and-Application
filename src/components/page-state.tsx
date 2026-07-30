@@ -1,6 +1,8 @@
-'use client';
-
-/** Shared query-state UI so the board, tracker, and dashboard read consistently. */
+/**
+ * Shared query-state UI so the board, tracker, and dashboard read consistently.
+ * No `'use client'`: these render only markup (any handler is passed in by the
+ * client parent), so the module stays usable from server components too.
+ */
 
 /** Pulsing placeholder cards shown while a query is loading. */
 export function LoadingSkeleton({ rows = 4 }: { rows?: number }) {
