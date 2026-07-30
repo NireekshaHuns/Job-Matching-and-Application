@@ -24,6 +24,8 @@ export const jobListInput = z.object({
   includeExcluded: z.boolean().default(false),
   roleFamilies: z.array(z.enum(roleFamilyEnum.enumValues)).optional(),
   seniorities: z.array(z.enum(seniorityEnum.enumValues)).optional(),
+  /** Off by default: the board is scoped to entry/new-grad + mid roles. */
+  includeSenior: z.boolean().default(false),
   employmentType: z.enum([...employmentTypeEnum.enumValues, 'all']).default('full_time'),
   remoteOnly: z.boolean().default(false),
   search: z.string().trim().max(100).optional(),
@@ -40,6 +42,8 @@ export interface JobQueryPlan {
   sponsorTiers: JobListInput['sponsorTiers'] | null;
   roleFamilies: JobListInput['roleFamilies'] | null;
   seniorities: JobListInput['seniorities'] | null;
+  /** Hide senior ('other') roles by default; an explicit `seniorities` filter overrides. */
+  hideSenior: boolean;
   employmentType: (typeof employmentTypeEnum.enumValues)[number] | null;
   remoteOnly: boolean;
   search: string | null;
@@ -48,11 +52,14 @@ export interface JobQueryPlan {
 
 /** Pure translation of raw input into a query plan (unit-tested). */
 export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
+  const seniorities = input.seniorities?.length ? input.seniorities : null;
   return {
     hideExcluded: !input.includeExcluded,
     sponsorTiers: input.sponsorTiers?.length ? input.sponsorTiers : null,
     roleFamilies: input.roleFamilies?.length ? input.roleFamilies : null,
-    seniorities: input.seniorities?.length ? input.seniorities : null,
+    seniorities,
+    // Default board scope is entry/mid; an explicit seniority selection wins.
+    hideSenior: !input.includeSenior && seniorities === null,
     employmentType: input.employmentType === 'all' ? null : input.employmentType,
     remoteOnly: input.remoteOnly,
     search: input.search ? input.search : null,
@@ -116,6 +123,8 @@ export const jobsRouter = createTRPCRouter({
     if (plan.sponsorTiers) where.push(inArray(jobs.sponsorTier, plan.sponsorTiers));
     if (plan.roleFamilies) where.push(inArray(jobs.roleFamily, plan.roleFamilies));
     if (plan.seniorities) where.push(inArray(jobs.seniority, plan.seniorities));
+    // Hide senior roles by default; IS DISTINCT FROM keeps null/unclassified visible.
+    else if (plan.hideSenior) where.push(sql`${jobs.seniority} is distinct from 'other'`);
     if (plan.employmentType) where.push(eq(jobs.employmentType, plan.employmentType));
     if (plan.remoteOnly) where.push(eq(jobs.isRemote, true));
     if (plan.search) {
