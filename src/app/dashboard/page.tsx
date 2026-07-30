@@ -39,7 +39,9 @@ function Breakdown({
       <ul className="space-y-2">
         {rows.map((r) => (
           <li key={r.key} className="flex items-center gap-3 text-sm">
-            <span className="w-28 shrink-0 truncate text-zinc-600 capitalize">{r.key}</span>
+            <span className="w-28 shrink-0 truncate text-zinc-600 capitalize">
+              {r.key.replace(/_/g, ' ')}
+            </span>
             <span className="h-2 flex-1 overflow-hidden rounded bg-zinc-100">
               <span
                 className={`block h-full rounded ${barClass?.(r.key) ?? 'bg-blue-500'}`}

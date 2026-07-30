@@ -33,6 +33,8 @@ export function fillCounts<T extends string>(
   return order.map((key) => ({ key, count: found.get(key) ?? 0 }));
 }
 
+// Assert an int result. Only NULL-safe for `count(*)` (never null); `max`/`sum`/
+// `avg` can return NULL, so wrap those in `coalesce(..., 0)` before using this.
 const int = (expr: ReturnType<typeof sql>) => sql<number>`${expr}::int`;
 
 export const dashboardRouter = createTRPCRouter({
@@ -85,11 +87,14 @@ export const dashboardRouter = createTRPCRouter({
         .select({
           company: jobs.company,
           jobs: int(sql`count(*)`),
-          sponsorCount: int(sql`max(${jobs.sponsorCount})`),
+          // sponsor_count is denormalized per job and consistent within a company,
+          // so max() picks that company's approvals. coalesce(...,0) keeps the value
+          // non-null (unmatched companies) — also making the DESC sort put them last.
+          sponsorCount: int(sql`coalesce(max(${jobs.sponsorCount}), 0)`),
         })
         .from(jobs)
         .groupBy(jobs.company)
-        .orderBy(desc(sql`max(${jobs.sponsorCount})`), desc(sql`count(*)`))
+        .orderBy(desc(sql`coalesce(max(${jobs.sponsorCount}), 0)`), desc(sql`count(*)`))
         .limit(8),
       ctx.db
         .select({
