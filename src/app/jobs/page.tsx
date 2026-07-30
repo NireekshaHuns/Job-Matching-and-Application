@@ -13,6 +13,7 @@ export default function JobsPage() {
   const [sort, setSort] = useState<Sort>('combined');
   const [resumeId, setResumeId] = useState<number | undefined>(undefined);
   const [includeExcluded, setIncludeExcluded] = useState(false);
+  const [includeSenior, setIncludeSenior] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [allEmployment, setAllEmployment] = useState(false);
 
@@ -41,6 +42,7 @@ export default function JobsPage() {
     sort,
     resumeId,
     includeExcluded,
+    includeSenior,
     remoteOnly,
     employmentType: allEmployment ? 'all' : 'full_time',
   });
@@ -106,6 +108,14 @@ export default function JobsPage() {
             onChange={(e) => setAllEmployment(e.target.checked)}
           />
           Include contract
+        </label>
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={includeSenior}
+            onChange={(e) => setIncludeSenior(e.target.checked)}
+          />
+          Include senior
         </label>
         <label className="flex items-center gap-1">
           <input
