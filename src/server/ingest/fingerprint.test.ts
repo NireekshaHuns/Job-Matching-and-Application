@@ -18,12 +18,12 @@ describe('postingFingerprint', () => {
     expect(postingFingerprint('Stripe', 'SWE', null)).toBe('STRIPE|swe|');
   });
 
-  it('collapses the same remote role across differing location wording', () => {
-    const simplify = postingFingerprint('Ramp', 'Software Engineer', 'Remote - US');
-    const ashby = postingFingerprint('Ramp', 'Software Engineer', 'United States');
-    const greenhouse = postingFingerprint('Ramp', 'Software Engineer', 'Remote');
-    expect(simplify).toBe(ashby);
-    expect(ashby).toBe(greenhouse);
+  it('collapses the same remote role across differing remote wording', () => {
+    const a = postingFingerprint('Ramp', 'Software Engineer', 'Remote - US');
+    const b = postingFingerprint('Ramp', 'Software Engineer', 'Remote');
+    const c = postingFingerprint('Ramp', 'Software Engineer', 'Telecommute');
+    expect(a).toBe(b);
+    expect(b).toBe(c);
   });
 
   it('collapses title noise (req ids, years, parentheticals) for the same role', () => {
@@ -37,14 +37,32 @@ describe('postingFingerprint', () => {
       postingFingerprint('Stripe', 'Software Engineer', 'San Francisco, CA'),
     );
   });
+
+  it('does NOT collapse an on-site metro with a country tag into remote', () => {
+    // "New York, US" is on-site NYC — must stay distinct from a remote posting.
+    expect(postingFingerprint('Stripe', 'Software Engineer', 'New York, US')).not.toBe(
+      postingFingerprint('Stripe', 'Software Engineer', 'Remote'),
+    );
+  });
+
+  it('keeps a parenthesized level distinct from the plain title', () => {
+    expect(postingFingerprint('Stripe', 'Software Engineer (Senior)', 'Remote')).not.toBe(
+      postingFingerprint('Stripe', 'Software Engineer', 'Remote'),
+    );
+  });
 });
 
 describe('normalizeTitle', () => {
-  it('strips asides/ids/years but keeps role + seniority words', () => {
+  it('strips noise asides/ids/years but keeps role + seniority words', () => {
     expect(normalizeTitle('Senior Backend Engineer (Remote) - REQ 998')).toBe(
       'senior backend engineer',
     );
     expect(normalizeTitle('Data Scientist #4567')).toBe('data scientist');
+  });
+
+  it('keeps a level in parentheses (only noise parentheticals are stripped)', () => {
+    expect(normalizeTitle('Software Engineer (Senior)')).toBe('software engineer senior');
+    expect(normalizeTitle('Software Engineer (Remote)')).toBe('software engineer');
   });
 
   it('does not merge distinct disciplines', () => {
@@ -53,10 +71,16 @@ describe('normalizeTitle', () => {
 });
 
 describe('normalizeLocation', () => {
-  it('canonicalizes remote/nationwide variants to "remote"', () => {
-    for (const loc of ['Remote', 'Remote - US', 'United States', 'Anywhere', 'US', 'WFH']) {
+  it('canonicalizes explicit remote variants to "remote"', () => {
+    for (const loc of ['Remote', 'Remote - US', 'Anywhere', 'WFH', 'Telecommute', 'Virtual']) {
       expect(normalizeLocation(loc)).toBe('remote');
     }
+  });
+
+  it('does NOT treat a bare country tag as remote (avoids over-merging cities)', () => {
+    expect(normalizeLocation('New York, US')).toBe('new york us');
+    expect(normalizeLocation('Boston, MA, US')).toBe('boston ma us');
+    expect(normalizeLocation('United States')).toBe('united states');
   });
 
   it('keeps real cities and empty input intact', () => {
