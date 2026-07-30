@@ -37,6 +37,9 @@ export default function RootLayout({
               <Link href="/tracker" className="text-zinc-600 hover:text-zinc-900">
                 Tracker
               </Link>
+              <Link href="/dashboard" className="text-zinc-600 hover:text-zinc-900">
+                Dashboard
+              </Link>
             </div>
           </nav>
           {children}
