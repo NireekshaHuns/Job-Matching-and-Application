@@ -55,6 +55,9 @@ export const OUTREACH_SYSTEM_PROMPT = [
   'Respond with ONLY a JSON object: {"subject": string, "body": string}. No prose, no code fences.',
 ].join('\n');
 
+// Note: company/role/contact fields are the user's own trusted input (they add
+// their own contacts) and are interpolated into the prompt; the user reviews and
+// edits every draft before sending, so there's no third-party trust boundary here.
 export function buildOutreachMessages(req: OutreachRequest): { system: string; user: string } {
   const p = profileOf(req);
   const facts = [
@@ -72,15 +75,27 @@ export function buildOutreachMessages(req: OutreachRequest): { system: string; u
   return { system: OUTREACH_SYSTEM_PROMPT, user: facts };
 }
 
-/** Parse the model's JSON reply, tolerating leading prose or ```json fences. */
+/**
+ * Parse the model's JSON reply. Tries the raw string first (the runtime adapter
+ * requests strict json_object mode, so this is the normal path); only if that
+ * fails does it fall back to extracting the first brace-balanced-ish `{...}`,
+ * which tolerates ```json fences or leading prose from a non-strict model.
+ */
 export function parseOutreachEmail(raw: string): OutreachEmail {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON object found in outreach draft');
-  const parsed = JSON.parse(match[0]) as { subject?: unknown; body?: unknown };
-  if (typeof parsed.subject !== 'string' || typeof parsed.body !== 'string') {
-    throw new Error('Outreach draft missing subject/body');
+  const validate = (v: unknown): OutreachEmail => {
+    const o = v as { subject?: unknown; body?: unknown };
+    if (typeof o.subject !== 'string' || typeof o.body !== 'string') {
+      throw new Error('Outreach draft missing subject/body');
+    }
+    return { subject: o.subject.trim(), body: o.body.trim() };
+  };
+  try {
+    return validate(JSON.parse(raw.trim()));
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON object found in outreach draft');
+    return validate(JSON.parse(match[0]));
   }
-  return { subject: parsed.subject.trim(), body: parsed.body.trim() };
 }
 
 /** Deterministic fallback used when no LLM is configured. */

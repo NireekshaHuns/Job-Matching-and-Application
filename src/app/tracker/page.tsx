@@ -40,20 +40,22 @@ function OutreachPanel({
   const [title, setTitle] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
 
-  // The currently-drafted outreach email (editable before the user copies it).
-  const [draft, setDraft] = useState<{ subject: string; body: string; source: string } | null>(
-    null,
-  );
+  // The currently-drafted outreach email (editable before the user copies it),
+  // plus which contact a draft is being generated for (so only that button waits).
+  const [draft, setDraft] = useState<{
+    subject: string;
+    body: string;
+    source: 'llm' | 'template';
+  } | null>(null);
+  const [pendingContactId, setPendingContactId] = useState<number | null>(null);
   const draftEmail = trpc.outreach.draftEmail.useMutation({
     onSuccess: (d) => setDraft(d),
+    onSettled: () => setPendingContactId(null),
   });
-  const draftForContact = (contactName: string, contactTitle: string | null) =>
-    draftEmail.mutate({
-      company,
-      role,
-      contactName,
-      contactTitle: contactTitle ?? undefined,
-    });
+  const draftForContact = (c: { id: number; name: string; title: string | null }) => {
+    setPendingContactId(c.id);
+    draftEmail.mutate({ company, role, contactName: c.name, contactTitle: c.title ?? undefined });
+  };
 
   return (
     <div className="mt-3 space-y-3 border-t border-zinc-100 pt-3">
@@ -95,11 +97,11 @@ function OutreachPanel({
             <span className="ml-auto flex gap-1">
               <button
                 type="button"
-                disabled={draftEmail.isPending}
-                onClick={() => draftForContact(c.name, c.title)}
+                disabled={pendingContactId === c.id}
+                onClick={() => draftForContact(c)}
                 className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-zinc-50 disabled:opacity-50"
               >
-                Draft email
+                {pendingContactId === c.id ? 'Drafting…' : 'Draft email'}
               </button>
               <button
                 type="button"

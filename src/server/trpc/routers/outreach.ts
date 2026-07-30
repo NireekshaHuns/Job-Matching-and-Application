@@ -110,8 +110,10 @@ export const outreachRouter = createTRPCRouter({
           process.env.OPENAI_CLASSIFY_MODEL ?? 'gpt-4o-mini',
         );
         return { ...(await draftOutreachEmail(input, chat)), source: 'llm' as const };
-      } catch {
-        // fall through to the template on any LLM/parse failure
+      } catch (err) {
+        // Fall through to the template on any LLM/parse failure, but log it so a
+        // persistently broken LLM path is visible rather than silently templated.
+        console.warn('draftEmail: LLM draft failed, using template', err);
       }
     }
     return { ...templateOutreachEmail(input), source: 'template' as const };
