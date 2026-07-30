@@ -8,6 +8,7 @@
 import { desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { contacts, outreachChannelEnum, outreachLog } from '@/server/db/schema';
+import { draftOutreachEmail, templateOutreachEmail } from '@/server/outreach/email';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
 export const addContactInput = z.object({
@@ -20,6 +21,13 @@ export const addContactInput = z.object({
 export const logTouchInput = z.object({
   contactId: z.number().int(),
   channel: z.enum(outreachChannelEnum.enumValues).default('linkedin'),
+});
+
+export const draftEmailInput = z.object({
+  company: z.string().min(1).max(200),
+  role: z.string().max(200).optional(),
+  contactName: z.string().max(200).optional(),
+  contactTitle: z.string().max(200).optional(),
 });
 
 export const outreachRouter = createTRPCRouter({
@@ -84,6 +92,29 @@ export const outreachRouter = createTRPCRouter({
   logTouch: publicProcedure.input(logTouchInput).mutation(async ({ ctx, input }) => {
     await ctx.db.insert(outreachLog).values({ contactId: input.contactId, channel: input.channel });
     return { ok: true };
+  }),
+
+  /**
+   * Draft an outreach email for a contact/company. Uses the LLM when
+   * OPENAI_API_KEY is set (openai imported lazily so the app boots without it),
+   * and falls back to the deterministic template otherwise or on any failure.
+   */
+  draftEmail: publicProcedure.input(draftEmailInput).mutation(async ({ input }) => {
+    const key = process.env.OPENAI_API_KEY;
+    if (key) {
+      try {
+        const { default: OpenAI } = await import('openai');
+        const { openaiChat } = await import('@/server/enrich/openai');
+        const chat = openaiChat(
+          new OpenAI({ apiKey: key }),
+          process.env.OPENAI_CLASSIFY_MODEL ?? 'gpt-4o-mini',
+        );
+        return { ...(await draftOutreachEmail(input, chat)), source: 'llm' as const };
+      } catch {
+        // fall through to the template on any LLM/parse failure
+      }
+    }
+    return { ...templateOutreachEmail(input), source: 'template' as const };
   }),
 
   /**

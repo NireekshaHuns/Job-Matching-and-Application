@@ -18,6 +18,12 @@ describe('googleXray', () => {
   });
 });
 
+describe('ROLE_PRESETS', () => {
+  it('includes an HR / people preset for outreach targeting', () => {
+    expect(ROLE_PRESETS.hr).toContain('human resources');
+  });
+});
+
 describe('encoding edge cases', () => {
   it('encodes ampersands/spaces and strips embedded quotes', () => {
     const url = linkedinPeopleSearch('A & B "Inc"', ['recruiter']);
@@ -29,7 +35,12 @@ describe('encoding edge cases', () => {
 describe('outreachLinks', () => {
   it('offers recruiter, manager, and x-ray links for a company', () => {
     const labels = outreachLinks('Acme').map((l) => l.label);
-    expect(labels).toEqual(['Recruiters (LinkedIn)', 'Eng managers (LinkedIn)', 'Google x-ray']);
+    expect(labels).toEqual([
+      'Recruiters (LinkedIn)',
+      'Eng managers (LinkedIn)',
+      'HR / people (LinkedIn)',
+      'Google x-ray',
+    ]);
     expect(outreachLinks('Acme').every((l) => l.url.includes('Acme'))).toBe(true);
   });
 });

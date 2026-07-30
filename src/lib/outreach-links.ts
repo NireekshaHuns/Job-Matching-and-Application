@@ -8,6 +8,7 @@
 export const ROLE_PRESETS = {
   recruiters: ['recruiter', 'technical recruiter', 'talent acquisition'],
   managers: ['engineering manager', 'hiring manager'],
+  hr: ['human resources', 'people operations', 'hr business partner'],
 } as const;
 
 /** Quote a phrase, stripping embedded double-quotes so the expression can't break. */
@@ -49,9 +50,10 @@ export function outreachLinks(company: string): OutreachLink[] {
       label: 'Eng managers (LinkedIn)',
       url: linkedinPeopleSearch(company, ROLE_PRESETS.managers),
     },
+    { label: 'HR / people (LinkedIn)', url: linkedinPeopleSearch(company, ROLE_PRESETS.hr) },
     {
       label: 'Google x-ray',
-      url: googleXray(company, [...ROLE_PRESETS.recruiters, ...ROLE_PRESETS.managers]),
+      url: googleXray(company, [...ROLE_PRESETS.managers, ...ROLE_PRESETS.recruiters]),
     },
   ];
 }
