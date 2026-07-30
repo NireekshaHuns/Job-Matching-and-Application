@@ -34,6 +34,28 @@ describe('dedupPostings', () => {
     expect(result).toHaveLength(2);
     expect(result[0].source).toBe('greenhouse');
   });
+
+  it('upgrades to the JD-bearing posting on a collision, keeping its position', () => {
+    const result = dedupPostings([
+      posting({ fingerprint: 'a', source: 'github:simplify', jdText: '' }),
+      posting({ fingerprint: 'b', source: 'lever' }),
+      posting({ fingerprint: 'a', source: 'greenhouse', jdText: 'Full JD here.' }),
+    ]);
+    expect(result).toHaveLength(2);
+    // 'a' stays first (first occurrence) but now carries the Greenhouse JD.
+    expect(result[0].fingerprint).toBe('a');
+    expect(result[0].source).toBe('greenhouse');
+    expect(result[0].jdText).toBe('Full JD here.');
+  });
+
+  it('does not downgrade a JD-bearing winner to a later JD-less duplicate', () => {
+    const result = dedupPostings([
+      posting({ fingerprint: 'a', source: 'greenhouse', jdText: 'Full JD.' }),
+      posting({ fingerprint: 'a', source: 'github:simplify', jdText: '' }),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].source).toBe('greenhouse');
+  });
 });
 
 describe('matchSponsor', () => {
