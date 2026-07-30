@@ -1,6 +1,7 @@
 'use client';
 
 import type { inferRouterOutputs } from '@trpc/server';
+import { ErrorState, LoadingSkeleton } from '@/components/page-state';
 import type { AppRouter } from '@/server/trpc/root';
 import { trpc } from '@/trpc/react';
 
@@ -124,9 +125,12 @@ export default function DashboardPage() {
         </p>
       </header>
 
-      {summary.isLoading && <p className="text-sm text-zinc-500">Loading…</p>}
+      {summary.isLoading && <LoadingSkeleton rows={3} />}
       {summary.isError && (
-        <p className="text-sm text-red-600">Failed to load dashboard: {summary.error.message}</p>
+        <ErrorState
+          message={`Failed to load dashboard: ${summary.error.message}`}
+          onRetry={() => summary.refetch()}
+        />
       )}
       {summary.data && <DashboardBody data={summary.data} />}
     </main>

@@ -12,15 +12,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/*
+ * The UI is designed light-only (hardcoded zinc/white palette across all pages),
+ * so we don't flip to a dark theme on prefers-color-scheme — doing so left dark
+ * text on a black body. Render consistently light.
+ */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
