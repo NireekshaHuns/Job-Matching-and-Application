@@ -1,7 +1,9 @@
 'use client';
 
 import type { inferRouterOutputs } from '@trpc/server';
+import Link from 'next/link';
 import { useState } from 'react';
+import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { outreachLinks } from '@/lib/outreach-links';
 import type { AppRouter } from '@/server/trpc/root';
 import { trpc } from '@/trpc/react';
@@ -287,11 +289,21 @@ export default function Tracker() {
         </span>
       </header>
 
-      {query.isLoading && <p className="text-sm text-zinc-500">Loading…</p>}
+      {query.isLoading && <LoadingSkeleton />}
+      {query.isError && (
+        <ErrorState
+          message={`Failed to load applications: ${query.error.message}`}
+          onRetry={() => query.refetch()}
+        />
+      )}
       {query.data?.length === 0 && (
-        <p className="text-sm text-zinc-500">
-          No applications yet. Mark a job applied from the board.
-        </p>
+        <EmptyState title="No applications yet.">
+          Mark a job applied from the{' '}
+          <Link href="/jobs" className="text-blue-700 hover:underline">
+            job board
+          </Link>
+          .
+        </EmptyState>
       )}
 
       <ul className="space-y-3">
