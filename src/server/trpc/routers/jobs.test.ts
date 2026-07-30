@@ -67,6 +67,10 @@ describe('resolveJobQueryPlan', () => {
     const p = plan({ seniorities: ['other'] });
     expect(p.seniorities).toEqual(['other']);
     expect(p.hideSenior).toBe(false);
+    // Explicit entry/mid selection also counts as "explicit" → no default hide.
+    expect(plan({ seniorities: ['entry', 'mid'] }).hideSenior).toBe(false);
+    // Explicit filter + includeSenior together still just uses the filter.
+    expect(plan({ seniorities: ['entry'], includeSenior: true }).hideSenior).toBe(false);
   });
 });
 
