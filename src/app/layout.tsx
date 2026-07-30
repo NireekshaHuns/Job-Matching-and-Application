@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import Link from 'next/link';
 import './globals.css';
+import { Navbar } from '@/components/navbar';
 import { TRPCReactProvider } from '@/trpc/react';
 
 const geistSans = Geist({
@@ -28,20 +28,7 @@ export default function RootLayout({
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <TRPCReactProvider>
-          <nav className="border-b border-zinc-200">
-            <div className="mx-auto flex w-full max-w-5xl items-center gap-4 px-6 py-3 text-sm">
-              <span className="font-semibold">H1B Board</span>
-              <Link href="/" className="text-zinc-600 hover:text-zinc-900">
-                Board
-              </Link>
-              <Link href="/tracker" className="text-zinc-600 hover:text-zinc-900">
-                Tracker
-              </Link>
-              <Link href="/dashboard" className="text-zinc-600 hover:text-zinc-900">
-                Dashboard
-              </Link>
-            </div>
-          </nav>
+          <Navbar />
           {children}
         </TRPCReactProvider>
       </body>
