@@ -45,6 +45,9 @@ yarn-error.log*
 # discovered ATS tokens (regenerate with pnpm ats:discover)
 /ats-boards.json
 
+# durable local status/plan docs (never committed)
+*.local.md
+
 # vercel
 .vercel
 
