@@ -4,7 +4,7 @@ import { staleCutoff } from './cache';
 import { purgeStalePeopleCache } from './purge';
 
 describe('purgeStalePeopleCache', () => {
-  it('deletes rows past the TTL and returns the count', async () => {
+  it('deletes rows at/older than the TTL cutoff and returns the count', async () => {
     const returning = vi.fn(async () => [{ id: 1 }, { id: 2 }]);
     const where = vi.fn(() => ({ returning }));
     const del = vi.fn(() => ({ where }));
@@ -15,8 +15,9 @@ describe('purgeStalePeopleCache', () => {
 
     expect(purged).toBe(2);
     expect(del).toHaveBeenCalledOnce();
-    // Filters on the stale cutoff (fetched_at < now - TTL).
+    // A predicate is always passed — never an unfiltered delete-everything.
     expect(where).toHaveBeenCalledOnce();
+    expect(where.mock.calls[0]).toHaveLength(1);
   });
 
   it('reports 0 when nothing is stale', async () => {
