@@ -45,4 +45,4 @@ pnpm dev
 
 ## Status
 
-Foundation scaffolded (Epic 0). Feature work is tracked as GitHub Issues across Epics 1–8.
+Feature-complete across Epics 0–13 (all five stages: gather → check sponsorship → filter junk → rank vs. résumé → apply & follow up). Ongoing work is tracked as GitHub Issues labeled `enhancement`.
