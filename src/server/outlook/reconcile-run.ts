@@ -22,6 +22,12 @@ const DEFAULT_MAX_LOOKBACK_DAYS = 60;
  * Oldest received-date to ask Graph for: the earliest pending application, but
  * never further back than `maxLookbackDays` (a first run shouldn't scan the
  * whole mailbox). With no pending apps, the window is just the lookback. Pure.
+ *
+ * The `maxLookbackDays` floor also bounds the oldest-first paging trade-off
+ * (issue #43): a pending app that never gets a confirmation (ghosted / phrase
+ * miss) can only anchor the window until it ages past the floor, after which the
+ * rolling floor advances daily — so it can delay, but not indefinitely strand,
+ * newer confirmations on a mailbox busy enough to hit the page cap.
  */
 export function reconcileSinceIso(
   appliedAtMs: number[],
@@ -70,6 +76,12 @@ export interface ReconcileStats {
   pending: number;
   messages: number;
   confirmed: number;
+  /**
+   * True when the mail read hit the page cap and the newest messages weren't
+   * fetched this run (issue #43). Not an error — remaining mail is picked up on
+   * a later run as the window advances — but surfaced so it's visible in logs.
+   */
+  truncated: boolean;
 }
 
 /** End-to-end: load pending, fetch mail, match, write confirmations. */
@@ -82,11 +94,11 @@ export async function runOutlookReconcile(args: RunOutlookReconcileArgs): Promis
     args.maxLookbackDays,
   );
 
-  const messages = await args.mail.listMessages({ sinceIso });
+  const { messages, truncated } = await args.mail.listMessages({ sinceIso });
   const updates = reconcileConfirmations(messages, pending);
   const confirmed = await writeConfirmations(args.db, updates);
 
-  return { pending: pending.length, messages: messages.length, confirmed };
+  return { pending: pending.length, messages: messages.length, confirmed, truncated };
 }
 
 /**
