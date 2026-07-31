@@ -101,8 +101,10 @@ function capCycleNudge(now: Date): VisaNudge | null {
         'The electronic registration window is usually early–mid March. Confirm a sponsoring employer submits your registration before it closes.',
     };
   }
-  // Approaching: only meaningful in the weeks before March 1.
-  const target = new Date(Date.UTC(now.getUTCFullYear(), CAP_MONTH, 1));
+  // Approaching: the NEXT March 1 (roll to next year once March has passed), so
+  // the window is correct regardless of how large CAP_APPROACH_DAYS is.
+  const year = now.getUTCMonth() > CAP_MONTH ? now.getUTCFullYear() + 1 : now.getUTCFullYear();
+  const target = new Date(Date.UTC(year, CAP_MONTH, 1));
   const days = daysUntil(target, now);
   if (days >= 0 && days <= CAP_APPROACH_DAYS) {
     return {

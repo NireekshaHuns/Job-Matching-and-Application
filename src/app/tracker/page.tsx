@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { outreachLinks } from '@/lib/outreach-links';
+import type { NudgeLevel } from '@/lib/visa/nudges';
 import type { AppRouter } from '@/server/trpc/root';
 import { trpc } from '@/trpc/react';
 
@@ -15,7 +16,7 @@ type Status = (typeof STATUSES)[number];
 type Application = inferRouterOutputs<AppRouter>['applications']['list'][number];
 type FilingType = Application['filingType'];
 
-const NUDGE_STYLE: Record<'urgent' | 'warning' | 'info', string> = {
+const NUDGE_STYLE: Record<NudgeLevel, string> = {
   urgent: 'bg-red-50 text-red-800 border-red-200',
   warning: 'bg-amber-50 text-amber-800 border-amber-200',
   info: 'bg-blue-50 text-blue-800 border-blue-200',

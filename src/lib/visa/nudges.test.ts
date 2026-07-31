@@ -30,6 +30,23 @@ describe('computeVisaNudges — OPT / STEM-OPT', () => {
     expect(ids({ optEndDate: '2027-06-01', stemOptEndDate: null })).toEqual([]);
   });
 
+  it('treats the exact 90-day and 180-day boundaries inclusively', () => {
+    // From 2026-07-15: +90d = 2026-10-13 (warning), +180d = 2027-01-11 (info).
+    const at90 = computeVisaNudges({ optEndDate: '2026-10-13', stemOptEndDate: null }, JULY)[0];
+    expect(at90.daysUntil).toBe(90);
+    expect(at90.level).toBe('warning');
+    const at180 = computeVisaNudges({ optEndDate: '2027-01-11', stemOptEndDate: null }, JULY)[0];
+    expect(at180.daysUntil).toBe(180);
+    expect(at180.level).toBe('info');
+  });
+
+  it('handles a leap-day "now" without off-by-one', () => {
+    const leap = new Date('2028-02-29T12:00:00Z');
+    const [n] = computeVisaNudges({ optEndDate: '2028-03-30', stemOptEndDate: null }, leap);
+    expect(n.daysUntil).toBe(30);
+    expect(n.level).toBe('warning');
+  });
+
   it('flags an expired OPT as urgent with a negative daysUntil', () => {
     const [n] = computeVisaNudges({ optEndDate: '2026-06-01', stemOptEndDate: null }, JULY);
     expect(n.level).toBe('urgent');
@@ -64,5 +81,11 @@ describe('computeVisaNudges — H-1B cap cycle', () => {
   it('is silent about the cap cycle in the off-season (e.g. July)', () => {
     expect(ids(NONE, JULY)).not.toContain('h1b-cap-approaching');
     expect(ids(NONE, JULY)).not.toContain('h1b-cap-open');
+  });
+
+  it('fires the approaching nudge at exactly 60 days out, silent at 61', () => {
+    // 2025-12-31 → 2026-03-01 is 60 days; 2025-12-30 is 61 (rolls to next March).
+    expect(ids(NONE, new Date('2025-12-31T12:00:00Z'))).toContain('h1b-cap-approaching');
+    expect(ids(NONE, new Date('2025-12-30T12:00:00Z'))).not.toContain('h1b-cap-approaching');
   });
 });
