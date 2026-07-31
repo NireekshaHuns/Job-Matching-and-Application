@@ -382,6 +382,32 @@ export const outreachLog = pgTable('outreach_log', {
 });
 
 /**
+ * People-finder cache (spec §5.6/§7). Caches email-inference results per query
+ * so we respect Apollo/Hunter free-tier limits. Contains third-party PII — kept
+ * minimal, TTL'd by `fetched_at` (freshness enforced in the router), and
+ * purgeable. Never exposed publicly.
+ */
+export const peopleCache = pgTable('people_cache', {
+  id: serial('id').primaryKey(),
+  /** Normalized query key (company + optional domain). */
+  cacheKey: text('cache_key').notNull().unique(),
+  /** Merged, deduped provider results (name/title/email/confidence/source). */
+  results: jsonb('results')
+    .$type<
+      Array<{
+        name: string;
+        title: string | null;
+        email: string | null;
+        emailConfidence: number | null;
+        source: string;
+      }>
+    >()
+    .notNull()
+    .default([]),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Single-user visa profile — the user's OPT / STEM-OPT end dates, used to derive
  * time-sensitive tracker nudges (spec §5.5). One row (enforced in the router);
  * dates are nullable until the user fills them in.
@@ -461,6 +487,8 @@ export type CompanyAlias = typeof companyAliases.$inferSelect;
 export type NewCompanyAlias = typeof companyAliases.$inferInsert;
 export type Profile = typeof profile.$inferSelect;
 export type NewProfile = typeof profile.$inferInsert;
+export type PeopleCacheRow = typeof peopleCache.$inferSelect;
+export type NewPeopleCacheRow = typeof peopleCache.$inferInsert;
 export type Resume = typeof resumes.$inferSelect;
 export type NewResume = typeof resumes.$inferInsert;
 export type Job = typeof jobs.$inferSelect;
