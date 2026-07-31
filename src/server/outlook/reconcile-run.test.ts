@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DB } from '@/server/db';
-import { reconcileSinceIso, writeConfirmations } from './reconcile-run';
+import { reconcileSinceIso, runOutlookReconcile, writeConfirmations } from './reconcile-run';
 import type { ConfirmationUpdate } from './confirm';
+import type { MailClient } from './types';
 
 const DAY = 86_400_000;
 const NOW = Date.parse('2026-07-27T00:00:00Z');
@@ -57,5 +58,30 @@ describe('writeConfirmations', () => {
     expect(upd).toHaveBeenCalledTimes(2);
     expect(batch).toHaveBeenCalledTimes(1);
     expect(batch.mock.calls[0][0].length).toBe(2);
+  });
+});
+
+describe('runOutlookReconcile', () => {
+  /** Fake DB with no pending applications, so nothing is matched or written. */
+  function emptyDb(): DB {
+    const orderBy = async () => [];
+    const where = () => ({ orderBy });
+    const innerJoin = () => ({ where });
+    const from = () => ({ innerJoin });
+    return { select: () => ({ from }) } as unknown as DB;
+  }
+
+  const mailReturning = (truncated: boolean): MailClient => ({
+    listMessages: async () => ({ messages: [], truncated }),
+  });
+
+  it('propagates the mail-client truncation flag into the stats (issue #43)', async () => {
+    const stats = await runOutlookReconcile({ db: emptyDb(), mail: mailReturning(true) });
+    expect(stats).toEqual({ pending: 0, messages: 0, confirmed: 0, truncated: true });
+  });
+
+  it('reports truncated: false on a complete read', async () => {
+    const stats = await runOutlookReconcile({ db: emptyDb(), mail: mailReturning(false) });
+    expect(stats.truncated).toBe(false);
   });
 });

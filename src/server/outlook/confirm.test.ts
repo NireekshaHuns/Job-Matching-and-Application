@@ -196,7 +196,7 @@ describe('reconcileConfirmations', () => {
     ]);
   });
 
-  it('claims each application at most once (first confirmation wins)', () => {
+  it('claims each application at most once (earliest confirmation wins)', () => {
     const messages = [
       msg({
         id: 'e1',
@@ -212,6 +212,27 @@ describe('reconcileConfirmations', () => {
     const updates = reconcileConfirmations(messages, apps);
     expect(updates).toHaveLength(1);
     expect(updates[0].confirmationEmailId).toBe('e1');
+  });
+
+  it('picks the earliest confirmation regardless of input order', () => {
+    // Newer email first in the array — the internal oldest-first sort must still
+    // pick the earliest, so confirmedAt is the true confirmation time (issue #43).
+    const messages = [
+      msg({
+        id: 'newer',
+        subject: 'Thank you for applying to Stripe',
+        receivedAt: '2026-07-21T00:00:00Z',
+      }),
+      msg({
+        id: 'older',
+        subject: 'Thank you for applying to Stripe',
+        receivedAt: '2026-07-18T00:00:00Z',
+      }),
+    ];
+    const updates = reconcileConfirmations(messages, apps);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].confirmationEmailId).toBe('older');
+    expect(updates[0].confirmedAt).toBe('2026-07-18T00:00:00Z');
   });
 
   it('is idempotent: skips emails already recorded on an application', () => {

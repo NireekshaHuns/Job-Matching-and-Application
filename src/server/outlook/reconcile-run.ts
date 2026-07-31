@@ -22,6 +22,12 @@ const DEFAULT_MAX_LOOKBACK_DAYS = 60;
  * Oldest received-date to ask Graph for: the earliest pending application, but
  * never further back than `maxLookbackDays` (a first run shouldn't scan the
  * whole mailbox). With no pending apps, the window is just the lookback. Pure.
+ *
+ * The `maxLookbackDays` floor also bounds the oldest-first paging trade-off
+ * (issue #43): a pending app that never gets a confirmation (ghosted / phrase
+ * miss) can only anchor the window until it ages past the floor, after which the
+ * rolling floor advances daily — so it can delay, but not indefinitely strand,
+ * newer confirmations on a mailbox busy enough to hit the page cap.
  */
 export function reconcileSinceIso(
   appliedAtMs: number[],
