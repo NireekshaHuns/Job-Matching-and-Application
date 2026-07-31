@@ -98,6 +98,12 @@ export const newHireStatusEnum = pgEnum('new_hire_status', [
 /** How a raw posting company name was matched to a USCIS employer record. */
 export const matchMethodEnum = pgEnum('match_method', ['exact', 'fuzzy', 'manual']);
 
+/**
+ * Posting lifecycle. `active` while still seen in a source feed; `closed` once
+ * it drops out (stale). Closed jobs are retained but hidden by default.
+ */
+export const jobStatusEnum = pgEnum('job_status', ['active', 'closed']);
+
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
@@ -239,8 +245,18 @@ export const jobs = pgTable(
     /** company + normalized title + location; used to dedup across sources. */
     fingerprint: text('fingerprint').notNull().unique(),
     source: text('source').notNull(),
+    /** Per-source external posting id (e.g. Greenhouse/Lever/Ashby/SmartRecruiters id). */
+    sourceJobId: text('source_job_id'),
     url: text('url').notNull(),
     postedDate: date('posted_date'),
+    /** Lifecycle: `active` while still in a feed, `closed` once it goes stale. */
+    status: jobStatusEnum('status').notNull().default('active'),
+    /** First time we saw this posting in a feed. */
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Most recent time we saw this posting in a feed — drives staleness. */
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the posting was marked closed (dropped out of its feed). */
+    closedAt: timestamp('closed_at', { withTimezone: true }),
     company: text('company').notNull(),
     title: text('title').notNull(),
     location: text('location'),
@@ -268,6 +284,8 @@ export const jobs = pgTable(
   (t) => [
     index('jobs_sponsor_tier_idx').on(t.sponsorTier),
     index('jobs_new_hire_status_idx').on(t.newHireStatus),
+    index('jobs_status_idx').on(t.status),
+    index('jobs_last_seen_at_idx').on(t.lastSeenAt),
     index('jobs_role_family_idx').on(t.roleFamily),
     // Approximate nearest-neighbour index for resume↔job similarity search.
     index('jobs_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),

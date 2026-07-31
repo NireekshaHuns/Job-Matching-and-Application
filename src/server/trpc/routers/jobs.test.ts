@@ -47,6 +47,11 @@ describe('resolveJobQueryPlan', () => {
     expect(plan({ includeExcluded: true }).hideExcluded).toBe(false);
   });
 
+  it('hides closed jobs by default, shows them only when the toggle is on', () => {
+    expect(plan().hideClosed).toBe(true);
+    expect(plan({ includeClosed: true }).hideClosed).toBe(false);
+  });
+
   it("maps employmentType 'all' to no filter", () => {
     expect(plan({ employmentType: 'all' }).employmentType).toBeNull();
     expect(plan({ employmentType: 'full_time' }).employmentType).toBe('full_time');

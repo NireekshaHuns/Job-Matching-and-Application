@@ -67,6 +67,7 @@ export function greenhouseConnector(
 
           postings.push({
             source: SOURCE,
+            sourceJobId: job.id != null ? String(job.id) : null,
             company: board.company,
             title,
             location,

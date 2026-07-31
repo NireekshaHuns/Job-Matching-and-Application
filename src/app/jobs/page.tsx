@@ -25,6 +25,7 @@ export default function JobsPage() {
   const [includeSenior, setIncludeSenior] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [allEmployment, setAllEmployment] = useState(false);
+  const [includeClosed, setIncludeClosed] = useState(false);
   const [newHire, setNewHire] = useState<NewHireFilter>('all');
   const [correcting, setCorrecting] = useState<number | null>(null);
 
@@ -56,6 +57,7 @@ export default function JobsPage() {
     includeSenior,
     remoteOnly,
     employmentType: allEmployment ? 'all' : 'full_time',
+    includeClosed,
     newHireStatuses: newHire === 'all' ? undefined : [newHire],
   });
 
@@ -151,6 +153,14 @@ export default function JobsPage() {
           />
           Show excluded
         </label>
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={includeClosed}
+            onChange={(e) => setIncludeClosed(e.target.checked)}
+          />
+          Show closed
+        </label>
       </div>
 
       {jobsQuery.isLoading && <LoadingSkeleton />}
@@ -225,6 +235,14 @@ export default function JobsPage() {
               {job.roleFamily && <Chip>{job.roleFamily}</Chip>}
               {job.seniority && <Chip>{job.seniority}</Chip>}
               {job.employmentType === 'contract' && <Chip muted>contract</Chip>}
+              {job.status === 'closed' && (
+                <span
+                  className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-700"
+                  title="No longer seen in the source feed"
+                >
+                  Closed
+                </span>
+              )}
               <span className="text-xs text-zinc-400">
                 {job.source}
                 {job.postedDate ? ` · ${job.postedDate}` : ''}

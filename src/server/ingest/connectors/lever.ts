@@ -53,6 +53,7 @@ export function leverConnector(
 
           postings.push({
             source: SOURCE,
+            sourceJobId: p.id ?? null,
             company: board.company,
             title,
             location,

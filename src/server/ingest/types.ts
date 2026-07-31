@@ -11,6 +11,8 @@
 export interface RawPosting {
   /** Connector id that produced this posting (e.g. `greenhouse`, `github:simplify-newgrad`). */
   source: string;
+  /** Per-source external posting id, when the feed exposes one; null otherwise. */
+  sourceJobId?: string | null;
   company: string;
   title: string;
   location: string | null;

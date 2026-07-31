@@ -5,7 +5,7 @@
  * (type-only import of `DB`) so this never loads the env-bound client and can be
  * driven from a script or the Inngest function.
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { DB } from '@/server/db';
 import { companyAliases, jobs, sponsors, type NewJob } from '@/server/db/schema';
 import type { SponsorHistory } from '@/lib/sponsorship';
@@ -144,6 +144,64 @@ export async function upsertDiscoveredAliases(
   return written;
 }
 
+/**
+ * A job unseen in any feed for this many days is marked closed. A grace window
+ * (rather than closing the instant a posting is absent from one fetch) keeps a
+ * transient empty response or a single-source hiccup from closing live jobs, and
+ * sidesteps per-source bookkeeping under cross-source dedup.
+ */
+export const STALE_DAYS = 14;
+
+/** The cutoff before which an unrefreshed job is considered stale. Pure/testable. */
+export function staleThreshold(now: Date, days: number = STALE_DAYS): Date {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+}
+
+export interface ReconcileStats {
+  refreshed: number;
+  closed: number;
+}
+
+/** Fingerprints are short strings, so batch the reconcile IN-lists larger than job inserts. */
+const RECONCILE_CHUNK_SIZE = 1000;
+
+/**
+ * Freshness reconcile: refresh `last_seen_at` (and reopen) for every posting
+ * still present in a feed this run, then close any active job not seen since the
+ * stale cutoff. `seen` is the set of fingerprints fetched this run (pre-dedup).
+ *
+ * Safety valve: if nothing was fetched at all this run (every connector failed
+ * or returned empty), there's no staleness signal — skip the close pass so a
+ * total outage can't mass-close a still-live board.
+ */
+export async function reconcileFreshness(
+  db: DB,
+  seen: Iterable<string>,
+  now: Date = new Date(),
+): Promise<ReconcileStats> {
+  const fingerprints = [...new Set(seen)];
+  if (fingerprints.length === 0) return { refreshed: 0, closed: 0 };
+
+  let refreshed = 0;
+  for (let i = 0; i < fingerprints.length; i += RECONCILE_CHUNK_SIZE) {
+    const chunk = fingerprints.slice(i, i + RECONCILE_CHUNK_SIZE);
+    const returned = await db
+      .update(jobs)
+      .set({ lastSeenAt: now, status: 'active', closedAt: null })
+      .where(inArray(jobs.fingerprint, chunk))
+      .returning({ id: jobs.id });
+    refreshed += returned.length;
+  }
+
+  const closedRows = await db
+    .update(jobs)
+    .set({ status: 'closed', closedAt: now })
+    .where(and(eq(jobs.status, 'active'), lt(jobs.lastSeenAt, staleThreshold(now))))
+    .returning({ id: jobs.id });
+
+  return { refreshed, closed: closedRows.length };
+}
+
 export interface RunEnrichmentArgs {
   db: DB;
   postings: RawPosting[];
@@ -151,10 +209,10 @@ export interface RunEnrichmentArgs {
   embedder: Embedder;
 }
 
-/** End-to-end: load state, enrich new postings, insert, persist aliases. */
+/** End-to-end: load state, enrich new postings, insert, persist aliases, reconcile freshness. */
 export async function runEnrichment(
   args: RunEnrichmentArgs,
-): Promise<EnrichResult & { inserted: number; aliasesWritten: number }> {
+): Promise<EnrichResult & { inserted: number; aliasesWritten: number; reconcile: ReconcileStats }> {
   const [existing, sponsorState] = await Promise.all([
     loadExistingFingerprints(args.db),
     loadSponsorState(args.db),
@@ -177,5 +235,11 @@ export async function runEnrichment(
     discovered.values(),
     sponsorState.idByKey,
   );
-  return { ...result, inserted, aliasesWritten };
+  // Reconcile against every fingerprint seen this run (pre-dedup), so a job
+  // present in any feed is kept fresh and only truly-dropped jobs go stale.
+  const reconcile = await reconcileFreshness(
+    args.db,
+    args.postings.map((p) => p.fingerprint),
+  );
+  return { ...result, inserted, aliasesWritten, reconcile };
 }

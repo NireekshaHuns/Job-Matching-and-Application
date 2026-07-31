@@ -8,6 +8,7 @@ import { ashbyConnector, type AshbyBoard } from './connectors/ashby';
 import { greenhouseConnector, type GreenhouseBoard } from './connectors/greenhouse';
 import { leverConnector, type LeverBoard } from './connectors/lever';
 import { simplifyNewGradConnector } from './connectors/simplify';
+import { smartRecruitersConnector, type SmartRecruitersBoard } from './connectors/smartrecruiters';
 import type { DiscoveredBoards } from './discover';
 import type { Fetcher, JobConnector } from './types';
 
@@ -58,6 +59,15 @@ export const ASHBY_BOARDS: AshbyBoard[] = [
   { board: 'notion', company: 'Notion' },
 ];
 
+/**
+ * SmartRecruiters company identifiers are case-sensitive and churn like the
+ * other ATS tokens — validate against the live API before relying on them.
+ */
+export const SMARTRECRUITERS_BOARDS: SmartRecruitersBoard[] = [
+  { identifier: 'Square', company: 'Square' },
+  { identifier: 'Visa', company: 'Visa' },
+];
+
 export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnector[] {
   const discovered = loadDiscoveredBoards();
   const greenhouse = mergeBoards(GREENHOUSE_BOARDS, discovered.greenhouse, (b) => b.token);
@@ -68,6 +78,7 @@ export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnect
     greenhouseConnector(greenhouse, fetcher),
     leverConnector(lever, fetcher),
     ashbyConnector(ashby, fetcher),
+    smartRecruitersConnector(SMARTRECRUITERS_BOARDS, fetcher),
     simplifyNewGradConnector({}, fetcher),
   ];
 }

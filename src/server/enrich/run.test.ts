@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { DB } from '@/server/db';
 import type { NewJob } from '@/server/db/schema';
 import type { DiscoveredAlias } from './steps/resolver';
-import { insertJobs, loadSponsorState, upsertDiscoveredAliases } from './run';
+import {
+  insertJobs,
+  loadSponsorState,
+  reconcileFreshness,
+  staleThreshold,
+  upsertDiscoveredAliases,
+} from './run';
 
 interface InsertCapture {
   values: Array<{ fingerprint: string }>;
@@ -145,6 +151,65 @@ describe('upsertDiscoveredAliases', () => {
     const { db, inserts } = makeUpsertDb();
     expect(await upsertDiscoveredAliases(db, [], new Map())).toBe(0);
     expect(inserts).toHaveLength(0);
+  });
+});
+
+describe('staleThreshold', () => {
+  it('subtracts the given number of days from now', () => {
+    const now = new Date('2026-07-31T00:00:00.000Z');
+    expect(staleThreshold(now, 14).toISOString()).toBe('2026-07-17T00:00:00.000Z');
+  });
+});
+
+describe('reconcileFreshness', () => {
+  interface UpdateCapture {
+    set: Record<string, unknown>;
+  }
+
+  /** Fake for update().set().where().returning(); returns the queued row lists in order. */
+  function makeUpdateDb(returns: Array<Array<{ id: number }>>) {
+    const updates: UpdateCapture[] = [];
+    let call = 0;
+    const db = {
+      update() {
+        const cap: UpdateCapture = { set: {} };
+        return {
+          set(vals: Record<string, unknown>) {
+            cap.set = vals;
+            return {
+              where() {
+                return {
+                  returning() {
+                    updates.push(cap);
+                    return Promise.resolve(returns[call++] ?? []);
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+    return { db: db as unknown as DB, updates };
+  }
+
+  it('refreshes+reopens seen jobs, then closes stale ones', async () => {
+    // 1st update = refresh (2 rows), 2nd = close-stale (1 row).
+    const { db, updates } = makeUpdateDb([[{ id: 1 }, { id: 2 }], [{ id: 9 }]]);
+    const stats = await reconcileFreshness(db, ['a', 'b', 'a'], new Date('2026-07-31T00:00:00Z'));
+
+    expect(stats).toEqual({ refreshed: 2, closed: 1 });
+    // Refresh reopens (active + clears closedAt); close-stale sets closed.
+    expect(updates[0].set).toMatchObject({ status: 'active', closedAt: null });
+    expect(updates[1].set).toMatchObject({ status: 'closed' });
+  });
+
+  it('skips all updates when nothing was seen (no signal = no closing)', async () => {
+    const { db, updates } = makeUpdateDb([[{ id: 5 }]]);
+    const stats = await reconcileFreshness(db, [], new Date());
+    // A total fetch outage must not close a still-live board.
+    expect(stats).toEqual({ refreshed: 0, closed: 0 });
+    expect(updates).toHaveLength(0);
   });
 });
 

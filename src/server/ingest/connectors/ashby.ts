@@ -14,6 +14,7 @@ export interface AshbyBoard {
 }
 
 interface AshbyJob {
+  id?: string;
   title?: string;
   location?: string;
   jobUrl?: string;
@@ -56,6 +57,7 @@ export function ashbyConnector(
 
           postings.push({
             source: SOURCE,
+            sourceJobId: job.id ?? null,
             company: board.company,
             title,
             location,
