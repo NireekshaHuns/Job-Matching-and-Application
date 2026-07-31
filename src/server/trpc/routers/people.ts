@@ -7,18 +7,26 @@
  *
  * Single-user personal app: procedures are intentionally public (no auth).
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { z } from 'zod';
 import { contacts, peopleCache } from '@/server/db/schema';
 import { buildPeopleProviders, findPeople, type PersonResult } from '@/server/people';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
-/** Cached results older than this are refetched. */
+/** Cached results older than this are refetched (and eligible for deletion). */
 export const CACHE_TTL_DAYS = 7;
 
-/** Stable per-query cache key (company + optional domain, normalized). */
+/**
+ * Stable per-query cache key. JSON-encodes the normalized fields so a value
+ * containing the delimiter can't collide with a different (company, domain) pair.
+ */
 export function peopleCacheKey(company: string, domain?: string | null): string {
-  return `${company.trim().toLowerCase()}|${(domain ?? '').trim().toLowerCase()}`;
+  return JSON.stringify([company.trim().toLowerCase(), (domain ?? '').trim().toLowerCase()]);
+}
+
+/** The cutoff before which a cache row is stale. */
+export function staleCutoff(now: Date, ttlDays: number = CACHE_TTL_DAYS): Date {
+  return new Date(now.getTime() - ttlDays * 24 * 60 * 60 * 1000);
 }
 
 /** True when a cached row is still within the TTL. */
@@ -76,6 +84,10 @@ export const peopleRouter = createTRPCRouter({
       return { configured: true as const, cached: true, people: cached.results as PersonResult[] };
     }
 
+    // Cache miss/stale: opportunistically drop any expired rows (bounds how long
+    // third-party PII lingers) before refetching + upserting this query.
+    await ctx.db.delete(peopleCache).where(lt(peopleCache.fetchedAt, staleCutoff(new Date())));
+
     const providers = buildPeopleProviders(keys, fetch);
     const people = await findPeople(providers, { company: input.company, domain: input.domain });
 
@@ -90,8 +102,21 @@ export const peopleRouter = createTRPCRouter({
     return { configured: true as const, cached: false, people };
   }),
 
-  /** Persist a chosen person as a contact for the job (the only PII we keep). */
+  /**
+   * Persist a chosen person as a contact for the job (the only PII we keep).
+   * Deduped on (jobId, email) so re-importing the same person doesn't pile up
+   * duplicate rows.
+   */
   import: publicProcedure.input(importPersonInput).mutation(async ({ ctx, input }) => {
+    if (input.email) {
+      const [existing] = await ctx.db
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(and(eq(contacts.jobId, input.jobId), eq(contacts.email, input.email)))
+        .limit(1);
+      if (existing) return existing;
+    }
+
     const [row] = await ctx.db
       .insert(contacts)
       .values({

@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { DB } from '@/server/db';
+import type { Context } from '@/server/trpc/context';
+import { createCaller } from '@/server/trpc/root';
 import {
   CACHE_TTL_DAYS,
   findPeopleInput,
@@ -9,10 +12,38 @@ import {
 
 describe('peopleCacheKey', () => {
   it('normalizes company + domain (case/space-insensitive) and stays stable', () => {
-    expect(peopleCacheKey('  Stripe ', 'Stripe.com')).toBe('stripe|stripe.com');
-    expect(peopleCacheKey('Stripe')).toBe('stripe|');
+    expect(peopleCacheKey('  Stripe ', 'Stripe.com')).toBe('["stripe","stripe.com"]');
+    expect(peopleCacheKey('Stripe')).toBe('["stripe",""]');
     // Same inputs → same key (cache hits are reliable).
     expect(peopleCacheKey('Acme', 'acme.io')).toBe(peopleCacheKey('acme', 'ACME.IO'));
+  });
+
+  it('does not collide when a value contains the delimiter', () => {
+    expect(peopleCacheKey('Acme|', 'evil.com')).not.toBe(peopleCacheKey('Acme', '|evil.com'));
+  });
+});
+
+describe('people.find gating', () => {
+  it('returns configured:false (and touches no db) when no provider key is set', async () => {
+    vi.stubEnv('HUNTER_API_KEY', '');
+    vi.stubEnv('APOLLO_API_KEY', '');
+    // db is a poison object: any access throws, proving the no-key path is db-free.
+    const db = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('db must not be touched without a provider key');
+        },
+      },
+    ) as unknown as DB;
+
+    const caller = createCaller({ db } as Context);
+    expect(await caller.people.find({ company: 'Stripe' })).toEqual({
+      configured: false,
+      cached: false,
+      people: [],
+    });
+    vi.unstubAllEnvs();
   });
 });
 

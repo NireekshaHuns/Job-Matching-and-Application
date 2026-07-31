@@ -40,9 +40,14 @@ function FindPeople({
   const [domain, setDomain] = useState('');
   const find = trpc.people.find.useMutation();
   const importPerson = trpc.people.import.useMutation({ onSuccess: onImported });
+  const purge = trpc.people.purgeCache.useMutation({
+    onSuccess: () => find.reset(), // clear the shown results after a purge
+  });
   const [imported, setImported] = useState<Set<string>>(new Set());
 
-  if (status.data && !status.data.configured) {
+  // Wait until we know whether keys are configured (avoids flashing the search UI).
+  if (!status.data) return null;
+  if (!status.data.configured) {
     return (
       <p className="text-xs text-zinc-400">
         Email inference is off — set <code>HUNTER_API_KEY</code> or <code>APOLLO_API_KEY</code> to
@@ -73,6 +78,15 @@ function FindPeople({
           {find.isPending ? 'Searching…' : 'Search'}
         </button>
         {find.data?.cached && <span className="text-xs text-zinc-400">cached</span>}
+        <button
+          type="button"
+          onClick={() => purge.mutate()}
+          disabled={purge.isPending}
+          title="Delete all cached third-party results (privacy)"
+          className="text-xs text-zinc-400 hover:text-zinc-600 hover:underline disabled:opacity-50"
+        >
+          Clear cache
+        </button>
       </div>
 
       {find.isError && (
