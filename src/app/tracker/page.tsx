@@ -13,6 +13,13 @@ type Status = (typeof STATUSES)[number];
 
 // Derived from the router so the row type can never drift from the query.
 type Application = inferRouterOutputs<AppRouter>['applications']['list'][number];
+type FilingType = Application['filingType'];
+
+const NUDGE_STYLE: Record<'urgent' | 'warning' | 'info', string> = {
+  urgent: 'bg-red-50 text-red-800 border-red-200',
+  warning: 'bg-amber-50 text-amber-800 border-amber-200',
+  info: 'bg-blue-50 text-blue-800 border-blue-200',
+};
 
 /** Contacts + compliant deep-links for one company. */
 function OutreachPanel({
@@ -335,6 +342,17 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
             </option>
           ))}
         </select>
+        <select
+          value={app.filingType}
+          disabled={update.isPending}
+          title="H-1B filing type (change-of-status vs. consular)"
+          onChange={(e) => update.mutate({ id: app.id, filingType: e.target.value as FilingType })}
+          className="rounded border border-zinc-300 px-1 py-1 text-sm disabled:opacity-50"
+        >
+          <option value="unknown">Filing: —</option>
+          <option value="change_of_status">Change of status</option>
+          <option value="consular">Consular</option>
+        </select>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -402,6 +420,77 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
   );
 }
 
+type VisaProfile = inferRouterOutputs<AppRouter>['profile']['get'];
+
+/** Editable OPT/STEM-OPT dates + the derived time-sensitive nudges (spec §5.5). */
+function VisaEditor({ data, onSaved }: { data: VisaProfile; onSaved: () => void }) {
+  const [opt, setOpt] = useState(data.optEndDate ?? '');
+  const [stem, setStem] = useState(data.stemOptEndDate ?? '');
+  const save = trpc.profile.set.useMutation({ onSuccess: onSaved });
+
+  return (
+    <section className="mb-6 rounded-lg border border-zinc-200 p-4">
+      <h2 className="text-sm font-semibold text-zinc-700">Visa timeline</h2>
+      {data.nudges.length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {data.nudges.map((n) => (
+            <li key={n.id} className={`rounded border px-2 py-1 text-xs ${NUDGE_STYLE[n.level]}`}>
+              <span className="font-medium">{n.title}.</span> {n.detail}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs text-zinc-500">No time-sensitive visa reminders right now.</p>
+      )}
+      <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
+        <label className="flex flex-col gap-1">
+          OPT end date
+          <input
+            type="date"
+            value={opt}
+            onChange={(e) => setOpt(e.target.value)}
+            className="rounded border border-zinc-300 px-2 py-1"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          STEM-OPT end date
+          <input
+            type="date"
+            value={stem}
+            onChange={(e) => setStem(e.target.value)}
+            className="rounded border border-zinc-300 px-2 py-1"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={save.isPending}
+          onClick={() => save.mutate({ optEndDate: opt || null, stemOptEndDate: stem || null })}
+          className="rounded bg-zinc-900 px-3 py-1 text-xs text-white disabled:opacity-50"
+        >
+          Save dates
+        </button>
+      </div>
+      <p className="mt-2 text-[11px] text-zinc-400">
+        Reminders are calendar-based (approximate) — not legal or lottery advice.
+      </p>
+    </section>
+  );
+}
+
+function VisaTimelinePanel() {
+  const utils = trpc.useUtils();
+  const q = trpc.profile.get.useQuery();
+  if (!q.data) return null;
+  // Re-seed the editor from server data after a save via the key.
+  return (
+    <VisaEditor
+      key={`${q.data.optEndDate ?? ''}:${q.data.stemOptEndDate ?? ''}`}
+      data={q.data}
+      onSaved={() => utils.profile.get.invalidate()}
+    />
+  );
+}
+
 export default function Tracker() {
   const utils = trpc.useUtils();
   const query = trpc.applications.list.useQuery();
@@ -426,6 +515,8 @@ export default function Tracker() {
           Outreach today: <span className="font-medium text-zinc-900">{todayQuery.data ?? 0}</span>
         </span>
       </header>
+
+      <VisaTimelinePanel />
 
       {query.isLoading && <LoadingSkeleton />}
       {query.isError && (
