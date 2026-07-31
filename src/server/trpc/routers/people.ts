@@ -7,36 +7,16 @@
  *
  * Single-user personal app: procedures are intentionally public (no auth).
  */
-import { and, eq, lt } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { contacts, peopleCache } from '@/server/db/schema';
 import { buildPeopleProviders, findPeople, type PersonResult } from '@/server/people';
+import { isCacheFresh, peopleCacheKey } from '@/server/people/cache';
+import { purgeStalePeopleCache } from '@/server/people/purge';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
-/** Cached results older than this are refetched (and eligible for deletion). */
-export const CACHE_TTL_DAYS = 7;
-
-/**
- * Stable per-query cache key. JSON-encodes the normalized fields so a value
- * containing the delimiter can't collide with a different (company, domain) pair.
- */
-export function peopleCacheKey(company: string, domain?: string | null): string {
-  return JSON.stringify([company.trim().toLowerCase(), (domain ?? '').trim().toLowerCase()]);
-}
-
-/** The cutoff before which a cache row is stale. */
-export function staleCutoff(now: Date, ttlDays: number = CACHE_TTL_DAYS): Date {
-  return new Date(now.getTime() - ttlDays * 24 * 60 * 60 * 1000);
-}
-
-/** True when a cached row is still within the TTL. */
-export function isCacheFresh(
-  fetchedAt: Date,
-  now: Date,
-  ttlDays: number = CACHE_TTL_DAYS,
-): boolean {
-  return now.getTime() - fetchedAt.getTime() < ttlDays * 24 * 60 * 60 * 1000;
-}
+// Re-exported so existing importers/tests keep their paths.
+export { CACHE_TTL_DAYS, isCacheFresh, peopleCacheKey, staleCutoff } from '@/server/people/cache';
 
 export const findPeopleInput = z.object({
   company: z.string().min(1).max(200),
@@ -85,8 +65,9 @@ export const peopleRouter = createTRPCRouter({
     }
 
     // Cache miss/stale: opportunistically drop any expired rows (bounds how long
-    // third-party PII lingers) before refetching + upserting this query.
-    await ctx.db.delete(peopleCache).where(lt(peopleCache.fetchedAt, staleCutoff(new Date())));
+    // third-party PII lingers) before refetching + upserting this query. The
+    // scheduled Inngest purge is the backstop when the finder isn't used.
+    await purgeStalePeopleCache(ctx.db);
 
     const providers = buildPeopleProviders(keys, fetch);
     const people = await findPeople(providers, { company: input.company, domain: input.domain });
