@@ -41,6 +41,9 @@ async function main() {
   console.log(
     `fetched ${result.stats.fetched}, unique ${result.stats.deduped}, enriched ${result.stats.enriched}, inserted ${result.inserted}.`,
   );
+  console.log(
+    `freshness: refreshed ${result.reconcile.refreshed}, closed ${result.reconcile.closed} stale; aliases upserted ${result.aliasesWritten}.`,
+  );
 }
 
 main().catch((err) => {

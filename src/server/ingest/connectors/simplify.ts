@@ -11,6 +11,7 @@ import { postingFingerprint } from '../fingerprint';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
 interface SimplifyListing {
+  id?: string;
   company_name?: string;
   title?: string;
   url?: string;
@@ -73,6 +74,7 @@ export function simplifyNewGradConnector(
 
         postings.push({
           source,
+          sourceJobId: listing.id ?? null,
           company,
           title,
           location,

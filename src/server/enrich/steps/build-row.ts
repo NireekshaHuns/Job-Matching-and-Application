@@ -25,6 +25,7 @@ export function buildJobRow(
   return {
     fingerprint: posting.fingerprint,
     source: posting.source,
+    sourceJobId: posting.sourceJobId ?? null,
     url: posting.url,
     postedDate: posting.postedDate,
     company: posting.company,

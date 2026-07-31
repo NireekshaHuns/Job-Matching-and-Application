@@ -7,6 +7,7 @@ import {
   employmentTypeEnum,
   jobScores,
   jobs,
+  jobStatusEnum,
   masterSkills,
   matchMethodEnum,
   newHireStatusEnum,
@@ -60,6 +61,10 @@ describe('db schema', () => {
 
     it('match method records how a company was resolved', () => {
       expect(matchMethodEnum.enumValues).toEqual(['exact', 'fuzzy', 'manual']);
+    });
+
+    it('job status is active/closed (closed is retained, not deleted)', () => {
+      expect(jobStatusEnum.enumValues).toEqual(['active', 'closed']);
     });
   });
 
@@ -122,6 +127,11 @@ describe('db schema', () => {
         'isRemote',
         'techKeywords',
         'softKeywords',
+        'sourceJobId',
+        'status',
+        'firstSeenAt',
+        'lastSeenAt',
+        'closedAt',
       ]) {
         expect(cols).toHaveProperty(name);
       }

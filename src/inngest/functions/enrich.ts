@@ -45,7 +45,12 @@ export const enrichJobs = inngest.createFunction(
 
       const postings = (await Promise.all(buildConnectors().map((c) => c.fetch()))).flat();
       const result = await runEnrichment({ db, postings, chat, embedder });
-      return { ...result.stats, inserted: result.inserted };
+      return {
+        ...result.stats,
+        inserted: result.inserted,
+        aliasesWritten: result.aliasesWritten,
+        reconcile: result.reconcile,
+      };
     });
   },
 );
