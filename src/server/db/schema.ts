@@ -384,8 +384,9 @@ export const outreachLog = pgTable('outreach_log', {
 /**
  * People-finder cache (spec §5.6/§7). Caches email-inference results per query
  * so we respect Apollo/Hunter free-tier limits. Contains third-party PII — kept
- * minimal, TTL'd by `fetched_at` (freshness enforced in the router), and
- * purgeable. Never exposed publicly.
+ * minimal, TTL'd by `fetched_at` (freshness enforced on read; stale rows deleted
+ * opportunistically on a miss and by a daily purge), and purgeable. Never
+ * exposed publicly.
  */
 export const peopleCache = pgTable('people_cache', {
   id: serial('id').primaryKey(),
