@@ -39,4 +39,12 @@ describe('buildApplicationUpdate', () => {
       resumeSnapshot: 'x',
     });
   });
+
+  it('sets the filing type when provided', () => {
+    expect(buildApplicationUpdate({ id: 1, filingType: 'consular' })).toEqual({
+      filingType: 'consular',
+    });
+    // Leaving it out is a no-op (not forced back to a default).
+    expect(buildApplicationUpdate({ id: 1 })).toEqual({});
+  });
 });

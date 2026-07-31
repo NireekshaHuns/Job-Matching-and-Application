@@ -104,6 +104,13 @@ export const matchMethodEnum = pgEnum('match_method', ['exact', 'fuzzy', 'manual
  */
 export const jobStatusEnum = pgEnum('job_status', ['active', 'closed']);
 
+/**
+ * H-1B petition filing type, captured per application (spec §5.5). Change-of-
+ * status vs. consular processing matters for the US-master's-grad fee exemption;
+ * we only label it, never compute anything from it. `unknown` until the user sets it.
+ */
+export const filingTypeEnum = pgEnum('filing_type', ['change_of_status', 'consular', 'unknown']);
+
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
@@ -340,6 +347,8 @@ export const applications = pgTable(
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
     /** Graph message id of the confirming email — dedupes reconcile + audits the match. */
     confirmationEmailId: text('confirmation_email_id'),
+    /** H-1B petition filing type (labeled only, never computed). */
+    filingType: filingTypeEnum('filing_type').notNull().default('unknown'),
   },
   (t) => [
     // One confirming email can back at most one application (idempotency backstop).
@@ -370,6 +379,20 @@ export const outreachLog = pgTable('outreach_log', {
     .references(() => contacts.id, { onDelete: 'cascade' }),
   contactedAt: timestamp('contacted_at', { withTimezone: true }).notNull().defaultNow(),
   channel: outreachChannelEnum('channel').notNull(),
+});
+
+/**
+ * Single-user visa profile — the user's OPT / STEM-OPT end dates, used to derive
+ * time-sensitive tracker nudges (spec §5.5). One row (enforced in the router);
+ * dates are nullable until the user fills them in.
+ */
+export const profile = pgTable('profile', {
+  id: serial('id').primaryKey(),
+  /** OPT end date (F-1 post-completion OPT). */
+  optEndDate: date('opt_end_date'),
+  /** STEM-OPT extension end date, when applicable. */
+  stemOptEndDate: date('stem_opt_end_date'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -436,6 +459,8 @@ export type SponsorFiling = typeof sponsorFilings.$inferSelect;
 export type NewSponsorFiling = typeof sponsorFilings.$inferInsert;
 export type CompanyAlias = typeof companyAliases.$inferSelect;
 export type NewCompanyAlias = typeof companyAliases.$inferInsert;
+export type Profile = typeof profile.$inferSelect;
+export type NewProfile = typeof profile.$inferInsert;
 export type Resume = typeof resumes.$inferSelect;
 export type NewResume = typeof resumes.$inferInsert;
 export type Job = typeof jobs.$inferSelect;
