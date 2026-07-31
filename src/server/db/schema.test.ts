@@ -2,17 +2,22 @@ import { getTableColumns } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import {
   applications,
+  companyAliases,
   EMBEDDING_DIMENSIONS,
   employmentTypeEnum,
   jobScores,
   jobs,
   masterSkills,
+  matchMethodEnum,
+  newHireStatusEnum,
   resumeBullets,
   resumeKindEnum,
   resumes,
   roleFamilyEnum,
   seniorityEnum,
   skillKindEnum,
+  sponsorFilings,
+  sponsors,
   sponsorTierEnum,
 } from './schema';
 
@@ -42,6 +47,19 @@ describe('db schema', () => {
 
     it('seniority targets entry and mid only', () => {
       expect(seniorityEnum.enumValues).toEqual(['entry', 'mid', 'other']);
+    });
+
+    it('new-hire status keeps all four states (unknown/no-record never dropped)', () => {
+      expect(newHireStatusEnum.enumValues).toEqual([
+        'sponsors_new_hires',
+        'transfers_only',
+        'no_record',
+        'unknown',
+      ]);
+    });
+
+    it('match method records how a company was resolved', () => {
+      expect(matchMethodEnum.enumValues).toEqual(['exact', 'fuzzy', 'manual']);
     });
   });
 
@@ -129,6 +147,52 @@ describe('db schema', () => {
       expect(cols).toHaveProperty('kind');
       expect(cols).toHaveProperty('roleFamily');
       expect(cols).toHaveProperty('content');
+    });
+  });
+
+  describe('sponsorship signal v2', () => {
+    it('sponsors carries new-employment rollups separate from the blended count', () => {
+      const cols = getTableColumns(sponsors);
+      expect(cols).toHaveProperty('sponsorCount');
+      expect(cols).toHaveProperty('newEmploymentApprovals');
+      expect(cols).toHaveProperty('newEmploymentLastYear');
+      expect(cols).toHaveProperty('newEmploymentRecentYears');
+    });
+
+    it('sponsor_filings keeps initial vs continuing counts per fiscal year', () => {
+      const cols = getTableColumns(sponsorFilings);
+      for (const name of [
+        'companyNameNormalized',
+        'fiscalYear',
+        'initialApprovals',
+        'initialDenials',
+        'continuingApprovals',
+        'continuingDenials',
+      ]) {
+        expect(cols).toHaveProperty(name);
+      }
+    });
+
+    it('company_aliases stores a visible, correctable match (confidence + method + confirmed)', () => {
+      const cols = getTableColumns(companyAliases);
+      for (const name of [
+        'rawName',
+        'rawNameNormalized',
+        'sponsorId',
+        'matchConfidence',
+        'matchMethod',
+        'confirmed',
+      ]) {
+        expect(cols).toHaveProperty(name);
+      }
+      // Nullable so a confident "no match" can still be recorded.
+      expect(cols.sponsorId.notNull).toBe(false);
+    });
+
+    it('jobs carries the denormalized new-hire badge + match confidence', () => {
+      const cols = getTableColumns(jobs);
+      expect(cols).toHaveProperty('newHireStatus');
+      expect(cols).toHaveProperty('sponsorMatchConfidence');
     });
   });
 });
