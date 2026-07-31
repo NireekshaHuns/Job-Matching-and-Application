@@ -11,7 +11,6 @@ import {
   NEW_HIRE_STYLES,
   TIER_STYLES,
   type NewHireStatus,
-  type SponsorTier,
 } from '@/components/tier';
 import { trpc } from '@/trpc/react';
 
@@ -188,21 +187,17 @@ export default function JobsPage() {
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <span
-                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
-                    TIER_STYLES[job.sponsorTier as SponsorTier] ?? TIER_STYLES.Low
-                  }`}
+                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${TIER_STYLES[job.sponsorTier]}`}
                   title={job.sponsorReason ?? undefined}
                 >
                   H1B: {job.sponsorTier}
                   {job.sponsorCount != null ? ` (${job.sponsorCount})` : ''}
                 </span>
                 <span
-                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
-                    NEW_HIRE_STYLES[job.newHireStatus as NewHireStatus] ?? NEW_HIRE_STYLES.unknown
-                  }`}
-                  title={`${NEW_HIRE_MEANINGS[job.newHireStatus as NewHireStatus] ?? ''} ${NEW_HIRE_DISCLAIMER}`}
+                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${NEW_HIRE_STYLES[job.newHireStatus]}`}
+                  title={`${NEW_HIRE_MEANINGS[job.newHireStatus]} ${NEW_HIRE_DISCLAIMER}`}
                 >
-                  {NEW_HIRE_LABELS[job.newHireStatus as NewHireStatus] ?? NEW_HIRE_LABELS.unknown}
+                  {NEW_HIRE_LABELS[job.newHireStatus]}
                 </span>
                 <button
                   type="button"

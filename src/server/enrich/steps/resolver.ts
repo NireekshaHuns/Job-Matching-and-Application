@@ -67,10 +67,12 @@ export function buildSponsorResolver(inputs: ResolverInputs): {
     // A user-confirmed mapping is authoritative — never silently re-resolve it.
     if (inputs.confirmedAliases.has(rawNorm)) {
       const key = inputs.confirmedAliases.get(rawNorm) ?? null;
+      // A confirmed match is confidence 1; a confirmed "no match" (null key) is
+      // unmatched, so confidence must be null — never assert a match that isn't.
       return {
         history: key ? (inputs.historyByKey.get(key) ?? null) : null,
         key,
-        confidence: 1,
+        confidence: key ? 1 : null,
         method: 'manual',
       };
     }

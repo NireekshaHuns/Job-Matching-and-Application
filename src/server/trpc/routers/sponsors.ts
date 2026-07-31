@@ -8,7 +8,7 @@
  * Single-user personal app: procedures are intentionally public (no auth).
  */
 import { TRPCError } from '@trpc/server';
-import { desc, eq, ilike, sql } from 'drizzle-orm';
+import { desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { companyAliases, jobs, sponsors } from '@/server/db/schema';
 import {
@@ -48,81 +48,16 @@ export function recomputeSponsorship(
   };
 }
 
-const SPONSOR_ROLLUP = {
-  id: sponsors.id,
-  name: sponsors.companyNameNormalized,
+/** The `sponsors` columns needed to build a `SponsorHistory`. */
+const HISTORY_COLUMNS = {
   sponsorCount: sponsors.sponsorCount,
   approvalRate: sponsors.approvalRate,
   lastFiledYear: sponsors.lastFiledYear,
   newEmploymentApprovals: sponsors.newEmploymentApprovals,
   newEmploymentLastYear: sponsors.newEmploymentLastYear,
-  newEmploymentRecentYears: sponsors.newEmploymentRecentYears,
 } as const;
 
-function toHistory(row: {
-  sponsorCount: number;
-  approvalRate: number | null;
-  lastFiledYear: number | null;
-  newEmploymentApprovals: number;
-  newEmploymentLastYear: number | null;
-}): SponsorHistory {
-  return {
-    sponsorCount: row.sponsorCount,
-    approvalRate: row.approvalRate,
-    lastFiledYear: row.lastFiledYear,
-    newEmploymentApprovals: row.newEmploymentApprovals,
-    newEmploymentLastYear: row.newEmploymentLastYear,
-  };
-}
-
 export const sponsorsRouter = createTRPCRouter({
-  /** Sponsor rollup + current match metadata for a company, for the badge tooltip. */
-  detail: publicProcedure
-    .input(z.object({ company: z.string().min(1).max(200) }))
-    .query(async ({ ctx, input }) => {
-      const normalized = normalizeCompanyName(input.company);
-      if (!normalized) return { normalized: '', alias: null, sponsor: null };
-
-      const [alias] = await ctx.db
-        .select({
-          sponsorId: companyAliases.sponsorId,
-          matchConfidence: companyAliases.matchConfidence,
-          matchMethod: companyAliases.matchMethod,
-          confirmed: companyAliases.confirmed,
-        })
-        .from(companyAliases)
-        .where(eq(companyAliases.rawNameNormalized, normalized))
-        .limit(1);
-
-      // Prefer the alias's sponsor; else fall back to an exact normalized hit.
-      let sponsor = null;
-      if (alias?.sponsorId != null) {
-        [sponsor] = await ctx.db
-          .select(SPONSOR_ROLLUP)
-          .from(sponsors)
-          .where(eq(sponsors.id, alias.sponsorId))
-          .limit(1);
-      } else if (!alias) {
-        [sponsor] = await ctx.db
-          .select(SPONSOR_ROLLUP)
-          .from(sponsors)
-          .where(eq(sponsors.companyNameNormalized, normalized))
-          .limit(1);
-      }
-
-      return {
-        normalized,
-        alias: alias
-          ? {
-              confidence: alias.matchConfidence,
-              method: alias.matchMethod,
-              confirmed: alias.confirmed,
-            }
-          : null,
-        sponsor: sponsor ?? null,
-      };
-    }),
-
   /** Candidate USCIS employers for the correction dropdown, strongest new-hire sponsors first. */
   search: publicProcedure
     .input(z.object({ query: z.string().trim().min(1).max(100) }))
@@ -157,12 +92,12 @@ export const sponsorsRouter = createTRPCRouter({
     let history: SponsorHistory | null = null;
     if (input.sponsorId != null) {
       const [row] = await ctx.db
-        .select(SPONSOR_ROLLUP)
+        .select(HISTORY_COLUMNS)
         .from(sponsors)
         .where(eq(sponsors.id, input.sponsorId))
         .limit(1);
       if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Sponsor not found.' });
-      history = toHistory(row);
+      history = row;
     }
     const confidence = input.sponsorId != null ? 1 : null;
 
@@ -188,12 +123,19 @@ export const sponsorsRouter = createTRPCRouter({
         },
       });
 
-    // Re-derive denormalized fields on affected jobs. Normalization isn't
-    // expressible in SQL here, so filter in JS — fine at personal-board scale.
-    const jobRows = await ctx.db
-      .select({ id: jobs.id, company: jobs.company, jdText: jobs.jdText })
-      .from(jobs);
-    const affected = jobRows.filter((j) => normalizeCompanyName(j.company) === normalized);
+    // Find affected jobs. Normalization isn't expressible in SQL here, so pull
+    // just id + company and filter in JS; only the matched subset then needs its
+    // (potentially large) jdText loaded to recompute the tier.
+    const idAndCompany = await ctx.db.select({ id: jobs.id, company: jobs.company }).from(jobs);
+    const affectedIds = idAndCompany
+      .filter((j) => normalizeCompanyName(j.company) === normalized)
+      .map((j) => j.id);
+    if (affectedIds.length === 0) return { updatedJobs: 0 };
+
+    const affected = await ctx.db
+      .select({ id: jobs.id, jdText: jobs.jdText })
+      .from(jobs)
+      .where(inArray(jobs.id, affectedIds));
 
     for (const j of affected) {
       await ctx.db

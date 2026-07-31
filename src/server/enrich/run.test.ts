@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DB } from '@/server/db';
 import type { NewJob } from '@/server/db/schema';
-import { insertJobs, loadSponsorState } from './run';
+import type { DiscoveredAlias } from './steps/resolver';
+import { insertJobs, loadSponsorState, upsertDiscoveredAliases } from './run';
 
 interface InsertCapture {
   values: Array<{ fingerprint: string }>;
@@ -71,6 +72,78 @@ describe('insertJobs', () => {
   it('writes nothing for an empty list', async () => {
     const { db, inserts } = makeInsertDb();
     expect(await insertJobs(db, [])).toBe(0);
+    expect(inserts).toHaveLength(0);
+  });
+});
+
+describe('upsertDiscoveredAliases', () => {
+  interface UpsertCapture {
+    values: Array<Record<string, unknown>>;
+    conflict: { target?: unknown; set?: Record<string, unknown>; setWhere?: unknown };
+  }
+
+  function makeUpsertDb() {
+    const inserts: UpsertCapture[] = [];
+    const db = {
+      insert() {
+        const cap: UpsertCapture = { values: [], conflict: {} };
+        return {
+          values(vals: Array<Record<string, unknown>>) {
+            cap.values = vals;
+            return {
+              onConflictDoUpdate(cfg: UpsertCapture['conflict']) {
+                cap.conflict = cfg;
+                inserts.push(cap);
+                return Promise.resolve();
+              },
+            };
+          },
+        };
+      },
+    };
+    return { db: db as unknown as DB, inserts };
+  }
+
+  const alias = (rawNameNormalized: string, sponsorKey: string): DiscoveredAlias => ({
+    rawName: rawNameNormalized,
+    rawNameNormalized,
+    sponsorKey,
+    confidence: 0.8,
+    method: 'fuzzy',
+  });
+
+  it('maps sponsor keys to ids, marks rows unconfirmed, and never clobbers a confirmed row', async () => {
+    const { db, inserts } = makeUpsertDb();
+    const idByKey = new Map([['STRIPE PAYMENTS', 7]]);
+
+    const written = await upsertDiscoveredAliases(
+      db,
+      [alias('STRIPE', 'STRIPE PAYMENTS')],
+      idByKey,
+    );
+
+    expect(written).toBe(1);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].values[0]).toMatchObject({
+      rawNameNormalized: 'STRIPE',
+      sponsorId: 7,
+      confirmed: false,
+    });
+    // The sticky-correction guarantee: only update rows that aren't confirmed.
+    expect(inserts[0].conflict.setWhere).toBeTruthy();
+    expect(inserts[0].conflict.target).toBeTruthy();
+  });
+
+  it('writes null sponsorId when the discovered key is not in the id map', async () => {
+    const { db, inserts } = makeUpsertDb();
+    const written = await upsertDiscoveredAliases(db, [alias('X', 'MISSING KEY')], new Map());
+    expect(written).toBe(1);
+    expect(inserts[0].values[0].sponsorId).toBeNull();
+  });
+
+  it('writes nothing for an empty list', async () => {
+    const { db, inserts } = makeUpsertDb();
+    expect(await upsertDiscoveredAliases(db, [], new Map())).toBe(0);
     expect(inserts).toHaveLength(0);
   });
 });

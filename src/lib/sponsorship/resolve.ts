@@ -66,6 +66,14 @@ function levenshteinRatio(a: string, b: string): number {
  * token-overlap score (handles suffix/subset variants like "Stripe" vs
  * "Stripe Payments") and a character ratio (handles typos in single-token
  * names like "Databrics" vs "Databricks").
+ *
+ * Inherent ambiguity: a one-token name fully contained in a two-token candidate
+ * ("Stripe" ⊂ "Stripe Payments") is structurally identical to an unrelated pair
+ * that happens to share a head token ("Delta" ⊂ "Delta Dental"). The name alone
+ * carries no signal to tell them apart, so both surface as a moderate-confidence
+ * fuzzy match rather than being silently rejected (which would also drop the
+ * real "Stripe Payments" case). The displayed confidence + user-correctable
+ * alias (`company_aliases`) are the deliberate backstop — see spec §5.3/§7.
  */
 export function similarity(a: string, b: string): number {
   if (a === b) return 1;

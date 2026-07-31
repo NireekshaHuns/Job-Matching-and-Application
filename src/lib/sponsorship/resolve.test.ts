@@ -24,6 +24,17 @@ describe('similarity', () => {
     // "Apple" should NOT confidently resolve to "Apple Bank For Savings".
     expect(similarity('APPLE', 'APPLE BANK FOR SAVINGS')).toBeLessThan(FUZZY_THRESHOLD);
   });
+
+  it('documents the one-of-two-token ambiguity (surfaced, not silently dropped)', () => {
+    // A single token contained in a two-token name is a match either way — we
+    // cannot distinguish the real "Stripe"/"Stripe Payments" from the unrelated
+    // "Delta"/"Delta Dental" by name alone, so both clear the threshold and rely
+    // on the visible confidence + correction UI (spec §5.3). Pin the behavior.
+    expect(similarity('STRIPE', 'STRIPE PAYMENTS')).toBeGreaterThanOrEqual(FUZZY_THRESHOLD);
+    expect(similarity('DELTA', 'DELTA DENTAL')).toBeGreaterThanOrEqual(FUZZY_THRESHOLD);
+    // Both are moderate confidence, never a near-certain (1.0) assertion.
+    expect(similarity('DELTA', 'DELTA DENTAL')).toBeLessThan(1);
+  });
 });
 
 describe('resolveEmployer', () => {

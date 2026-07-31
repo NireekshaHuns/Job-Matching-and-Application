@@ -58,6 +58,8 @@ describe('buildSponsorResolver', () => {
     expect(r.key).toBeNull();
     expect(r.history).toBeNull();
     expect(r.method).toBe('manual');
+    // A confirmed "no match" must NOT report a confident match (spec §5.3).
+    expect(r.confidence).toBeNull();
   });
 
   it('returns an unresolved result for a blank name', () => {
