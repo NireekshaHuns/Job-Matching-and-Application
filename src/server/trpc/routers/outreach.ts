@@ -5,6 +5,7 @@
  *
  * Single-user personal app: procedures are intentionally public (no auth).
  */
+import { TRPCError } from '@trpc/server';
 import { desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { contacts, outreachChannelEnum, outreachLog } from '@/server/db/schema';
@@ -15,7 +16,14 @@ export const addContactInput = z.object({
   jobId: z.number().int(),
   name: z.string().min(1).max(200),
   title: z.string().max(200).optional(),
+  email: z.string().email().max(320).optional(),
   linkedinUrl: z.string().url().max(500).optional(),
+});
+
+export const sendEmailInput = z.object({
+  contactId: z.number().int(),
+  subject: z.string().min(1).max(300),
+  body: z.string().min(1).max(20_000),
 });
 
 export const logTouchInput = z.object({
@@ -39,6 +47,7 @@ export const outreachRouter = createTRPCRouter({
           id: contacts.id,
           name: contacts.name,
           title: contacts.title,
+          email: contacts.email,
           linkedinUrl: contacts.linkedinUrl,
         })
         .from(contacts)
@@ -76,6 +85,7 @@ export const outreachRouter = createTRPCRouter({
         jobId: input.jobId,
         name: input.name,
         title: input.title,
+        email: input.email,
         linkedinUrl: input.linkedinUrl,
       })
       .returning({ id: contacts.id });
@@ -117,6 +127,51 @@ export const outreachRouter = createTRPCRouter({
       }
     }
     return { ...templateOutreachEmail(input), source: 'template' as const };
+  }),
+
+  /**
+   * Send a reviewed draft to a saved contact via Microsoft Graph `Mail.Send`,
+   * then log an `email` touch. Draft-first: the client only calls this on an
+   * explicit Send of content the user has already reviewed/edited. Graph is
+   * imported lazily so the app boots without MS creds; a clear error surfaces
+   * when they're missing or the contact has no email on file.
+   */
+  sendEmail: publicProcedure.input(sendEmailInput).mutation(async ({ ctx, input }) => {
+    const clientId = process.env.MS_CLIENT_ID;
+    const refreshToken = process.env.MS_REFRESH_TOKEN;
+    if (!clientId || !refreshToken) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message:
+          'Outlook is not configured (MS_CLIENT_ID / MS_REFRESH_TOKEN). Run pnpm outlook:auth.',
+      });
+    }
+
+    const { graphMailSender, refreshAccessToken } = await import('@/server/outlook/graph');
+    const { sendOutreachEmail } = await import('@/server/outreach/send');
+    const tenant = process.env.MS_TENANT || 'consumers';
+    const sender = graphMailSender({
+      fetch,
+      getAccessToken: () => refreshAccessToken(fetch, { clientId, refreshToken, tenant }),
+    });
+
+    const result = await sendOutreachEmail({
+      db: ctx.db,
+      sender,
+      contactId: input.contactId,
+      subject: input.subject,
+      body: input.body,
+    });
+    if (result.status === 'not_found') {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Contact not found.' });
+    }
+    if (result.status === 'no_email') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'This contact has no email address — add one before sending.',
+      });
+    }
+    return { ok: true as const };
   }),
 
   /**
