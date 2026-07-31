@@ -3,10 +3,20 @@
 import { useDeferredValue, useState } from 'react';
 import { Chip } from '@/components/chip';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
-import { TIER_STYLES, type SponsorTier } from '@/components/tier';
+import { SponsorCorrection } from '@/components/sponsor-correction';
+import {
+  NEW_HIRE_DISCLAIMER,
+  NEW_HIRE_LABELS,
+  NEW_HIRE_MEANINGS,
+  NEW_HIRE_STYLES,
+  TIER_STYLES,
+  type NewHireStatus,
+  type SponsorTier,
+} from '@/components/tier';
 import { trpc } from '@/trpc/react';
 
 type Sort = 'combined' | 'sponsor' | 'fit' | 'recent';
+type NewHireFilter = NewHireStatus | 'all';
 
 export default function JobsPage() {
   const [search, setSearch] = useState('');
@@ -16,6 +26,8 @@ export default function JobsPage() {
   const [includeSenior, setIncludeSenior] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [allEmployment, setAllEmployment] = useState(false);
+  const [newHire, setNewHire] = useState<NewHireFilter>('all');
+  const [correcting, setCorrecting] = useState<number | null>(null);
 
   const deferredSearch = useDeferredValue(search);
   const utils = trpc.useUtils();
@@ -45,6 +57,7 @@ export default function JobsPage() {
     includeSenior,
     remoteOnly,
     employmentType: allEmployment ? 'all' : 'full_time',
+    newHireStatuses: newHire === 'all' ? undefined : [newHire],
   });
 
   return (
@@ -91,6 +104,20 @@ export default function JobsPage() {
                 {r.label}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1">
+          New hires
+          <select
+            value={newHire}
+            onChange={(e) => setNewHire(e.target.value as NewHireFilter)}
+            className="rounded border border-zinc-300 px-1 py-1"
+          >
+            <option value="all">Any</option>
+            <option value="sponsors_new_hires">Sponsors new hires</option>
+            <option value="transfers_only">Transfers only</option>
+            <option value="no_record">No record</option>
+            <option value="unknown">Unknown</option>
           </select>
         </label>
         <label className="flex items-center gap-1">
@@ -159,16 +186,40 @@ export default function JobsPage() {
                   {job.isRemote ? ' · Remote' : ''}
                 </div>
               </div>
-              <span
-                className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${
-                  TIER_STYLES[job.sponsorTier as SponsorTier] ?? TIER_STYLES.Low
-                }`}
-                title={job.sponsorReason ?? undefined}
-              >
-                H1B: {job.sponsorTier}
-                {job.sponsorCount != null ? ` (${job.sponsorCount})` : ''}
-              </span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+                    TIER_STYLES[job.sponsorTier as SponsorTier] ?? TIER_STYLES.Low
+                  }`}
+                  title={job.sponsorReason ?? undefined}
+                >
+                  H1B: {job.sponsorTier}
+                  {job.sponsorCount != null ? ` (${job.sponsorCount})` : ''}
+                </span>
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+                    NEW_HIRE_STYLES[job.newHireStatus as NewHireStatus] ?? NEW_HIRE_STYLES.unknown
+                  }`}
+                  title={`${NEW_HIRE_MEANINGS[job.newHireStatus as NewHireStatus] ?? ''} ${NEW_HIRE_DISCLAIMER}`}
+                >
+                  {NEW_HIRE_LABELS[job.newHireStatus as NewHireStatus] ?? NEW_HIRE_LABELS.unknown}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCorrecting(correcting === job.id ? null : job.id)}
+                  className="text-[11px] text-zinc-400 hover:text-zinc-600 hover:underline"
+                  title="Correct the USCIS employer match"
+                >
+                  {job.sponsorMatchConfidence != null
+                    ? `match ${Math.round(job.sponsorMatchConfidence * 100)}% · correct`
+                    : 'no match · correct'}
+                </button>
+              </div>
             </div>
+
+            {correcting === job.id && (
+              <SponsorCorrection company={job.company} onDone={() => setCorrecting(null)} />
+            )}
 
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {job.relevanceScore != null && (
