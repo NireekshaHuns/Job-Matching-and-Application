@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   authorizeUrl,
   buildMessagesUrl,
+  buildSendMailPayload,
   exchangeCodeForTokens,
   graphMailClient,
+  graphMailSender,
+  GRAPH_SCOPES,
   mapGraphMessage,
   refreshAccessToken,
   tokenEndpoint,
@@ -22,6 +25,12 @@ describe('URL builders', () => {
     expect(tokenEndpoint('consumers')).toBe(
       'https://login.microsoftonline.com/consumers/oauth2/v2.0/token',
     );
+  });
+
+  it('requests Mail.Read, Mail.Send, and offline_access', () => {
+    expect(GRAPH_SCOPES).toContain('Mail.Read');
+    expect(GRAPH_SCOPES).toContain('Mail.Send');
+    expect(GRAPH_SCOPES).toContain('offline_access');
   });
 
   it('builds an authorize URL with PKCE + offline scope', () => {
@@ -252,6 +261,73 @@ describe('graphMailClient', () => {
     });
     expect(msgs.map((m) => m.id)).toEqual(['a']);
     expect(truncated).toBe(true);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('buildSendMailPayload', () => {
+  it('wraps a plain-text email in the Graph sendMail shape', () => {
+    expect(
+      buildSendMailPayload({ to: 'jane@acme.com', subject: 'Hi', body: 'Hello there' }),
+    ).toEqual({
+      message: {
+        subject: 'Hi',
+        body: { contentType: 'Text', content: 'Hello there' },
+        toRecipients: [{ emailAddress: { address: 'jane@acme.com' } }],
+      },
+      saveToSentItems: true,
+    });
+  });
+});
+
+describe('graphMailSender', () => {
+  const email = { to: 'jane@acme.com', subject: 'Hi', body: 'Hello' };
+
+  it('POSTs the payload with a bearer token and resolves on 202', async () => {
+    // Graph sendMail returns 202 Accepted with an empty body.
+    const fetchFn = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () =>
+      jsonResponse({}, { status: 202 }),
+    );
+    const sender = graphMailSender({
+      fetch: fetchFn as unknown as typeof fetch,
+      getAccessToken: async () => 'AT',
+    });
+    await expect(sender.sendMail(email)).resolves.toBeUndefined();
+
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(url).toBe('https://graph.microsoft.com/v1.0/me/sendMail');
+    expect(init?.method).toBe('POST');
+    expect((init?.headers as Record<string, string>).authorization).toBe('Bearer AT');
+    expect((init?.headers as Record<string, string>)['content-type']).toBe('application/json');
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      message: { toRecipients: [{ emailAddress: { address: 'jane@acme.com' } }] },
+    });
+  });
+
+  it('refreshes the token and retries once on a 401', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'expired' }, { ok: false, status: 401 }))
+      .mockResolvedValueOnce(jsonResponse({}, { status: 202 }));
+    const getAccessToken = vi.fn(async () => 'AT');
+    const sender = graphMailSender({
+      fetch: fetchFn as unknown as typeof fetch,
+      getAccessToken,
+    });
+    await expect(sender.sendMail(email)).resolves.toBeUndefined();
+    expect(getAccessToken).toHaveBeenCalledTimes(2);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws with the status on a non-401 failure', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ error: 'bad recipient' }, { ok: false, status: 400 }),
+    );
+    const sender = graphMailSender({
+      fetch: fetchFn as unknown as typeof fetch,
+      getAccessToken: async () => 'AT',
+    });
+    await expect(sender.sendMail(email)).rejects.toThrow('400');
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });

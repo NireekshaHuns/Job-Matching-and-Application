@@ -260,6 +260,8 @@ export const contacts = pgTable('contacts', {
     .references(() => jobs.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   title: text('title'),
+  /** Optional recipient address; required to send an outreach email via Graph. */
+  email: text('email'),
   linkedinUrl: text('linkedin_url'),
 });
 

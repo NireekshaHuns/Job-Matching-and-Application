@@ -38,23 +38,39 @@ function OutreachPanel({
 
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
+  const [email, setEmail] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
 
-  // The currently-drafted outreach email (editable before the user copies it),
-  // plus which contact a draft is being generated for (so only that button waits).
+  // The currently-drafted outreach email (editable before the user sends/copies
+  // it), tagged with the contact it targets so "Send" knows the recipient.
   const [draft, setDraft] = useState<{
     subject: string;
     body: string;
     source: 'llm' | 'template';
+    contactId: number;
+    contactEmail: string | null;
   } | null>(null);
   const [pendingContactId, setPendingContactId] = useState<number | null>(null);
   const draftEmail = trpc.outreach.draftEmail.useMutation({
-    onSuccess: (d) => setDraft(d),
     onSettled: () => setPendingContactId(null),
   });
-  const draftForContact = (c: { id: number; name: string; title: string | null }) => {
+  const sendEmail = trpc.outreach.sendEmail.useMutation({
+    onSuccess: () => {
+      setDraft(null);
+      invalidate();
+    },
+  });
+  const draftForContact = (c: {
+    id: number;
+    name: string;
+    title: string | null;
+    email: string | null;
+  }) => {
     setPendingContactId(c.id);
-    draftEmail.mutate({ company, role, contactName: c.name, contactTitle: c.title ?? undefined });
+    draftEmail.mutate(
+      { company, role, contactName: c.name, contactTitle: c.title ?? undefined },
+      { onSuccess: (d) => setDraft({ ...d, contactId: c.id, contactEmail: c.email }) },
+    );
   };
 
   return (
@@ -78,6 +94,7 @@ function OutreachPanel({
           <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium">{c.name}</span>
             {c.title && <span className="text-zinc-500">{c.title}</span>}
+            {c.email && <span className="text-zinc-500">{c.email}</span>}
             {c.linkedinUrl && (
               <a
                 href={c.linkedinUrl}
@@ -163,7 +180,26 @@ function OutreachPanel({
             rows={10}
             className="w-full rounded border border-zinc-300 px-2 py-1 font-mono text-xs"
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={!draft.contactEmail || sendEmail.isPending}
+              title={
+                draft.contactEmail
+                  ? `Send to ${draft.contactEmail}`
+                  : 'Add an email to this contact to send'
+              }
+              onClick={() =>
+                sendEmail.mutate({
+                  contactId: draft.contactId,
+                  subject: draft.subject,
+                  body: draft.body,
+                })
+              }
+              className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {sendEmail.isPending ? 'Sending…' : 'Send'}
+            </button>
             <button
               type="button"
               onClick={() =>
@@ -174,12 +210,19 @@ function OutreachPanel({
               Copy
             </button>
             <a
-              href={`mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
+              href={`mailto:${draft.contactEmail ?? ''}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
               className="rounded border border-zinc-300 px-3 py-1 text-xs hover:bg-white"
             >
               Open in email
             </a>
+            {!draft.contactEmail && (
+              <span className="text-xs text-zinc-500">Add an email to this contact to send</span>
+            )}
           </div>
+          {sendEmail.isError && (
+            <p className="text-sm text-red-600">Send failed: {sendEmail.error.message}</p>
+          )}
+          {sendEmail.isSuccess && <p className="text-sm text-green-700">Sent ✓</p>}
         </div>
       )}
 
@@ -193,12 +236,14 @@ function OutreachPanel({
               jobId,
               name: name.trim(),
               title: title.trim() || undefined,
+              email: email.trim() || undefined,
               linkedinUrl: linkedinUrl.trim() || undefined,
             },
             {
               onSuccess: () => {
                 setName('');
                 setTitle('');
+                setEmail('');
                 setLinkedinUrl('');
               },
             },
@@ -217,6 +262,14 @@ function OutreachPanel({
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Title"
           aria-label="Contact title"
+          className="rounded border border-zinc-300 px-2 py-1 text-sm"
+        />
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email (to send)"
+          aria-label="Contact email"
           className="rounded border border-zinc-300 px-2 py-1 text-sm"
         />
         <input
