@@ -46,21 +46,31 @@ describe('buildTailoringSuggestions', () => {
     expect(s.achievableScore).toBe(67);
   });
 
-  it('surfaces the real bullets demonstrating an addable keyword (role-filtered)', () => {
-    // JD wants react; a backend résumé lacks it but the user HAS a react bullet
-    // (bullet 3, frontend). It's addable, and its supporting bullet is surfaced —
-    // even though bullet 3's role differs, the keyword is truthfully in the master
-    // inventory, so it's a legitimate cross-role suggestion.
+  it('does not surface a role-mismatched bullet as evidence for an addable keyword', () => {
+    // Backend résumé, JD wants react. React IS in the master inventory (so it's
+    // addable), but the only bullet demonstrating it (bullet 3) is frontend-tagged
+    // and must NOT be surfaced for a backend résumé — addable, with no bullets.
+    const s = buildTailoringSuggestions({
+      jobKeywords: ['react'],
+      resumeRoleFamily: 'backend',
+      masterSkills: master,
+      bullets,
+    });
+    const react = s.addable.find((a) => a.keyword === 'react');
+    expect(react).toEqual({ keyword: 'react', bullets: [] });
+    expect(s.matched).not.toContain('react');
+  });
+
+  it('surfaces a real bullet as evidence when its role matches the résumé', () => {
+    // Frontend résumé already surfaces react via bullet 3 → matched, not addable.
     const s = buildTailoringSuggestions({
       jobKeywords: ['react'],
       resumeRoleFamily: 'frontend',
       masterSkills: master,
       bullets,
     });
-    const react = s.addable.find((a) => a.keyword === 'react');
-    // With a frontend résumé, bullet 3 (frontend) already surfaces react → matched, not addable.
-    expect(react).toBeUndefined();
     expect(s.matched).toContain('react');
+    expect(s.addable.find((a) => a.keyword === 'react')).toBeUndefined();
   });
 
   it('never suggests a skill outside the master inventory (honest gap)', () => {

@@ -9,7 +9,7 @@
  * the master inventory is shown as an honest gap, never suggested.
  */
 import type { RoleFamily } from '@/server/enrich/types';
-import { computeFit, resumeSkillsFromBullets } from './fit';
+import { bulletMatchesRole, computeFit, resumeSkillsFromBullets, type BulletLike } from './fit';
 
 export interface TailoringBullet {
   id: number;
@@ -36,12 +36,10 @@ export interface TailoringSuggestions {
   gaps: string[];
 }
 
-export interface SuggestionBullet {
+export interface SuggestionBullet extends BulletLike {
   id: number;
   text: string;
   company: string | null;
-  skills: string[];
-  roleFamily: RoleFamily | null;
 }
 
 export interface SuggestionInput {
@@ -52,11 +50,12 @@ export interface SuggestionInput {
   bullets: SuggestionBullet[];
 }
 
-/** True when a bullet is usable by a résumé of the given role family. */
-function bulletMatchesRole(bulletRole: RoleFamily | null, resumeRole: RoleFamily | null): boolean {
-  return resumeRole === null || bulletRole === null || bulletRole === resumeRole;
-}
-
+/**
+ * Note: this is computed live, mirroring `scoreFits` exactly, so the panel's
+ * `relevanceScore` matches the board's persisted `job_scores` value — they are
+ * eventually-consistent (identical once `scoreFits` has re-run after any change
+ * to the master skills or bullet bank).
+ */
 export function buildTailoringSuggestions(input: SuggestionInput): TailoringSuggestions {
   const resumeSkills = resumeSkillsFromBullets(input.bullets, input.resumeRoleFamily);
   const fit = computeFit({

@@ -24,18 +24,19 @@ export const resumesRouter = createTRPCRouter({
   tailoringSuggestions: publicProcedure
     .input(z.object({ jobId: z.number().int(), resumeId: z.number().int() }))
     .query(async ({ ctx, input }) => {
-      const [job] = await ctx.db
-        .select({ techKeywords: jobs.techKeywords, softKeywords: jobs.softKeywords })
-        .from(jobs)
-        .where(eq(jobs.id, input.jobId))
-        .limit(1);
+      const [[job], [resume]] = await Promise.all([
+        ctx.db
+          .select({ techKeywords: jobs.techKeywords, softKeywords: jobs.softKeywords })
+          .from(jobs)
+          .where(eq(jobs.id, input.jobId))
+          .limit(1),
+        ctx.db
+          .select({ roleFamily: resumes.roleFamily })
+          .from(resumes)
+          .where(eq(resumes.id, input.resumeId))
+          .limit(1),
+      ]);
       if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Job not found.' });
-
-      const [resume] = await ctx.db
-        .select({ roleFamily: resumes.roleFamily })
-        .from(resumes)
-        .where(eq(resumes.id, input.resumeId))
-        .limit(1);
       if (!resume) throw new TRPCError({ code: 'NOT_FOUND', message: 'Résumé not found.' });
 
       const [skills, bullets] = await Promise.all([
