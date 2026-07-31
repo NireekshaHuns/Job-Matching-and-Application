@@ -1,4 +1,4 @@
-export { parseUscisCsv, parseUscisRows, type UscisRecord } from './parse';
+export { decodeUscisBuffer, parseUscisCsv, parseUscisRows, type UscisRecord } from './parse';
 export {
   aggregateFilings,
   aggregateSponsors,
