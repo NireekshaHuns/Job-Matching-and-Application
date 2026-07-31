@@ -50,11 +50,12 @@ describe('URL builders', () => {
     expect(url.searchParams.get('scope')).toContain('offline_access');
   });
 
-  it('builds a /me/messages URL filtered and sorted by received date', () => {
+  it('builds a /me/messages URL filtered and sorted oldest-first', () => {
     const url = new URL(buildMessagesUrl({ sinceIso: '2026-07-01T00:00:00Z', top: 25 }));
     expect(url.pathname).toBe('/v1.0/me/messages');
     expect(url.searchParams.get('$filter')).toBe('receivedDateTime ge 2026-07-01T00:00:00Z');
-    expect(url.searchParams.get('$orderby')).toBe('receivedDateTime desc');
+    // Oldest-first (issue #43): truncation drops the newest tail, not the oldest.
+    expect(url.searchParams.get('$orderby')).toBe('receivedDateTime asc');
     expect(url.searchParams.get('$top')).toBe('25');
     expect(url.searchParams.get('$select')).toContain('bodyPreview');
   });
@@ -63,7 +64,7 @@ describe('URL builders', () => {
     // Graph rejects the `+`-for-space form that URLSearchParams emits by default.
     const raw = buildMessagesUrl({ sinceIso: '2026-07-01T00:00:00Z' });
     expect(raw).toContain('receivedDateTime%20ge%20');
-    expect(raw).toContain('receivedDateTime%20desc');
+    expect(raw).toContain('receivedDateTime%20asc');
     expect(raw).not.toContain('+');
   });
 });
@@ -170,9 +171,12 @@ describe('graphMailClient', () => {
       fetch: fetchFn as unknown as typeof fetch,
       getAccessToken: async () => 'AT',
     });
-    const msgs = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
+    const { messages: msgs, truncated } = await client.listMessages({
+      sinceIso: '2026-07-01T00:00:00Z',
+    });
     expect(msgs).toHaveLength(1);
     expect(msgs[0].id).toBe('m1');
+    expect(truncated).toBe(false);
     const [, init] = fetchFn.mock.calls[0];
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer AT');
   });
@@ -194,8 +198,11 @@ describe('graphMailClient', () => {
       getAccessToken: async () => 'AT',
       maxPages: 5,
     });
-    const msgs = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
+    const { messages: msgs, truncated } = await client.listMessages({
+      sinceIso: '2026-07-01T00:00:00Z',
+    });
     expect(msgs.map((m) => m.id)).toEqual(['a', 'b']);
+    expect(truncated).toBe(false);
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
@@ -212,7 +219,7 @@ describe('graphMailClient', () => {
       getAccessToken,
       maxPages: 5,
     });
-    const msgs = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
+    const { messages: msgs } = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
     expect(msgs.map((m) => m.id)).toEqual(['a']);
     expect(getAccessToken).toHaveBeenCalledTimes(2);
     expect(fetchFn).toHaveBeenCalledTimes(2);
@@ -232,8 +239,29 @@ describe('graphMailClient', () => {
       fetch: fetchFn as unknown as typeof fetch,
       getAccessToken: async () => 'AT',
     });
-    const msgs = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
+    const { messages: msgs } = await client.listMessages({ sinceIso: '2026-07-01T00:00:00Z' });
     expect(msgs.map((m) => m.id)).toEqual(['a']);
+  });
+
+  it('reports truncated when it stops at the page cap with mail still unread', async () => {
+    // maxPages=1 and the single page carries a nextLink we won't follow.
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({
+        value: [{ id: 'a', receivedDateTime: '2026-07-20T10:00:00Z' }],
+        '@odata.nextLink': 'https://graph.microsoft.com/next',
+      }),
+    );
+    const client = graphMailClient({
+      fetch: fetchFn as unknown as typeof fetch,
+      getAccessToken: async () => 'AT',
+      maxPages: 1,
+    });
+    const { messages: msgs, truncated } = await client.listMessages({
+      sinceIso: '2026-07-01T00:00:00Z',
+    });
+    expect(msgs.map((m) => m.id)).toEqual(['a']);
+    expect(truncated).toBe(true);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });
 

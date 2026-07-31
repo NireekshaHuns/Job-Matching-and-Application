@@ -17,9 +17,16 @@ export interface OutlookMessage {
   receivedAt: string;
 }
 
+/** Result of a mailbox read: the messages, and whether the page cap truncated them. */
+export interface ListMessagesResult {
+  messages: OutlookMessage[];
+  /** True when the page cap was hit and the newest tail wasn't fetched (issue #43). */
+  truncated: boolean;
+}
+
 /** Reads recent messages from a mailbox. Implemented for real via Graph later. */
 export interface MailClient {
-  listMessages(opts: { sinceIso: string }): Promise<OutlookMessage[]>;
+  listMessages(opts: { sinceIso: string }): Promise<ListMessagesResult>;
 }
 
 /** A plain-text email to send on the user's behalf. */

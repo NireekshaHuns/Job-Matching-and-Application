@@ -112,13 +112,20 @@ export async function exchangeCodeForTokens(
 
 /**
  * Build a `/me/messages` URL that asks only for the fields the detector needs,
- * newest first, filtered to messages received on/after `sinceIso`.
+ * OLDEST first, filtered to messages received on/after `sinceIso`.
+ *
+ * Oldest-first is deliberate (issue #43): the window is anchored at the earliest
+ * pending application, and confirmations for the earliest-applied roles live at
+ * the OLD end. If the mailbox is busy enough to hit the page cap, paging
+ * oldest-first drops the newest tail — which is recoverable on a later run as
+ * older apps get confirmed and the window advances — rather than stranding the
+ * oldest confirmations indefinitely behind the cap.
  */
 export function buildMessagesUrl(opts: { sinceIso: string; top?: number }): string {
   const params = new URLSearchParams({
     $select: 'id,subject,bodyPreview,from,receivedDateTime',
     $filter: `receivedDateTime ge ${opts.sinceIso}`,
-    $orderby: 'receivedDateTime desc',
+    $orderby: 'receivedDateTime asc',
     $top: String(opts.top ?? 50),
   });
   // URLSearchParams encodes spaces as `+`, but OData ($filter/$orderby) requires
@@ -191,14 +198,20 @@ export function graphMailClient(deps: {
           if (m.id && m.receivedDateTime) messages.push(mapGraphMessage(m));
         }
         url = body['@odata.nextLink'];
-        if (url && page === maxPages - 1) {
-          // Newest-first, so the dropped tail is the OLDEST in the window.
-          console.warn(
-            `graphMailClient: hit maxPages=${maxPages}; older messages since ${sinceIso} were not fetched`,
-          );
-        }
       }
-      return messages;
+
+      // A leftover nextLink means we stopped at the page cap with more mail
+      // unread. We page OLDEST-first, so the dropped tail is the NEWEST in the
+      // window — recoverable on a later run once older pending apps get confirmed
+      // and the window advances. Surface it so truncation is observable in the
+      // reconcile stats, not just a buried warn.
+      const truncated = Boolean(url);
+      if (truncated) {
+        console.warn(
+          `graphMailClient: hit maxPages=${maxPages}; newest messages since ${sinceIso} were not fetched this run`,
+        );
+      }
+      return { messages, truncated };
     },
   };
 }
