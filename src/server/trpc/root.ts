@@ -5,6 +5,7 @@ import { healthRouter } from './routers/health';
 import { jobsRouter } from './routers/jobs';
 import { outreachRouter } from './routers/outreach';
 import { resumesRouter } from './routers/resumes';
+import { sponsorsRouter } from './routers/sponsors';
 
 export const appRouter = createTRPCRouter({
   health: healthRouter,
@@ -12,6 +13,7 @@ export const appRouter = createTRPCRouter({
   resumes: resumesRouter,
   applications: applicationsRouter,
   outreach: outreachRouter,
+  sponsors: sponsorsRouter,
   dashboard: dashboardRouter,
 });
 
