@@ -16,12 +16,16 @@ export type SponsorTier = (typeof sponsorTierEnum.enumValues)[number];
 
 /** Per-employer government sponsorship history, already aggregated. */
 export interface SponsorHistory {
-  /** Aggregate H1B filing count (may be recency-weighted at ingestion time). */
+  /** Aggregate H1B approval count, initial + continuing (blended lifetime total). */
   sponsorCount: number;
   /** USCIS approval rate, 0–1, or null when unknown. */
   approvalRate: number | null;
   /** Most recent filing year, or null when unknown. */
   lastFiledYear: number | null;
+  /** Lifetime "New Employment" (initial) approvals — genuine new-hire sponsorship. */
+  newEmploymentApprovals: number;
+  /** Most recent fiscal year with any New Employment approvals; null when none. */
+  newEmploymentLastYear: number | null;
 }
 
 export interface ScoreInput {
@@ -38,8 +42,12 @@ export interface SponsorScore {
 
 /** Filings no older than this many years before "now" count as recent. */
 const RECENT_YEARS = 3;
-/** Filing count at/above which recent history alone justifies `High`. */
-const HEAVY_SPONSOR_COUNT = 50;
+/**
+ * New-employment (initial) approvals at/above which recent history alone
+ * justifies `High`. Keyed off new-employment, not the blended count, so a
+ * transfer/continuation-heavy body shop can't reach `High` on history.
+ */
+const HEAVY_NEW_EMPLOYMENT = 25;
 
 /**
  * "This employer won't sponsor" phrasings. The negated forms use a windowed
@@ -113,22 +121,40 @@ export function scoreSponsorship(input: ScoreInput, opts?: { currentYear?: numbe
   }
 
   const { history } = input;
-  if (history && history.sponsorCount > 0) {
-    const recent =
-      history.lastFiledYear != null && history.lastFiledYear >= currentYear - RECENT_YEARS;
+  if (history) {
+    const newRecent =
+      history.newEmploymentLastYear != null &&
+      history.newEmploymentLastYear >= currentYear - RECENT_YEARS;
 
-    if (history.sponsorCount >= HEAVY_SPONSOR_COUNT && recent) {
+    // Heavy, recent new-hire sponsorship justifies High on history alone.
+    if (history.newEmploymentApprovals >= HEAVY_NEW_EMPLOYMENT && newRecent) {
       return {
         tier: 'High',
-        reason: `Heavy H1B history: ${history.sponsorCount} filings (last ${history.lastFiledYear}).`,
+        reason: `Heavy recent new-hire sponsorship: ${history.newEmploymentApprovals} New Employment approvals (last ${history.newEmploymentLastYear}).`,
       };
     }
 
-    const yearNote = history.lastFiledYear ? `, last ${history.lastFiledYear}` : '';
-    return {
-      tier: 'Medium',
-      reason: `Sponsored before (${history.sponsorCount} filings${yearNote}); JD silent.`,
-    };
+    // Any new-employment history (even older) beats transfer-only history.
+    if (history.newEmploymentApprovals > 0) {
+      const yearNote = history.newEmploymentLastYear
+        ? `, last ${history.newEmploymentLastYear}`
+        : '';
+      return {
+        tier: 'Medium',
+        reason: `Sponsored new hires before (${history.newEmploymentApprovals} New Employment approvals${yearNote}); JD silent.`,
+      };
+    }
+
+    // Matched an employer with approvals, but only transfers/continuations.
+    if (history.sponsorCount > 0) {
+      return {
+        tier: 'Medium',
+        reason: 'H1B history is transfers/continuations only; JD silent.',
+      };
+    }
+
+    // Matched a USCIS employer but no approvals on record (e.g. denials only).
+    return { tier: 'Low', reason: 'Matched a USCIS employer with no approvals on record.' };
   }
 
   return { tier: 'Low', reason: 'JD silent and no sponsorship history.' };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DB } from '@/server/db';
 import type { NewJob } from '@/server/db/schema';
-import { insertJobs, loadSponsorLookup } from './run';
+import { insertJobs, loadSponsorState } from './run';
 
 interface InsertCapture {
   values: Array<{ fingerprint: string }>;
@@ -75,19 +75,37 @@ describe('insertJobs', () => {
   });
 });
 
-describe('loadSponsorLookup', () => {
-  it('maps sponsor rows into a lookup, preserving null approval rate', async () => {
+describe('loadSponsorState', () => {
+  it('maps sponsor rows into history + id maps, preserving new-employment fields', async () => {
     const rows = [
-      { key: 'GOOGLE', sponsorCount: 100, approvalRate: 0.98, lastFiledYear: 2025 },
-      { key: 'FOO', sponsorCount: 3, approvalRate: null, lastFiledYear: 2020 },
+      {
+        id: 1,
+        key: 'GOOGLE',
+        sponsorCount: 100,
+        approvalRate: 0.98,
+        lastFiledYear: 2025,
+        newEmploymentApprovals: 40,
+        newEmploymentLastYear: 2025,
+      },
+      {
+        id: 2,
+        key: 'FOO',
+        sponsorCount: 3,
+        approvalRate: null,
+        lastFiledYear: 2020,
+        newEmploymentApprovals: 0,
+        newEmploymentLastYear: null,
+      },
     ];
     const db = {
       select: () => ({ from: () => Promise.resolve(rows) }),
     } as unknown as DB;
 
-    const lookup = await loadSponsorLookup(db);
-    expect(lookup('GOOGLE')?.sponsorCount).toBe(100);
-    expect(lookup('FOO')?.approvalRate).toBeNull();
-    expect(lookup('UNKNOWN')).toBeNull();
+    const { historyByKey, idByKey } = await loadSponsorState(db);
+    expect(historyByKey.get('GOOGLE')?.newEmploymentApprovals).toBe(40);
+    expect(historyByKey.get('FOO')?.approvalRate).toBeNull();
+    expect(historyByKey.has('UNKNOWN')).toBe(false);
+    expect(idByKey.get('GOOGLE')).toBe(1);
+    expect(idByKey.get('FOO')).toBe(2);
   });
 });

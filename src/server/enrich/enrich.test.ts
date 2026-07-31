@@ -16,7 +16,7 @@ const deps: EnrichDeps = {
   embedder: {
     embed: async () => Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0.01),
   },
-  lookup: () => null,
+  resolve: () => ({ history: null, key: null, confidence: null, method: 'fuzzy' }),
 };
 
 function posting(fingerprint: string, overrides: Partial<RawPosting> = {}): RawPosting {
@@ -45,6 +45,9 @@ describe('enrichPostings', () => {
     expect(result.stats).toEqual({ fetched: 4, deduped: 3, enriched: 2 });
     expect(result.rows.map((r) => r.fingerprint).sort()).toEqual(['a', 'c']);
     expect(result.rows[0].sponsorTier).toBe('Low');
+    // Unmatched company -> badge is unknown, confidence null (never fabricated).
+    expect(result.rows[0].newHireStatus).toBe('unknown');
+    expect(result.rows[0].sponsorMatchConfidence).toBeNull();
     expect(result.rows[0].roleFamily).toBe('backend');
   });
 
