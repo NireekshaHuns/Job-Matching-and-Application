@@ -155,7 +155,12 @@ export function matchConfirmationToApplication(
  * Reconcile a batch of messages against pending applications. Produces one
  * update per newly-confirmed application. Idempotent: emails already recorded
  * on an application are skipped, and each application is claimed at most once
- * per run (first matching confirmation wins).
+ * per run — the EARLIEST matching confirmation wins, so `confirmedAt` reflects
+ * when the application was actually confirmed.
+ *
+ * Messages are sorted oldest-first internally, so this holds regardless of the
+ * order the mail client returned them (the client's ordering only affects which
+ * messages are fetched under its page cap, not which email confirms an app).
  *
  * The caller (Outlook-2 adapter) must persist each update conditionally
  * (`WHERE confirmation_email_id IS NULL`) or in a single transaction so
@@ -172,7 +177,10 @@ export function reconcileConfirmations(
   const claimed = new Set<number>();
   const updates: ConfirmationUpdate[] = [];
 
-  for (const msg of messages) {
+  // Oldest-first: Graph receivedAt is always UTC ISO 8601, so a lexicographic
+  // sort is chronological. Ensures the earliest confirmation claims the app.
+  const ordered = [...messages].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  for (const msg of ordered) {
     if (usedEmailIds.has(msg.id)) continue;
     if (!isApplicationConfirmation(msg)) continue;
     const available = apps.filter((a) => !claimed.has(a.id));
