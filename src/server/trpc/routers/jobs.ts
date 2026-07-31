@@ -25,6 +25,8 @@ export const jobListInput = z.object({
   /** New-hire badge filter (Sponsors new hires / Transfers only / …). */
   newHireStatuses: z.array(z.enum(newHireStatusEnum.enumValues)).optional(),
   includeExcluded: z.boolean().default(false),
+  /** Off by default: closed/stale postings are hidden but retained. */
+  includeClosed: z.boolean().default(false),
   roleFamilies: z.array(z.enum(roleFamilyEnum.enumValues)).optional(),
   seniorities: z.array(z.enum(seniorityEnum.enumValues)).optional(),
   /** Off by default: the board is scoped to entry/new-grad + mid roles. */
@@ -42,6 +44,8 @@ export type JobListInput = z.infer<typeof jobListInput>;
 export interface JobQueryPlan {
   /** Excluded visibility is governed ONLY by the toggle, independent of tier filters. */
   hideExcluded: boolean;
+  /** Closed/stale postings are hidden unless the toggle is on. */
+  hideClosed: boolean;
   sponsorTiers: JobListInput['sponsorTiers'] | null;
   newHireStatuses: JobListInput['newHireStatuses'] | null;
   roleFamilies: JobListInput['roleFamilies'] | null;
@@ -59,6 +63,7 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
   const seniorities = input.seniorities?.length ? input.seniorities : null;
   return {
     hideExcluded: !input.includeExcluded,
+    hideClosed: !input.includeClosed,
     sponsorTiers: input.sponsorTiers?.length ? input.sponsorTiers : null,
     newHireStatuses: input.newHireStatuses?.length ? input.newHireStatuses : null,
     roleFamilies: input.roleFamilies?.length ? input.roleFamilies : null,
@@ -125,6 +130,7 @@ export const jobsRouter = createTRPCRouter({
 
     const where = [];
     if (plan.hideExcluded) where.push(sql`${jobs.sponsorTier} <> 'Excluded'`);
+    if (plan.hideClosed) where.push(eq(jobs.status, 'active'));
     if (plan.sponsorTiers) where.push(inArray(jobs.sponsorTier, plan.sponsorTiers));
     if (plan.newHireStatuses) where.push(inArray(jobs.newHireStatus, plan.newHireStatuses));
     if (plan.roleFamilies) where.push(inArray(jobs.roleFamily, plan.roleFamilies));
@@ -165,6 +171,7 @@ export const jobsRouter = createTRPCRouter({
         url: jobs.url,
         source: jobs.source,
         postedDate: jobs.postedDate,
+        status: jobs.status,
         roleFamily: jobs.roleFamily,
         seniority: jobs.seniority,
         employmentType: jobs.employmentType,
