@@ -20,7 +20,9 @@ export interface SendOutreachEmailArgs {
 /** `sent` on success; the other statuses map to client errors in the router. */
 export type SendOutreachEmailResult = { status: 'sent' | 'not_found' | 'no_email' };
 
-export async function sendOutreachEmail(args: SendOutreachEmailArgs): Promise<SendOutreachEmailResult> {
+export async function sendOutreachEmail(
+  args: SendOutreachEmailArgs,
+): Promise<SendOutreachEmailResult> {
   const [contact] = await args.db
     .select({ id: contacts.id, email: contacts.email })
     .from(contacts)

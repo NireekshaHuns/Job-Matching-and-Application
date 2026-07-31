@@ -142,7 +142,8 @@ export const outreachRouter = createTRPCRouter({
     if (!clientId || !refreshToken) {
       throw new TRPCError({
         code: 'PRECONDITION_FAILED',
-        message: 'Outlook is not configured (MS_CLIENT_ID / MS_REFRESH_TOKEN). Run pnpm outlook:auth.',
+        message:
+          'Outlook is not configured (MS_CLIENT_ID / MS_REFRESH_TOKEN). Run pnpm outlook:auth.',
       });
     }
 

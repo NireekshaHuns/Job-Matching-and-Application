@@ -184,7 +184,11 @@ function OutreachPanel({
             <button
               type="button"
               disabled={!draft.contactEmail || sendEmail.isPending}
-              title={draft.contactEmail ? `Send to ${draft.contactEmail}` : 'Add an email to this contact to send'}
+              title={
+                draft.contactEmail
+                  ? `Send to ${draft.contactEmail}`
+                  : 'Add an email to this contact to send'
+              }
               onClick={() =>
                 sendEmail.mutate({
                   contactId: draft.contactId,
