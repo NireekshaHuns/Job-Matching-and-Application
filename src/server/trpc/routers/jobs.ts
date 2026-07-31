@@ -2,7 +2,8 @@
  * Job board queries. `list` returns enriched jobs with BOTH scores kept
  * separate: the H1B `sponsorTier` (on the job) and the resume `relevanceScore`
  * (left-joined from job_scores for a selected resume "lens"). The `combined`
- * sort is a display-only blend (tier-weighted + fit); the scores are never
+ * sort is a display-only Apply Priority Score — a configurable weighted blend of
+ * tier + fit + freshness — computed at read time; the two scores are never
  * merged into one stored value.
  */
 import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
@@ -16,7 +17,10 @@ import {
   seniorityEnum,
   sponsorTierEnum,
 } from '@/server/db/schema';
+import { DEFAULT_PRIORITY_WEIGHTS, resolveWeights, type PriorityWeights } from '@/lib/priority';
 import { createTRPCRouter, publicProcedure } from '../trpc';
+
+export { DEFAULT_PRIORITY_WEIGHTS, resolveWeights, type PriorityWeights } from '@/lib/priority';
 
 export const jobListInput = z.object({
   /** Resume "lens": left-joins its fit score + skill gaps onto each job. */
@@ -35,6 +39,15 @@ export const jobListInput = z.object({
   remoteOnly: z.boolean().default(false),
   search: z.string().trim().max(100).optional(),
   sort: z.enum(['combined', 'sponsor', 'fit', 'recent']).default('combined'),
+  /** Apply-priority weights for the `combined` sort; absent/all-zero → defaults. */
+  weights: z
+    .object({
+      tier: z.number().int().min(0).max(100),
+      fit: z.number().int().min(0).max(100),
+      freshness: z.number().int().min(0).max(100),
+    })
+    .partial()
+    .optional(),
   limit: z.number().int().min(1).max(100).default(50),
   offset: z.number().int().min(0).default(0),
 });
@@ -83,28 +96,54 @@ export function escapeLike(term: string): string {
 }
 
 /**
- * Combined-sort weights (display-only blend; scores are never merged into a
- * stored value). One sponsor tier ≈ `TIER_WEIGHT` fit points, so tier stays
- * dominant. Freshness is a gentle nudge that decays linearly from `FRESHNESS_MAX`
- * (a brand-new post) to 0 over `FRESHNESS_WINDOW_DAYS`.
+ * Apply Priority Score (spec §5.4). A transparent, tunable blend of three
+ * components, each NORMALIZED to 0–100, combined by configurable weights into a
+ * 0–100 priority used only for the default sort + display — never stored (the
+ * two-score invariant holds). Adding a factor later (wage-level, warmth) is a
+ * new component + weight, no rewrite.
+ *
+ *   tier      — sponsorship possibility (High=100, Medium≈67, Low≈33, Excluded=0)
+ *   fit       — resume relevance for the selected lens (0 when no lens/score)
+ *   freshness — linear recency, 100 at 0 days old → 0 at the window edge
  */
-export const TIER_WEIGHT = 100;
-export const FRESHNESS_MAX = 20;
 export const FRESHNESS_WINDOW_DAYS = 30;
 
-/** Linear recency boost: `FRESHNESS_MAX` at 0 days → 0 at the window edge. */
-export function freshnessBoost(ageDays: number): number {
-  if (ageDays <= 0) return FRESHNESS_MAX;
+/** Sponsor tier → 0..100 component (mirrors the SQL CASE below). */
+export function tierScore(tierRank: number): number {
+  return (tierRank / 3) * 100;
+}
+
+/** Linear recency → 0..100: 100 at age ≤ 0, 0 at/after the window edge. */
+export function freshnessScore(ageDays: number): number {
+  if (ageDays <= 0) return 100;
   if (ageDays >= FRESHNESS_WINDOW_DAYS) return 0;
-  return FRESHNESS_MAX * (1 - ageDays / FRESHNESS_WINDOW_DAYS);
+  return 100 * (1 - ageDays / FRESHNESS_WINDOW_DAYS);
+}
+
+export interface PriorityBreakdown {
+  /** Component scores, each 0..100. */
+  tier: number;
+  fit: number;
+  freshness: number;
+  /** Weighted blend, 0..100. */
+  priority: number;
 }
 
 /**
- * Pure combined-rank score the SQL below mirrors. Kept as a helper so the
- * intended formula is unit-tested; the DB expression must stay in sync.
+ * Pure priority the SQL below mirrors. `fit` is 0..100 (pass 0 when there's no
+ * lens/score); `tierRank` is 0..3; `ageDays` is whole days since posting.
  */
-export function combinedRank(input: { tierRank: number; fit: number; ageDays: number }): number {
-  return input.tierRank * TIER_WEIGHT + input.fit + freshnessBoost(input.ageDays);
+export function computePriority(
+  input: { tierRank: number; fit: number; ageDays: number },
+  weights: PriorityWeights = DEFAULT_PRIORITY_WEIGHTS,
+): PriorityBreakdown {
+  const tier = tierScore(input.tierRank);
+  const fit = input.fit;
+  const freshness = freshnessScore(input.ageDays);
+  const sum = weights.tier + weights.fit + weights.freshness;
+  const priority =
+    sum > 0 ? (weights.tier * tier + weights.fit * fit + weights.freshness * freshness) / sum : 0;
+  return { tier, fit, freshness, priority };
 }
 
 const TIER_RANK = sql<number>`case ${jobs.sponsorTier}
@@ -113,16 +152,21 @@ const FIT = sql`${jobScores.relevanceScore} desc nulls last`;
 const POSTED = sql`${jobs.postedDate} desc nulls last`;
 // Whole-day age from the posted calendar date (falling back to the ingest date),
 // anchored to UTC so it never depends on the DB session timezone. `date - date`
-// yields an integer, so AGE_DAYS matches the `ageDays` freshnessBoost() takes —
-// which lets the SQL below mirror the pure helper EXACTLY for every value it can
-// produce (integer days). Keep the two in sync.
+// yields an integer, so AGE_DAYS matches the `ageDays` the pure helpers take —
+// which lets the SQL below mirror them EXACTLY for every value (integer days).
 const AGE_DAYS = sql`((now() at time zone 'UTC')::date - coalesce(${jobs.postedDate}, (${jobs.createdAt} at time zone 'UTC')::date))`;
-// clamp(age, 0, window): mirrors freshnessBoost()'s <=0 -> MAX and >=window -> 0 clamps.
 const CLAMPED_AGE = sql`least(greatest(${AGE_DAYS}, 0), ${FRESHNESS_WINDOW_DAYS})`;
-// FRESHNESS = MAX * (1 - clampedAge/window) — the linear decay, as float.
-const FRESHNESS = sql`(${FRESHNESS_MAX} * (1 - ${CLAMPED_AGE}::float / ${FRESHNESS_WINDOW_DAYS}))`;
-// Display blend (mirrors combinedRank): tier-major, then fit, then a freshness nudge.
-const COMBINED = sql`(${TIER_RANK} * ${TIER_WEIGHT} + coalesce(${jobScores.relevanceScore}, 0) + ${FRESHNESS}) desc`;
+
+// The three 0..100 component expressions, mirroring the pure helpers above.
+const TIER_SCORE = sql`(${TIER_RANK}::float / 3 * 100)`;
+const FIT_SCORE = sql`coalesce(${jobScores.relevanceScore}, 0)`;
+const FRESH_SCORE = sql`(100 * (1 - ${CLAMPED_AGE}::float / ${FRESHNESS_WINDOW_DAYS}))`;
+
+/** Weighted priority SQL expression (weights interpolated as bound params). */
+function prioritySql(w: PriorityWeights) {
+  const sum = w.tier + w.fit + w.freshness;
+  return sql`((${w.tier} * ${TIER_SCORE} + ${w.fit} * ${FIT_SCORE} + ${w.freshness} * ${FRESH_SCORE}) / ${sum})`;
+}
 
 export const jobsRouter = createTRPCRouter({
   list: publicProcedure.input(jobListInput).query(async ({ ctx, input }) => {
@@ -144,6 +188,9 @@ export const jobsRouter = createTRPCRouter({
       where.push(or(ilike(jobs.company, esc), ilike(jobs.title, esc)));
     }
 
+    const weights = resolveWeights(input.weights);
+    const priority = prioritySql(weights);
+
     // Always end with a unique tiebreaker so limit/offset paging is stable.
     const tiebreak = desc(jobs.id);
     const orderBy =
@@ -153,7 +200,7 @@ export const jobsRouter = createTRPCRouter({
           ? [POSTED, desc(jobs.createdAt), tiebreak]
           : plan.sort === 'sponsor'
             ? [desc(TIER_RANK), FIT, tiebreak]
-            : [COMBINED, tiebreak]; // combined
+            : [sql`${priority} desc`, tiebreak]; // combined (apply priority)
 
     // Left-join the lens's score only; with no lens, join on false so score is null.
     const lensOn =
@@ -184,6 +231,14 @@ export const jobsRouter = createTRPCRouter({
         sponsorMatchConfidence: jobs.sponsorMatchConfidence,
         relevanceScore: jobScores.relevanceScore,
         skillGaps: jobScores.skillGaps,
+        // Apply-priority score + its component breakdown (0..100 each), for the
+        // "why this rank" display. ORDER BY uses the UNROUNDED priority above;
+        // only the displayed value is rounded, so rows that show the same number
+        // still order deterministically. Keep it that way.
+        priorityScore: sql<number>`round(${priority})::int`,
+        priorityTier: sql<number>`round(${TIER_SCORE})::int`,
+        priorityFit: sql<number>`round(${FIT_SCORE})::int`,
+        priorityFreshness: sql<number>`round(${FRESH_SCORE})::int`,
       })
       .from(jobs)
       .leftJoin(jobScores, lensOn)
