@@ -4,6 +4,7 @@ import { useDeferredValue, useState } from 'react';
 import { Chip } from '@/components/chip';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { SponsorCorrection } from '@/components/sponsor-correction';
+import { TailoringPanel } from '@/components/tailoring-panel';
 import {
   NEW_HIRE_DISCLAIMER,
   NEW_HIRE_LABELS,
@@ -29,6 +30,7 @@ export default function JobsPage() {
   const [includeClosed, setIncludeClosed] = useState(false);
   const [newHire, setNewHire] = useState<NewHireFilter>('all');
   const [correcting, setCorrecting] = useState<number | null>(null);
+  const [tailoring, setTailoring] = useState<number | null>(null);
   // Apply-priority weights (percentages) for the default priority sort.
   const [weights, setWeights] = useState({ ...DEFAULT_PRIORITY_WEIGHTS });
   // What the server actually ranks by (all-zero falls back to the default mix).
@@ -287,7 +289,15 @@ export default function JobsPage() {
                 {job.source}
                 {job.postedDate ? ` · ${job.postedDate}` : ''}
               </span>
-              <span className="ml-auto">
+              <span className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setTailoring(tailoring === job.id ? null : job.id)}
+                  className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50"
+                  title="Tailoring suggestions for the selected résumé lens"
+                >
+                  {tailoring === job.id ? 'Hide tailor' : 'Tailor'}
+                </button>
                 {applied.has(job.id) ? (
                   <span className="text-xs font-medium text-green-700">Applied ✓</span>
                 ) : (
@@ -309,6 +319,10 @@ export default function JobsPage() {
               <div className="mt-2 text-xs text-zinc-500">
                 Missing: {job.skillGaps.slice(0, 8).join(', ')}
               </div>
+            )}
+
+            {tailoring === job.id && (
+              <TailoringPanel jobId={job.id} resumeId={resumeId} lensLabel={lensLabel} />
             )}
           </li>
         ))}
