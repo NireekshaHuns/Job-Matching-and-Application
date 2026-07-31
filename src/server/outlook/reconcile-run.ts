@@ -70,6 +70,12 @@ export interface ReconcileStats {
   pending: number;
   messages: number;
   confirmed: number;
+  /**
+   * True when the mail read hit the page cap and the newest messages weren't
+   * fetched this run (issue #43). Not an error — remaining mail is picked up on
+   * a later run as the window advances — but surfaced so it's visible in logs.
+   */
+  truncated: boolean;
 }
 
 /** End-to-end: load pending, fetch mail, match, write confirmations. */
@@ -82,11 +88,11 @@ export async function runOutlookReconcile(args: RunOutlookReconcileArgs): Promis
     args.maxLookbackDays,
   );
 
-  const messages = await args.mail.listMessages({ sinceIso });
+  const { messages, truncated } = await args.mail.listMessages({ sinceIso });
   const updates = reconcileConfirmations(messages, pending);
   const confirmed = await writeConfirmations(args.db, updates);
 
-  return { pending: pending.length, messages: messages.length, confirmed };
+  return { pending: pending.length, messages: messages.length, confirmed, truncated };
 }
 
 /**
