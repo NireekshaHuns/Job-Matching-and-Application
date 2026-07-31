@@ -75,6 +75,18 @@ const CONTINUING_DENIAL_GROUPS: readonly (readonly string[])[] = [
   ['amendeddenial', 'amendeddenials'],
 ];
 
+/**
+ * Normalized approval-column names that mark a file as a recognizable USCIS
+ * schema (current or legacy). Used to fail loudly on an unknown header rather
+ * than silently importing every count as 0 — the New Employment / initial
+ * signal the `High` tier depends on must never be zeroed silently.
+ */
+const RECOGNIZED_APPROVAL_COLUMNS: readonly string[] = [
+  ...NEW_EMPLOYMENT_APPROVAL,
+  ...LEGACY_ALIASES.initialApprovals,
+  ...LEGACY_ALIASES.continuingApprovals,
+];
+
 function normHeader(h: string): string {
   return h.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -91,11 +103,15 @@ function toInt(v: string | undefined): number | null {
 }
 
 /**
- * Decode a raw USCIS file buffer to text, honoring a UTF-16 (LE/BE) or UTF-8
- * BOM. The current Data Hub export ships UTF-16LE; the legacy one is UTF-8.
+ * Decode a raw USCIS file buffer to text based on its byte-order mark. The
+ * current Data Hub export ships UTF-16LE; the legacy one is UTF-8. A UTF-8 file
+ * (BOM or not) falls through to the utf8 branch — any leading BOM char it
+ * carries is stripped later, in `parseUscisCsv`.
  */
 export function decodeUscisBuffer(buf: Buffer): string {
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    // UTF-16LE. Node truncates a trailing odd byte on decode (matches the BE
+    // branch below, which truncates explicitly since swap16 needs even length).
     return buf.toString('utf16le');
   }
   if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
@@ -192,5 +208,20 @@ export function parseUscisCsv(csv: string): UscisRecord[] {
     bom: true,
     delimiter: detectDelimiter(text),
   }) as Array<Record<string, string>>;
+
+  // Fail loudly if the header matches neither schema (e.g. a future USCIS
+  // rename). Without this, unrecognized approval columns would silently import
+  // as 0 for every row — corrupting the sponsorship signal with no error.
+  if (rows.length > 0) {
+    const headerKeys = new Set(Object.keys(rows[0]).map(normHeader));
+    if (!RECOGNIZED_APPROVAL_COLUMNS.some((c) => headerKeys.has(c))) {
+      throw new Error(
+        'USCIS parse: no recognized approval columns in header (expected ' +
+          '"New Employment Approval" or "Initial Approval"). Found: ' +
+          Object.keys(rows[0]).join(', '),
+      );
+    }
+  }
+
   return parseUscisRows(rows);
 }

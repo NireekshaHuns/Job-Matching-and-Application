@@ -106,6 +106,34 @@ describe('parseUscisCsv — current Data Hub format', () => {
     expect(rec.initialApprovals).toBe(10);
     expect(rec.continuingApprovals).toBe(15);
   });
+
+  it('sums only the continuing categories that are present', () => {
+    // No "Amended" columns at all — the remaining four still sum (3+2+1+4).
+    const tsv = [
+      'Fiscal Year\tEmployer (Petitioner) Name\tNew Employment Approval\tContinuation Approval\tChange with Same Employer Approval\tNew Concurrent Approval\tChange of Employer Approval',
+      '2024\tACME CORP\t10\t3\t2\t1\t4',
+    ].join('\n');
+    const [rec] = parseUscisCsv(tsv);
+    expect(rec.initialApprovals).toBe(10);
+    expect(rec.continuingApprovals).toBe(10);
+  });
+
+  it('keeps a comma inside a tab-delimited field (delimiter heuristic)', () => {
+    const tsv = [
+      'Fiscal Year\tEmployer (Petitioner) Name\tNew Employment Approval',
+      '2024\tACME, INC\t5',
+    ].join('\n');
+    const [rec] = parseUscisCsv(tsv);
+    expect(rec.employer).toBe('ACME, INC');
+    expect(rec.initialApprovals).toBe(5);
+  });
+});
+
+describe('parseUscisCsv — unrecognized schema', () => {
+  it('throws rather than silently importing zeros when no approval column is found', () => {
+    const csv = 'Fiscal Year,Employer,Widgets Made\n2024,Foo,7\n';
+    expect(() => parseUscisCsv(csv)).toThrow(/no recognized approval columns/);
+  });
 });
 
 describe('decodeUscisBuffer', () => {
