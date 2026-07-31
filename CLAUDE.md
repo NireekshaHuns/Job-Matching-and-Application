@@ -58,10 +58,22 @@ Five stages: gather → check sponsorship → filter junk → rank vs. resume �
 ## Working process
 
 - Work one ticket (GitHub Issue) at a time. Pause after each completed feature for a summary before starting the next.
-- Definition of done per ticket: branch from the issue → implement → write Vitest unit tests → lint + typecheck + tests pass → commit in small chunks → push → open a PR that closes the issue → run the read-only `code-reviewer` subagent on the diff → post a summary (what changed, which files, how to test manually, what the tests cover).
+- Definition of done per ticket: branch from the issue → implement → write Vitest unit tests → `pnpm format:check` + lint + typecheck + tests pass → commit in small chunks → push → open a PR that closes the issue → run the read-only `code-reviewer` subagent on the diff and address findings → ensure CI is green → **squash-merge the PR and delete the branch** → post a summary (what changed, which files, how to test manually, what the tests cover).
+- Always run `pnpm format:check` before pushing (CI enforces it, and the post-edit hook doesn't always cover every file).
+- Merging is part of the flow: once a PR is green and its review is addressed, squash-merge it (matching the repo's `… (#NN)` history) and delete the branch — don't leave finished PRs open. If the PR was based on an older `main` (e.g. an earlier PR merged first), update it from `main`, re-run the gates, and let CI re-verify the combination before merging.
 - Commit small and often; push when a ticket is done (not after every edit). Never force-push `main`.
 - Propose genuinely useful new features/tools as GitHub Issues labeled `enhancement`; don't implement unrequested scope.
 - Ask me before anything destructive or irreversible, before adding a paid service, and before large changes to architecture or data model.
+
+## Descoped (intentional)
+
+The Stack/Architecture sections above describe the original intent; these pieces were deliberately dropped and are **not** pending work (don't reintroduce without asking):
+
+- **Aggregator API connector** (JSearch / FlyByAPIs) — public ATS feeds + the GitHub repo give enough coverage.
+- **Embedding / pgvector relevance** — relevance uses interpretable keyword overlap instead (`src/server/resume/fit.ts`). The `embedding` columns/indexes exist but don't feed scoring.
+- **S3 resume storage** — resumes are handled locally (PDF text extraction + LaTeX compile).
+- **Terraform** — no infra-as-code.
+- **Standalone `/outreach` route** — outreach lives in the tracker page as `OutreachPanel`.
 
 ## Commands
 
