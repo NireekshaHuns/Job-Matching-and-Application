@@ -146,30 +146,30 @@ export const outreachRouter = createTRPCRouter({
       });
     }
 
-    const [contact] = await ctx.db
-      .select({ id: contacts.id, email: contacts.email })
-      .from(contacts)
-      .where(eq(contacts.id, input.contactId))
-      .limit(1);
-    if (!contact) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: 'Contact not found.' });
-    }
-    if (!contact.email) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'This contact has no email address — add one before sending.',
-      });
-    }
-
     const { graphMailSender, refreshAccessToken } = await import('@/server/outlook/graph');
+    const { sendOutreachEmail } = await import('@/server/outreach/send');
     const tenant = process.env.MS_TENANT || 'consumers';
     const sender = graphMailSender({
       fetch,
       getAccessToken: () => refreshAccessToken(fetch, { clientId, refreshToken, tenant }),
     });
-    await sender.sendMail({ to: contact.email, subject: input.subject, body: input.body });
 
-    await ctx.db.insert(outreachLog).values({ contactId: contact.id, channel: 'email' });
+    const result = await sendOutreachEmail({
+      db: ctx.db,
+      sender,
+      contactId: input.contactId,
+      subject: input.subject,
+      body: input.body,
+    });
+    if (result.status === 'not_found') {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Contact not found.' });
+    }
+    if (result.status === 'no_email') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'This contact has no email address — add one before sending.',
+      });
+    }
     return { ok: true as const };
   }),
 
