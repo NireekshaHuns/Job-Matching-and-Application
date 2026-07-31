@@ -22,6 +22,10 @@ const schema = z.object({
   MS_CLIENT_ID: z.preprocess((v) => (v ? v : undefined), z.string().min(1).optional()),
   MS_TENANT: z.string().default('consumers'),
   MS_REFRESH_TOKEN: z.preprocess((v) => (v ? v : undefined), z.string().min(1).optional()),
+  // Optional: the people-finder no-ops without a key. Empty strings (shipped
+  // blank in .env.example) are treated as absent.
+  HUNTER_API_KEY: z.preprocess((v) => (v ? v : undefined), z.string().min(1).optional()),
+  APOLLO_API_KEY: z.preprocess((v) => (v ? v : undefined), z.string().min(1).optional()),
 });
 
 export const env = schema.parse(process.env);
