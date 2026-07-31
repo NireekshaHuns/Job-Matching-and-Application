@@ -1,10 +1,9 @@
 /**
- * Shared enrichment types. External services (OpenAI, sponsor lookup) are
+ * Shared enrichment types. External services (OpenAI, sponsor resolution) are
  * expressed as small interfaces so steps can be unit-tested with fakes and the
  * real adapters (`openai.ts`) plugged in only at runtime.
  */
 import { employmentTypeEnum, roleFamilyEnum, seniorityEnum } from '@/server/db/schema';
-import type { SponsorHistory } from '@/lib/sponsorship';
 
 export type EmploymentType = (typeof employmentTypeEnum.enumValues)[number];
 export type RoleFamily = (typeof roleFamilyEnum.enumValues)[number];
@@ -38,6 +37,3 @@ export interface ChatClient {
 export interface Embedder {
   embed(text: string): Promise<number[]>;
 }
-
-/** Look up aggregated government sponsor history by normalized company name. */
-export type SponsorLookup = (companyNameNormalized: string) => SponsorHistory | null;

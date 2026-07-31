@@ -7,11 +7,15 @@ const heavyRecent: SponsorHistory = {
   sponsorCount: 120,
   approvalRate: 0.95,
   lastFiledYear: 2025,
+  newEmploymentApprovals: 60,
+  newEmploymentLastYear: 2025,
 };
 const someOld: SponsorHistory = {
   sponsorCount: 8,
   approvalRate: 0.8,
   lastFiledYear: 2019,
+  newEmploymentApprovals: 8,
+  newEmploymentLastYear: 2019,
 };
 
 function tier(jdText: string, history: SponsorHistory | null = null) {
@@ -63,43 +67,62 @@ describe('scoreSponsorship', () => {
       expect(tier(jd)).toBe('High');
     });
 
-    it('heavy recent history with a silent JD -> High', () => {
+    it('heavy recent NEW-EMPLOYMENT history with a silent JD -> High', () => {
       expect(tier('Build backend services in Go.', heavyRecent)).toBe('High');
+    });
+
+    it('transfer/continuation-heavy body shop cannot reach High on history alone', () => {
+      // Big blended count, but zero new-employment -> not a new-hire sponsor.
+      expect(
+        tier('Backend role.', {
+          sponsorCount: 500,
+          approvalRate: 0.9,
+          lastFiledYear: 2025,
+          newEmploymentApprovals: 0,
+          newEmploymentLastYear: null,
+        }),
+      ).toBe('Medium');
     });
   });
 
   describe('Medium — prior history, silent JD', () => {
-    it('some history, silent JD -> Medium', () => {
+    it('some new-employment history, silent JD -> Medium', () => {
       expect(tier('Frontend engineer, React.', someOld)).toBe('Medium');
     });
 
-    it('heavy count but stale (outside recency window) -> Medium', () => {
+    it('heavy new-employment but stale (outside recency window) -> Medium', () => {
       expect(
         tier('Backend role.', {
           sponsorCount: 200,
           approvalRate: 0.9,
           lastFiledYear: 2015,
+          newEmploymentApprovals: 200,
+          newEmploymentLastYear: 2015,
         }),
       ).toBe('Medium');
     });
 
-    it('heavy count exactly at the recency boundary -> High', () => {
+    it('heavy new-employment exactly at the recency boundary -> High', () => {
       // NOW - RECENT_YEARS = 2023 is the oldest year that still counts.
       expect(
         tier('Backend role.', {
           sponsorCount: 200,
           approvalRate: 0.9,
           lastFiledYear: 2023,
+          newEmploymentApprovals: 200,
+          newEmploymentLastYear: 2023,
         }),
       ).toBe('High');
     });
 
-    it('heavy count one year past the boundary -> Medium', () => {
+    it('heavy new-employment one year past the boundary -> Medium', () => {
       expect(
         tier('Backend role.', {
           sponsorCount: 200,
           approvalRate: 0.9,
           lastFiledYear: 2022,
+          newEmploymentApprovals: 200,
+          newEmploymentLastYear: 2022,
         }),
       ).toBe('Medium');
     });
@@ -110,12 +133,14 @@ describe('scoreSponsorship', () => {
       expect(tier('Great startup, ping pong tables.', null)).toBe('Low');
     });
 
-    it('zero count history -> Low', () => {
+    it('matched employer with zero approvals on record -> Low', () => {
       expect(
         tier('Great role.', {
           sponsorCount: 0,
           approvalRate: null,
           lastFiledYear: null,
+          newEmploymentApprovals: 0,
+          newEmploymentLastYear: null,
         }),
       ).toBe('Low');
     });

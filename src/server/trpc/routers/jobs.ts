@@ -11,6 +11,7 @@ import {
   employmentTypeEnum,
   jobScores,
   jobs,
+  newHireStatusEnum,
   roleFamilyEnum,
   seniorityEnum,
   sponsorTierEnum,
@@ -21,6 +22,8 @@ export const jobListInput = z.object({
   /** Resume "lens": left-joins its fit score + skill gaps onto each job. */
   resumeId: z.number().int().optional(),
   sponsorTiers: z.array(z.enum(sponsorTierEnum.enumValues)).optional(),
+  /** New-hire badge filter (Sponsors new hires / Transfers only / …). */
+  newHireStatuses: z.array(z.enum(newHireStatusEnum.enumValues)).optional(),
   includeExcluded: z.boolean().default(false),
   roleFamilies: z.array(z.enum(roleFamilyEnum.enumValues)).optional(),
   seniorities: z.array(z.enum(seniorityEnum.enumValues)).optional(),
@@ -40,6 +43,7 @@ export interface JobQueryPlan {
   /** Excluded visibility is governed ONLY by the toggle, independent of tier filters. */
   hideExcluded: boolean;
   sponsorTiers: JobListInput['sponsorTiers'] | null;
+  newHireStatuses: JobListInput['newHireStatuses'] | null;
   roleFamilies: JobListInput['roleFamilies'] | null;
   seniorities: JobListInput['seniorities'] | null;
   /** Hide senior ('other') roles by default; an explicit `seniorities` filter overrides. */
@@ -56,6 +60,7 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
   return {
     hideExcluded: !input.includeExcluded,
     sponsorTiers: input.sponsorTiers?.length ? input.sponsorTiers : null,
+    newHireStatuses: input.newHireStatuses?.length ? input.newHireStatuses : null,
     roleFamilies: input.roleFamilies?.length ? input.roleFamilies : null,
     seniorities,
     // Default board scope is entry/mid; an explicit seniority selection wins.
@@ -121,6 +126,7 @@ export const jobsRouter = createTRPCRouter({
     const where = [];
     if (plan.hideExcluded) where.push(sql`${jobs.sponsorTier} <> 'Excluded'`);
     if (plan.sponsorTiers) where.push(inArray(jobs.sponsorTier, plan.sponsorTiers));
+    if (plan.newHireStatuses) where.push(inArray(jobs.newHireStatus, plan.newHireStatuses));
     if (plan.roleFamilies) where.push(inArray(jobs.roleFamily, plan.roleFamilies));
     if (plan.seniorities) where.push(inArray(jobs.seniority, plan.seniorities));
     // Hide senior roles by default; IS DISTINCT FROM keeps null/unclassified visible.
@@ -167,6 +173,8 @@ export const jobsRouter = createTRPCRouter({
         sponsorTier: jobs.sponsorTier,
         sponsorReason: jobs.sponsorReason,
         sponsorCount: jobs.sponsorCount,
+        newHireStatus: jobs.newHireStatus,
+        sponsorMatchConfidence: jobs.sponsorMatchConfidence,
         relevanceScore: jobScores.relevanceScore,
         skillGaps: jobScores.skillGaps,
       })

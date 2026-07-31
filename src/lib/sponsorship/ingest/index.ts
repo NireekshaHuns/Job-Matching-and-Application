@@ -1,3 +1,9 @@
 export { parseUscisCsv, parseUscisRows, type UscisRecord } from './parse';
-export { aggregateSponsors, type SponsorAggregate } from './aggregate';
-export { loadSponsors } from './load';
+export {
+  aggregateFilings,
+  aggregateSponsors,
+  RECENT_YEARS_WINDOW,
+  type SponsorAggregate,
+  type SponsorFilingRow,
+} from './aggregate';
+export { loadSponsorFilings, loadSponsors } from './load';

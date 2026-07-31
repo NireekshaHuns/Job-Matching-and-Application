@@ -63,19 +63,32 @@ describe('matchSponsor', () => {
     sponsorCount: 120,
     approvalRate: 0.95,
     lastFiledYear: 2025,
+    newEmploymentApprovals: 60,
+    newEmploymentLastYear: 2025,
   };
+  const opts = { currentYear: 2026 };
 
-  it('tiers via scoreSponsorship using looked-up history', () => {
-    const lookup = (key: string) => (key === 'STRIPE' ? history : null);
-    const match = matchSponsor('Stripe, Inc.', 'Backend role.', lookup);
+  it('tiers + badges a matched employer and surfaces the confidence', () => {
+    const resolve = () => ({ history, key: 'STRIPE', confidence: 0.82, method: 'fuzzy' as const });
+    const match = matchSponsor('Stripe, Inc.', 'Backend role.', resolve, opts);
     expect(match.tier).toBe('High');
     expect(match.sponsorCount).toBe(120);
+    expect(match.newHireStatus).toBe('sponsors_new_hires');
+    expect(match.matchConfidence).toBe(0.82);
   });
 
-  it('returns Low with null count when the company is unmatched', () => {
-    const match = matchSponsor('Unknown Co', 'Backend role.', () => null);
+  it('returns Low/unknown/null when the company is unmatched', () => {
+    const resolve = () => ({
+      history: null,
+      key: null,
+      confidence: null,
+      method: 'fuzzy' as const,
+    });
+    const match = matchSponsor('Unknown Co', 'Backend role.', resolve, opts);
     expect(match.tier).toBe('Low');
     expect(match.sponsorCount).toBeNull();
+    expect(match.newHireStatus).toBe('unknown');
+    expect(match.matchConfidence).toBeNull();
   });
 });
 
@@ -166,7 +179,13 @@ describe('buildJobRow', () => {
   it('assembles a jobs row keeping the two scores separate', () => {
     const row = buildJobRow(
       posting(),
-      { tier: 'High', reason: 'why', sponsorCount: 10 },
+      {
+        tier: 'High',
+        reason: 'why',
+        sponsorCount: 10,
+        newHireStatus: 'sponsors_new_hires',
+        matchConfidence: 0.9,
+      },
       {
         employmentType: 'full_time',
         roleFamily: 'backend',
@@ -178,6 +197,8 @@ describe('buildJobRow', () => {
     );
     expect(row.fingerprint).toBe('STRIPE|software engineer|remote us');
     expect(row.sponsorTier).toBe('High');
+    expect(row.newHireStatus).toBe('sponsors_new_hires');
+    expect(row.sponsorMatchConfidence).toBe(0.9);
     expect(row.isRemote).toBe(true);
     expect(row.techKeywords).toEqual(['go']);
     expect(row.softKeywords).toEqual(['ownership']);
@@ -187,7 +208,13 @@ describe('buildJobRow', () => {
   it('overrides a full_time label to contract when the JD reads as a staffing placement', () => {
     const row = buildJobRow(
       posting({ jdText: 'Our client is seeking a Go engineer. Corp-to-corp only.' }),
-      { tier: 'Medium', reason: 'why', sponsorCount: 1 },
+      {
+        tier: 'Medium',
+        reason: 'why',
+        sponsorCount: 1,
+        newHireStatus: 'transfers_only',
+        matchConfidence: 1,
+      },
       {
         employmentType: 'full_time',
         roleFamily: 'backend',
@@ -203,7 +230,13 @@ describe('buildJobRow', () => {
   it('leaves a genuine full_time role untouched', () => {
     const row = buildJobRow(
       posting({ jdText: 'Join our platform team building payments in Go.' }),
-      { tier: 'Medium', reason: 'why', sponsorCount: 1 },
+      {
+        tier: 'Medium',
+        reason: 'why',
+        sponsorCount: 1,
+        newHireStatus: 'transfers_only',
+        matchConfidence: 1,
+      },
       {
         employmentType: 'full_time',
         roleFamily: 'backend',
