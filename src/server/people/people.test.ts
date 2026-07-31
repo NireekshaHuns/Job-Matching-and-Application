@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { apolloProvider, mapApollo } from './apollo';
 import { buildPeopleProviders, findPeople } from './index';
 import { hunterProvider, mapHunter } from './hunter';
-import type { PeopleProvider, PersonResult } from './types';
+import type { Fetcher, PeopleProvider, PersonResult } from './types';
 
 const HUNTER_BODY = {
   data: {
@@ -58,17 +58,14 @@ describe('mapApollo', () => {
 
 describe('hunterProvider', () => {
   it('queries by domain when given and returns [] on a non-OK response', async () => {
-    const fetcher = vi.fn(
-      async (_url: string, _init?: RequestInit) =>
-        new Response(JSON.stringify(HUNTER_BODY), { status: 200 }),
+    const fetcher = vi.fn<Fetcher>(
+      async () => new Response(JSON.stringify(HUNTER_BODY), { status: 200 }),
     );
     const rows = await hunterProvider('k', fetcher).find({ company: 'Acme', domain: 'acme.com' });
     expect(rows).toHaveLength(1);
     expect(fetcher.mock.calls[0][0]).toContain('domain=acme.com');
 
-    const bad = vi.fn(
-      async (_url: string, _init?: RequestInit) => new Response('', { status: 429 }),
-    );
+    const bad = vi.fn<Fetcher>(async () => new Response('', { status: 429 }));
     expect(await hunterProvider('k', bad).find({ company: 'Acme' })).toEqual([]);
     // Falls back to company= when no domain is given.
     expect(bad.mock.calls[0][0]).toContain('company=Acme');
@@ -77,9 +74,8 @@ describe('hunterProvider', () => {
 
 describe('apolloProvider', () => {
   it('POSTs with the X-Api-Key header and returns [] on a non-OK response', async () => {
-    const fetcher = vi.fn(
-      async (_url: string, _init?: RequestInit) =>
-        new Response(JSON.stringify(APOLLO_BODY), { status: 200 }),
+    const fetcher = vi.fn<Fetcher>(
+      async () => new Response(JSON.stringify(APOLLO_BODY), { status: 200 }),
     );
     const rows = await apolloProvider('k', fetcher).find({ company: 'Acme', roles: ['recruiter'] });
     expect(rows).toHaveLength(2);
@@ -87,9 +83,7 @@ describe('apolloProvider', () => {
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>)['X-Api-Key']).toBe('k');
 
-    const bad = vi.fn(
-      async (_url: string, _init?: RequestInit) => new Response('', { status: 401 }),
-    );
+    const bad = vi.fn<Fetcher>(async () => new Response('', { status: 401 }));
     expect(await apolloProvider('k', bad).find({ company: 'Acme' })).toEqual([]);
   });
 });

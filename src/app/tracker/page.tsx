@@ -22,6 +22,106 @@ const NUDGE_STYLE: Record<NudgeLevel, string> = {
   info: 'bg-blue-50 text-blue-800 border-blue-200',
 };
 
+/**
+ * People-finder (spec §5.6): infer emails via Apollo/Hunter and import a chosen
+ * person as a contact. No-ops (with a hint) when no provider key is configured.
+ * Only imported people persist — the search results are transient/cached.
+ */
+function FindPeople({
+  jobId,
+  company,
+  onImported,
+}: {
+  jobId: number;
+  company: string;
+  onImported: () => void;
+}) {
+  const status = trpc.people.status.useQuery();
+  const [domain, setDomain] = useState('');
+  const find = trpc.people.find.useMutation();
+  const importPerson = trpc.people.import.useMutation({ onSuccess: onImported });
+  const [imported, setImported] = useState<Set<string>>(new Set());
+
+  if (status.data && !status.data.configured) {
+    return (
+      <p className="text-xs text-zinc-400">
+        Email inference is off — set <code>HUNTER_API_KEY</code> or <code>APOLLO_API_KEY</code> to
+        find contacts automatically. (The compliant search links above always work.)
+      </p>
+    );
+  }
+
+  const people = find.data?.people ?? [];
+
+  return (
+    <div className="rounded-lg border border-dashed border-zinc-200 p-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium text-zinc-600">Find people</span>
+        <input
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          placeholder="company domain (optional, e.g. stripe.com)"
+          aria-label="Company domain"
+          className="min-w-56 flex-1 rounded border border-zinc-300 px-2 py-1 text-xs"
+        />
+        <button
+          type="button"
+          disabled={find.isPending}
+          onClick={() => find.mutate({ company, domain: domain.trim() || undefined })}
+          className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
+        >
+          {find.isPending ? 'Searching…' : 'Search'}
+        </button>
+        {find.data?.cached && <span className="text-xs text-zinc-400">cached</span>}
+      </div>
+
+      {find.isError && (
+        <p className="mt-1 text-xs text-red-600">Search failed: {find.error.message}</p>
+      )}
+      {find.isSuccess && people.length === 0 && (
+        <p className="mt-1 text-xs text-zinc-500">No people found for “{company}”.</p>
+      )}
+
+      {people.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {people.map((p, i) => {
+            const rowKey = `${p.email ?? p.name}:${i}`;
+            return (
+              <li key={rowKey} className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-medium text-zinc-800">{p.name}</span>
+                {p.title && <span className="text-zinc-500">{p.title}</span>}
+                {p.email && <span className="text-zinc-500">{p.email}</span>}
+                {p.emailConfidence != null && (
+                  <span className="text-zinc-400">{p.emailConfidence}%</span>
+                )}
+                <span className="text-zinc-400">· {p.source}</span>
+                <button
+                  type="button"
+                  disabled={importPerson.isPending || imported.has(rowKey)}
+                  onClick={() =>
+                    importPerson.mutate(
+                      {
+                        jobId,
+                        name: p.name,
+                        title: p.title ?? undefined,
+                        email: p.email ?? undefined,
+                      },
+                      { onSuccess: () => setImported((s) => new Set(s).add(rowKey)) },
+                    )
+                  }
+                  className="ml-auto rounded border border-zinc-300 px-1.5 py-0.5 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {imported.has(rowKey) ? 'Added ✓' : 'Add as contact'}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Contacts + compliant deep-links for one company. */
 function OutreachPanel({
   jobId,
@@ -96,6 +196,8 @@ function OutreachPanel({
           </a>
         ))}
       </div>
+
+      <FindPeople jobId={jobId} company={company} onImported={invalidate} />
 
       <ul className="space-y-1">
         {contactsQuery.data?.map((c) => (
