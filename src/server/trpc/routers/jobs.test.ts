@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  combinedRank,
+  computePriority,
+  DEFAULT_PRIORITY_WEIGHTS,
   escapeLike,
-  FRESHNESS_MAX,
   FRESHNESS_WINDOW_DAYS,
-  freshnessBoost,
+  freshnessScore,
   jobListInput,
   resolveJobQueryPlan,
-  TIER_WEIGHT,
+  resolveWeights,
+  tierScore,
 } from './jobs';
 
 describe('jobListInput', () => {
@@ -94,44 +95,61 @@ describe('escapeLike', () => {
   });
 });
 
-describe('freshnessBoost', () => {
-  it('is max for a brand-new post and zero past the window', () => {
-    expect(freshnessBoost(0)).toBe(FRESHNESS_MAX);
-    expect(freshnessBoost(-5)).toBe(FRESHNESS_MAX); // future/clock skew clamps to max
-    expect(freshnessBoost(FRESHNESS_WINDOW_DAYS)).toBe(0);
-    expect(freshnessBoost(999)).toBe(0);
+describe('component scores', () => {
+  it('tierScore maps High/Medium/Low/Excluded ranks to 100/~67/~33/0', () => {
+    expect(tierScore(3)).toBe(100);
+    expect(tierScore(2)).toBeCloseTo(66.67, 1);
+    expect(tierScore(1)).toBeCloseTo(33.33, 1);
+    expect(tierScore(0)).toBe(0);
   });
 
-  it('decays linearly across the window', () => {
-    expect(freshnessBoost(FRESHNESS_WINDOW_DAYS / 2)).toBeCloseTo(FRESHNESS_MAX / 2);
+  it('freshnessScore is 100 when new, 0 past the window, linear between', () => {
+    expect(freshnessScore(0)).toBe(100);
+    expect(freshnessScore(-5)).toBe(100); // future/clock skew clamps to max
+    expect(freshnessScore(FRESHNESS_WINDOW_DAYS)).toBe(0);
+    expect(freshnessScore(999)).toBe(0);
+    expect(freshnessScore(FRESHNESS_WINDOW_DAYS / 2)).toBeCloseTo(50);
   });
 });
 
-describe('combinedRank', () => {
-  it('keeps tier dominant when fit and freshness are equal', () => {
-    const high = combinedRank({ tierRank: 3, fit: 50, ageDays: 5 });
-    const medium = combinedRank({ tierRank: 2, fit: 50, ageDays: 5 });
-    // A whole tier (TIER_WEIGHT) separates them regardless of the shared fit/freshness.
-    expect(high - medium).toBeCloseTo(TIER_WEIGHT);
+describe('resolveWeights', () => {
+  it('defaults when weights are missing or sum to zero', () => {
+    expect(resolveWeights(undefined)).toEqual(DEFAULT_PRIORITY_WEIGHTS);
+    expect(resolveWeights({ tier: 0, fit: 0, freshness: 0 })).toEqual(DEFAULT_PRIORITY_WEIGHTS);
   });
 
-  it('caps fit + freshness so they cannot leap more than ~one tier', () => {
-    // Max fit (100) + max freshness (20) is the most a lower tier can make up.
-    const maxedLower = combinedRank({ tierRank: 1, fit: 100, ageDays: 0 });
-    const barePlusOne = combinedRank({ tierRank: 2, fit: 0, ageDays: 999 });
-    // A maxed Low can overtake a bare Medium — a known, intended property of the blend.
-    expect(maxedLower).toBeGreaterThan(barePlusOne);
+  it('merges a partial override onto the defaults', () => {
+    expect(resolveWeights({ fit: 50 })).toEqual({ ...DEFAULT_PRIORITY_WEIGHTS, fit: 50 });
+  });
+});
+
+describe('computePriority', () => {
+  it('is a weighted average of the three 0..100 components', () => {
+    // tier=100, fit=40, freshness=100 with default {60,30,10}:
+    // (60*100 + 30*40 + 10*100) / 100 = (6000+1200+1000)/100 = 82
+    const b = computePriority({ tierRank: 3, fit: 40, ageDays: 0 });
+    expect(b.tier).toBe(100);
+    expect(b.fit).toBe(40);
+    expect(b.freshness).toBe(100);
+    expect(b.priority).toBeCloseTo(82);
   });
 
-  it('uses freshness to break near-ties within the same tier and fit', () => {
-    const fresh = combinedRank({ tierRank: 1, fit: 50, ageDays: 0 });
-    const stale = combinedRank({ tierRank: 1, fit: 50, ageDays: 999 });
-    expect(fresh - stale).toBeCloseTo(FRESHNESS_MAX);
+  it('keeps tier dominant under the default mix', () => {
+    const high = computePriority({ tierRank: 3, fit: 50, ageDays: 5 }).priority;
+    const medium = computePriority({ tierRank: 2, fit: 50, ageDays: 5 }).priority;
+    // One tier step (33.3 pts) × the 0.6 tier weight ≈ 20 priority points.
+    expect(high - medium).toBeCloseTo((100 / 3) * 0.6, 1);
   });
 
-  it('matches the documented formula', () => {
-    expect(combinedRank({ tierRank: 2, fit: 40, ageDays: FRESHNESS_WINDOW_DAYS })).toBe(
-      2 * TIER_WEIGHT + 40,
-    );
+  it('honors custom weights (e.g. fit-first)', () => {
+    const fitFirst = { tier: 0, fit: 100, freshness: 0 };
+    expect(computePriority({ tierRank: 3, fit: 42, ageDays: 0 }, fitFirst).priority).toBe(42);
+  });
+
+  it('returns 0 priority when all weights are zero (no divide-by-zero)', () => {
+    expect(
+      computePriority({ tierRank: 3, fit: 100, ageDays: 0 }, { tier: 0, fit: 0, freshness: 0 })
+        .priority,
+    ).toBe(0);
   });
 });
