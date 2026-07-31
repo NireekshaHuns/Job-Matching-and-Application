@@ -1,0 +1,17 @@
+{
+  "totalFound": 2,
+  "content": [
+    {
+      "id": "1001",
+      "name": "Senior Software Engineer, Backend",
+      "releasedDate": "2026-07-18T00:00:00.000Z",
+      "location": { "city": "New York", "region": "NY", "country": "us", "remote": false }
+    },
+    {
+      "id": "1002",
+      "name": "Frontend Engineer",
+      "releasedDate": "2026-07-15T00:00:00.000Z",
+      "location": { "city": "", "region": "", "country": "us", "remote": true }
+    }
+  ]
+}

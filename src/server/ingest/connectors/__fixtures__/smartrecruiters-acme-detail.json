@@ -1,0 +1,16 @@
+{
+  "1001": {
+    "jobAd": {
+      "sections": {
+        "jobDescription": {
+          "title": "Job Description",
+          "text": "<p>Build and scale APIs in Go.</p>"
+        },
+        "qualifications": { "title": "Qualifications", "text": "<p>5+ years of backend work.</p>" }
+      }
+    }
+  },
+  "1002": {
+    "jobAd": { "sections": { "jobDescription": { "text": "<p>Build UIs in React.</p>" } } }
+  }
+}
