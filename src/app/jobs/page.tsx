@@ -28,6 +28,8 @@ export default function JobsPage() {
   const [includeClosed, setIncludeClosed] = useState(false);
   const [newHire, setNewHire] = useState<NewHireFilter>('all');
   const [correcting, setCorrecting] = useState<number | null>(null);
+  // Apply-priority weights (percentages) for the default "Tier × fit" sort.
+  const [weights, setWeights] = useState({ tier: 60, fit: 30, freshness: 10 });
 
   const deferredSearch = useDeferredValue(search);
   const utils = trpc.useUtils();
@@ -59,6 +61,7 @@ export default function JobsPage() {
     employmentType: allEmployment ? 'all' : 'full_time',
     includeClosed,
     newHireStatuses: newHire === 'all' ? undefined : [newHire],
+    weights,
   });
 
   return (
@@ -163,6 +166,33 @@ export default function JobsPage() {
         </label>
       </div>
 
+      {sort === 'combined' && (
+        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-dashed border-zinc-200 p-3 text-sm">
+          <span className="font-medium text-zinc-600">Priority weights</span>
+          {(['tier', 'fit', 'freshness'] as const).map((k) => (
+            <label key={k} className="flex items-center gap-1 capitalize">
+              {k === 'tier' ? 'sponsorship' : k}
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={weights[k]}
+                onChange={(e) =>
+                  setWeights((w) => ({
+                    ...w,
+                    [k]: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+                  }))
+                }
+                className="w-16 rounded border border-zinc-300 px-1 py-1"
+              />
+            </label>
+          ))}
+          <span className="text-xs text-zinc-400">
+            Relative weights for the “Tier × fit” sort — the score is a weighted average.
+          </span>
+        </div>
+      )}
+
       {jobsQuery.isLoading && <LoadingSkeleton />}
       {jobsQuery.isError && (
         <ErrorState
@@ -227,6 +257,12 @@ export default function JobsPage() {
             )}
 
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span
+                className="rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-700"
+                title={`Why this rank: sponsorship ${job.priorityTier} · fit ${job.priorityFit} · freshness ${job.priorityFreshness} (weights ${weights.tier}/${weights.fit}/${weights.freshness})`}
+              >
+                Priority {job.priorityScore}
+              </span>
               {job.relevanceScore != null && (
                 <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
                   Fit {job.relevanceScore}%
