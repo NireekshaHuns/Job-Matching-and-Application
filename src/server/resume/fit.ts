@@ -80,9 +80,20 @@ export interface BulletLike {
 }
 
 /**
+ * True when a bullet is usable by a résumé of the given role family: role-
+ * agnostic bullets (roleFamily=null) always count, and a generalist résumé
+ * (roleFamily=null) sees ALL bullets. Shared so callers can't drift.
+ */
+export function bulletMatchesRole(
+  bulletRole: RoleFamily | null,
+  resumeRole: RoleFamily | null,
+): boolean {
+  return resumeRole === null || bulletRole === null || bulletRole === resumeRole;
+}
+
+/**
  * The skills a base resume can present = union of bullet-bank skills whose
- * role_family matches the resume's (role-agnostic bullets, role_family=null,
- * always count). A generalist resume (roleFamily=null) sees ALL bullets.
+ * role_family matches the resume's (see `bulletMatchesRole`).
  */
 export function resumeSkillsFromBullets(
   bullets: BulletLike[],
@@ -90,7 +101,7 @@ export function resumeSkillsFromBullets(
 ): string[] {
   const out = new Set<string>();
   for (const b of bullets) {
-    if (roleFamily === null || b.roleFamily === null || b.roleFamily === roleFamily) {
+    if (bulletMatchesRole(b.roleFamily, roleFamily)) {
       for (const s of b.skills) {
         const n = s.trim().toLowerCase();
         if (n) out.add(n);
