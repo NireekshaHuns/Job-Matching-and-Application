@@ -10,7 +10,7 @@
  */
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { applicationStatusEnum, applications, jobs } from '@/server/db/schema';
+import { applicationStatusEnum, applications, filingTypeEnum, jobs } from '@/server/db/schema';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
 export const createApplicationInput = z.object({
@@ -27,6 +27,8 @@ export const updateApplicationInput = z.object({
   // nullish: undefined = leave unchanged, null = clear.
   resumeLabel: z.string().max(200).nullish(),
   resumeSnapshot: z.string().nullish(),
+  /** H-1B filing type label (change-of-status / consular / unknown). */
+  filingType: z.enum(filingTypeEnum.enumValues).optional(),
 });
 export type UpdateApplicationInput = z.infer<typeof updateApplicationInput>;
 
@@ -38,6 +40,7 @@ export function buildApplicationUpdate(
   if (input.status !== undefined) set.status = input.status;
   if (input.resumeLabel !== undefined) set.resumeLabel = input.resumeLabel;
   if (input.resumeSnapshot !== undefined) set.resumeSnapshot = input.resumeSnapshot;
+  if (input.filingType !== undefined) set.filingType = input.filingType;
   return set;
 }
 
@@ -53,6 +56,7 @@ export const applicationsRouter = createTRPCRouter({
         confirmedAt: applications.confirmedAt,
         resumeLabel: applications.resumeLabel,
         resumeSnapshot: applications.resumeSnapshot,
+        filingType: applications.filingType,
         company: jobs.company,
         title: jobs.title,
         url: jobs.url,

@@ -64,6 +64,13 @@
       "when": 1785513290642,
       "tag": "0008_panoramic_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785516157348,
+      "tag": "0009_secret_wonder_man",
+      "breakpoints": true
     }
   ]
 }
