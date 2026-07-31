@@ -9,13 +9,18 @@
  * `Mail.Read offline_access`. A one-time auth-code+PKCE bootstrap
  * (`scripts/outlook-auth.ts`) mints the refresh token stored in `.env`.
  */
-import type { MailClient, OutlookMessage } from './types';
+import type { MailClient, MailSender, OutgoingEmail, OutlookMessage } from './types';
 
 type FetchFn = typeof fetch;
 
-/** Delegated scopes: read mail + get a refresh token. */
-export const GRAPH_SCOPES = 'Mail.Read offline_access';
+/**
+ * Delegated scopes: read mail (confirmation poller), send mail (outreach), and
+ * a refresh token. Adding `Mail.Send` to the shared set means the existing
+ * refresh token must be re-consented — re-run `pnpm outlook:auth` after upgrading.
+ */
+export const GRAPH_SCOPES = 'Mail.Read Mail.Send offline_access';
 const GRAPH_MESSAGES_ENDPOINT = 'https://graph.microsoft.com/v1.0/me/messages';
+const GRAPH_SENDMAIL_ENDPOINT = 'https://graph.microsoft.com/v1.0/me/sendMail';
 
 /** OAuth2 token endpoint for the given tenant (`consumers` = personal accounts). */
 export function tokenEndpoint(tenant: string): string {
@@ -194,6 +199,60 @@ export function graphMailClient(deps: {
         }
       }
       return messages;
+    },
+  };
+}
+
+/** The Graph `/me/sendMail` request body for a plain-text email. Pure. */
+export function buildSendMailPayload(email: OutgoingEmail): {
+  message: {
+    subject: string;
+    body: { contentType: 'Text'; content: string };
+    toRecipients: { emailAddress: { address: string } }[];
+  };
+  saveToSentItems: boolean;
+} {
+  return {
+    message: {
+      subject: email.subject,
+      body: { contentType: 'Text', content: email.body },
+      toRecipients: [{ emailAddress: { address: email.to } }],
+    },
+    // Keep a copy in Sent Items so outreach is visible in the mailbox too.
+    saveToSentItems: true,
+  };
+}
+
+/**
+ * A `MailSender` backed by Graph `Mail.Send`. Same injected-`fetch` /
+ * getAccessToken shape as `graphMailClient`, with a single 401 refresh-and-retry.
+ * `sendMail` returns 202 Accepted with an empty body, so there's nothing to parse.
+ */
+export function graphMailSender(deps: {
+  fetch: FetchFn;
+  getAccessToken: () => Promise<string>;
+}): MailSender {
+  return {
+    async sendMail(email) {
+      let accessToken = await deps.getAccessToken();
+      const post = () =>
+        deps.fetch(GRAPH_SENDMAIL_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(buildSendMailPayload(email)),
+        });
+
+      let res = await post();
+      if (res.status === 401) {
+        accessToken = await deps.getAccessToken();
+        res = await post();
+      }
+      if (!res.ok) {
+        throw new Error(`Graph sendMail failed (${res.status}): ${await res.text()}`);
+      }
     },
   };
 }

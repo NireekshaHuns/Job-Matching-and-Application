@@ -21,3 +21,17 @@ export interface OutlookMessage {
 export interface MailClient {
   listMessages(opts: { sinceIso: string }): Promise<OutlookMessage[]>;
 }
+
+/** A plain-text email to send on the user's behalf. */
+export interface OutgoingEmail {
+  /** Bare recipient address (e.g. `jane@acme.com`). */
+  to: string;
+  subject: string;
+  /** Plain-text body — outreach drafts are plain text, no markdown/HTML. */
+  body: string;
+}
+
+/** Sends a single email. Implemented for real via Microsoft Graph `Mail.Send`. */
+export interface MailSender {
+  sendMail(email: OutgoingEmail): Promise<void>;
+}
