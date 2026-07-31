@@ -53,9 +53,17 @@ describe('resolveJobQueryPlan', () => {
   });
 
   it('normalizes empty filter arrays to null', () => {
-    const p = plan({ sponsorTiers: [], roleFamilies: [] });
+    const p = plan({ sponsorTiers: [], roleFamilies: [], newHireStatuses: [] });
     expect(p.sponsorTiers).toBeNull();
     expect(p.roleFamilies).toBeNull();
+    expect(p.newHireStatuses).toBeNull();
+  });
+
+  it('passes through a new-hire status filter', () => {
+    expect(plan({ newHireStatuses: ['sponsors_new_hires'] }).newHireStatuses).toEqual([
+      'sponsors_new_hires',
+    ]);
+    expect(() => jobListInput.parse({ newHireStatuses: ['maybe'] })).toThrow();
   });
 
   it('hides senior roles by default, and shows them when includeSenior is on', () => {

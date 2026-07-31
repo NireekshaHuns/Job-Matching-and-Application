@@ -47,5 +47,7 @@ export function buildJobRow(
     sponsorTier: sponsor.tier,
     sponsorReason: sponsor.reason,
     sponsorCount: sponsor.sponsorCount,
+    newHireStatus: sponsor.newHireStatus,
+    sponsorMatchConfidence: sponsor.matchConfidence,
   };
 }

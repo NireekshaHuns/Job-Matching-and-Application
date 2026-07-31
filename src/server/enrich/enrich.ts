@@ -12,18 +12,19 @@ import { buildJobRow } from './steps/build-row';
 import { classifyPosting } from './steps/classify';
 import { dedupPostings } from './steps/dedup';
 import { embedJd } from './steps/embed';
+import type { SponsorResolver } from './steps/resolver';
 import { matchSponsor } from './steps/sponsor-match';
-import type { ChatClient, Embedder, SponsorLookup } from './types';
+import type { ChatClient, Embedder } from './types';
 
 export interface EnrichDeps {
   chat: ChatClient;
   embedder: Embedder;
-  lookup: SponsorLookup;
+  resolve: SponsorResolver;
 }
 
 /** Enrich a single posting into a clean `jobs` row. */
 export async function enrichPosting(posting: RawPosting, deps: EnrichDeps): Promise<NewJob> {
-  const sponsor = matchSponsor(posting.company, posting.jdText, deps.lookup);
+  const sponsor = matchSponsor(posting.company, posting.jdText, deps.resolve);
   // Classify always: the title alone carries real signal (role/seniority), even
   // for sources with no JD text. Embedding is skipped for empty JDs (embedJd
   // returns null) since there's nothing meaningful to embed.

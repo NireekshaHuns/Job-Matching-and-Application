@@ -82,6 +82,22 @@ export const resumeKindEnum = pgEnum('resume_kind', ['base', 'tailored']);
 /** Whether a master-inventory skill is technical or a soft competency. */
 export const skillKindEnum = pgEnum('skill_kind', ['technical', 'soft']);
 
+/**
+ * New-hire sponsorship signal, derived from the USCIS "New Employment" (initial)
+ * approvals column — a stronger filter than "has any H1B record". Complementary
+ * to `sponsor_tier`, which also reads the JD. All four states are visible; none
+ * is ever dropped. Display labels live in `src/components/tier.ts`.
+ */
+export const newHireStatusEnum = pgEnum('new_hire_status', [
+  'sponsors_new_hires', // recent New Employment (initial) approvals
+  'transfers_only', // continuing approvals but no recent new-employment
+  'no_record', // matched a USCIS employer with no approvals on record
+  'unknown', // no confident match to a USCIS employer
+]);
+
+/** How a raw posting company name was matched to a USCIS employer record. */
+export const matchMethodEnum = pgEnum('match_method', ['exact', 'fuzzy', 'manual']);
+
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
@@ -100,6 +116,64 @@ export const sponsors = pgTable('sponsors', {
   /** USCIS approval rate, 0–1. Null when unknown. */
   approvalRate: real('approval_rate'),
   lastFiledYear: integer('last_filed_year'),
+  /**
+   * Lifetime "New Employment" (initial) approvals — genuine new-hire sponsorship,
+   * separate from transfers/continuations. Basis for the new-hire badge.
+   */
+  newEmploymentApprovals: integer('new_employment_approvals').notNull().default(0),
+  /** Most recent fiscal year with any New Employment approvals; null if none. */
+  newEmploymentLastYear: integer('new_employment_last_year'),
+  /** New-employment approvals for the most recent ~3 fiscal years, newest first (for trend). */
+  newEmploymentRecentYears: jsonb('new_employment_recent_years')
+    .$type<Array<{ year: number; initialApprovals: number }>>()
+    .notNull()
+    .default([]),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Per-employer, per-fiscal-year USCIS filing counts — the durable series behind
+ * the new-employment rollups on `sponsors` (recency + trend). Keyed by the same
+ * normalized company name so it lines up with `sponsors`. Multiple source rows
+ * for one employer-year (state/NAICS splits) are summed before insert.
+ */
+export const sponsorFilings = pgTable(
+  'sponsor_filings',
+  {
+    id: serial('id').primaryKey(),
+    companyNameNormalized: text('company_name_normalized').notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    initialApprovals: integer('initial_approvals').notNull().default(0),
+    initialDenials: integer('initial_denials').notNull().default(0),
+    continuingApprovals: integer('continuing_approvals').notNull().default(0),
+    continuingDenials: integer('continuing_denials').notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex('sponsor_filings_company_year_idx').on(t.companyNameNormalized, t.fiscalYear),
+  ],
+);
+
+/**
+ * Entity resolution: maps a raw posting company name to a canonical USCIS
+ * employer (`sponsors`), with a visible confidence and how it was matched.
+ * `sponsor_id` null means "no confident match"; a user-`confirmed` row is
+ * authoritative and wins over any recomputed match (spec §5.3 — never silently
+ * assert a match; corrections stick).
+ */
+export const companyAliases = pgTable('company_aliases', {
+  id: serial('id').primaryKey(),
+  /** The company name exactly as it appeared on a posting (for display/audit). */
+  rawName: text('raw_name').notNull(),
+  /** Normalized join key; one alias row per distinct normalized name. */
+  rawNameNormalized: text('raw_name_normalized').notNull().unique(),
+  /** Resolved USCIS employer; null when no confident match (or confirmed no-match). */
+  sponsorId: integer('sponsor_id').references(() => sponsors.id, { onDelete: 'set null' }),
+  /** Match confidence 0–1 (1 = exact normalized hit; manual confirmations = 1). */
+  matchConfidence: real('match_confidence').notNull().default(0),
+  matchMethod: matchMethodEnum('match_method').notNull(),
+  /** True once the user has confirmed/corrected this mapping. */
+  confirmed: boolean('confirmed').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -185,10 +259,15 @@ export const jobs = pgTable(
     sponsorReason: text('sponsor_reason'),
     /** Denormalized from `sponsors` at enrichment time for fast board reads. */
     sponsorCount: integer('sponsor_count'),
+    /** New-hire sponsorship badge, denormalized from the USCIS new-employment signal. */
+    newHireStatus: newHireStatusEnum('new_hire_status').notNull().default('unknown'),
+    /** Confidence 0–1 of the company→USCIS employer match behind the sponsor data (null when unmatched). */
+    sponsorMatchConfidence: real('sponsor_match_confidence'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('jobs_sponsor_tier_idx').on(t.sponsorTier),
+    index('jobs_new_hire_status_idx').on(t.newHireStatus),
     index('jobs_role_family_idx').on(t.roleFamily),
     // Approximate nearest-neighbour index for resume↔job similarity search.
     index('jobs_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
@@ -318,12 +397,27 @@ export const outreachLogRelations = relations(outreachLog, ({ one }) => ({
   }),
 }));
 
+export const sponsorsRelations = relations(sponsors, ({ many }) => ({
+  aliases: many(companyAliases),
+}));
+
+export const companyAliasesRelations = relations(companyAliases, ({ one }) => ({
+  sponsor: one(sponsors, {
+    fields: [companyAliases.sponsorId],
+    references: [sponsors.id],
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Inferred types
 // ---------------------------------------------------------------------------
 
 export type Sponsor = typeof sponsors.$inferSelect;
 export type NewSponsor = typeof sponsors.$inferInsert;
+export type SponsorFiling = typeof sponsorFilings.$inferSelect;
+export type NewSponsorFiling = typeof sponsorFilings.$inferInsert;
+export type CompanyAlias = typeof companyAliases.$inferSelect;
+export type NewCompanyAlias = typeof companyAliases.$inferInsert;
 export type Resume = typeof resumes.$inferSelect;
 export type NewResume = typeof resumes.$inferInsert;
 export type Job = typeof jobs.$inferSelect;
