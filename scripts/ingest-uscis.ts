@@ -13,7 +13,13 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { aggregateSponsors, loadSponsors, parseUscisCsv } from '../src/lib/sponsorship/ingest';
+import {
+  aggregateFilings,
+  aggregateSponsors,
+  loadSponsorFilings,
+  loadSponsors,
+  parseUscisCsv,
+} from '../src/lib/sponsorship/ingest';
 import * as schema from '../src/server/db/schema';
 
 async function main() {
@@ -31,10 +37,13 @@ async function main() {
 
   const records = files.flatMap((f) => parseUscisCsv(readFileSync(f, 'utf8')));
   const aggregates = aggregateSponsors(records);
+  const filings = aggregateFilings(records);
   const written = await loadSponsors(db, aggregates);
+  const filingsWritten = await loadSponsorFilings(db, filings);
 
   console.log(
-    `Parsed ${records.length} rows -> ${aggregates.length} employers -> upserted ${written}.`,
+    `Parsed ${records.length} rows -> ${aggregates.length} employers ` +
+      `(${filingsWritten} employer-years) -> upserted ${written}.`,
   );
 }
 

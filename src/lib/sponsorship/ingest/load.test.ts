@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DB } from '@/server/db';
-import type { SponsorAggregate } from './aggregate';
-import { loadSponsors } from './load';
+import type { SponsorAggregate, SponsorFilingRow } from './aggregate';
+import { loadSponsorFilings, loadSponsors } from './load';
 
 interface Capture {
   values: unknown[];
@@ -41,6 +41,20 @@ function agg(name: string): SponsorAggregate {
     sponsorCount: 1,
     approvalRate: 1,
     lastFiledYear: 2024,
+    newEmploymentApprovals: 1,
+    newEmploymentLastYear: 2024,
+    newEmploymentRecentYears: [{ year: 2024, initialApprovals: 1 }],
+  };
+}
+
+function filing(name: string, fiscalYear: number): SponsorFilingRow {
+  return {
+    companyNameNormalized: name,
+    fiscalYear,
+    initialApprovals: 1,
+    initialDenials: 0,
+    continuingApprovals: 0,
+    continuingDenials: 0,
   };
 }
 
@@ -63,6 +77,31 @@ describe('loadSponsors', () => {
     const { db, inserts } = makeFakeDb();
     const many = Array.from({ length: 501 }, (_, i) => agg(`C${i}`));
     expect(await loadSponsors(db, many)).toBe(501);
+    expect(inserts).toHaveLength(2);
+    expect(inserts[0].values).toHaveLength(500);
+    expect(inserts[1].values).toHaveLength(1);
+  });
+});
+
+describe('loadSponsorFilings', () => {
+  it('issues no inserts for an empty list', async () => {
+    const { db, inserts } = makeFakeDb();
+    expect(await loadSponsorFilings(db, [])).toBe(0);
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('upserts per-year rows with onConflictDoUpdate on (company, year)', async () => {
+    const { db, inserts } = makeFakeDb();
+    expect(await loadSponsorFilings(db, [filing('A', 2023), filing('A', 2024)])).toBe(2);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].values).toHaveLength(2);
+    expect(inserts[0].conflict).toBeTruthy();
+  });
+
+  it('splits across the 500-row chunk boundary', async () => {
+    const { db, inserts } = makeFakeDb();
+    const many = Array.from({ length: 501 }, (_, i) => filing('C', 1900 + i));
+    expect(await loadSponsorFilings(db, many)).toBe(501);
     expect(inserts).toHaveLength(2);
     expect(inserts[0].values).toHaveLength(500);
     expect(inserts[1].values).toHaveLength(1);
