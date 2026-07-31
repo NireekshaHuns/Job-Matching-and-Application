@@ -204,14 +204,12 @@ describe('reconcileFreshness', () => {
     expect(updates[1].set).toMatchObject({ status: 'closed' });
   });
 
-  it('still runs the close pass when nothing was seen', async () => {
+  it('skips all updates when nothing was seen (no signal = no closing)', async () => {
     const { db, updates } = makeUpdateDb([[{ id: 5 }]]);
     const stats = await reconcileFreshness(db, [], new Date());
-    expect(stats.refreshed).toBe(0);
-    expect(stats.closed).toBe(1);
-    // Only the close-stale update runs (no fingerprints to refresh).
-    expect(updates).toHaveLength(1);
-    expect(updates[0].set).toMatchObject({ status: 'closed' });
+    // A total fetch outage must not close a still-live board.
+    expect(stats).toEqual({ refreshed: 0, closed: 0 });
+    expect(updates).toHaveLength(0);
   });
 });
 

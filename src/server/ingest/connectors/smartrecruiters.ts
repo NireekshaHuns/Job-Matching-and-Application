@@ -76,9 +76,13 @@ export function smartRecruitersConnector(
   async function fetchJd(identifier: string, id: string): Promise<string> {
     try {
       const res = await fetcher(`${API_BASE}/${identifier}/postings/${id}`);
-      if (!res.ok) return '';
+      if (!res.ok) {
+        console.warn(`[smartrecruiters] detail ${identifier}/${id} -> HTTP ${res.status}`);
+        return '';
+      }
       return detailToJd((await res.json()) as SmartRecruitersDetail);
-    } catch {
+    } catch (err) {
+      console.warn(`[smartrecruiters] detail ${identifier}/${id} failed: ${String(err)}`);
       return '';
     }
   }

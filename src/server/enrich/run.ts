@@ -162,10 +162,17 @@ export interface ReconcileStats {
   closed: number;
 }
 
+/** Fingerprints are short strings, so batch the reconcile IN-lists larger than job inserts. */
+const RECONCILE_CHUNK_SIZE = 1000;
+
 /**
  * Freshness reconcile: refresh `last_seen_at` (and reopen) for every posting
  * still present in a feed this run, then close any active job not seen since the
  * stale cutoff. `seen` is the set of fingerprints fetched this run (pre-dedup).
+ *
+ * Safety valve: if nothing was fetched at all this run (every connector failed
+ * or returned empty), there's no staleness signal — skip the close pass so a
+ * total outage can't mass-close a still-live board.
  */
 export async function reconcileFreshness(
   db: DB,
@@ -173,10 +180,11 @@ export async function reconcileFreshness(
   now: Date = new Date(),
 ): Promise<ReconcileStats> {
   const fingerprints = [...new Set(seen)];
+  if (fingerprints.length === 0) return { refreshed: 0, closed: 0 };
 
   let refreshed = 0;
-  for (let i = 0; i < fingerprints.length; i += CHUNK_SIZE) {
-    const chunk = fingerprints.slice(i, i + CHUNK_SIZE);
+  for (let i = 0; i < fingerprints.length; i += RECONCILE_CHUNK_SIZE) {
+    const chunk = fingerprints.slice(i, i + RECONCILE_CHUNK_SIZE);
     const returned = await db
       .update(jobs)
       .set({ lastSeenAt: now, status: 'active', closedAt: null })

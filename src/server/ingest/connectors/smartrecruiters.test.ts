@@ -100,4 +100,49 @@ describe('smartRecruitersConnector', () => {
     expect(listCalls).toBe(2);
     expect(postings).toHaveLength(120);
   });
+
+  it('stops after a full final page once totalFound is reached', async () => {
+    let listCalls = 0;
+    const fetcher: Fetcher = async (url) => {
+      if (/\/postings\/[^?]+$/.test(url)) return new Response('{}', { status: 200 });
+      listCalls++;
+      // Exactly one full page and totalFound == that page → stop without a 2nd call.
+      return new Response(
+        JSON.stringify({
+          totalFound: 100,
+          content: Array.from({ length: 100 }, (_, i) => ({ id: `x${i}`, name: `Eng ${i}` })),
+        }),
+        { status: 200 },
+      );
+    };
+    const postings = await smartRecruitersConnector(
+      [{ identifier: 'Big', company: 'Big Co' }],
+      fetcher,
+    ).fetch();
+    expect(listCalls).toBe(1);
+    expect(postings).toHaveLength(100);
+  });
+
+  it('terminates a runaway feed via the MAX_PAGES guard', async () => {
+    let listCalls = 0;
+    // Always returns a full page and never reaches totalFound → only MAX_PAGES stops it.
+    const fetcher: Fetcher = async (url) => {
+      if (/\/postings\/[^?]+$/.test(url)) return new Response('{}', { status: 200 });
+      listCalls++;
+      return new Response(
+        JSON.stringify({
+          totalFound: 1_000_000,
+          content: Array.from({ length: 100 }, (_, i) => ({ id: `r${listCalls}-${i}`, name: 'X' })),
+        }),
+        { status: 200 },
+      );
+    };
+    const postings = await smartRecruitersConnector(
+      [{ identifier: 'Loop', company: 'Loop Co' }],
+      fetcher,
+    ).fetch();
+    // Bounded: 20 pages max, 100 each.
+    expect(listCalls).toBe(20);
+    expect(postings).toHaveLength(2000);
+  });
 });
