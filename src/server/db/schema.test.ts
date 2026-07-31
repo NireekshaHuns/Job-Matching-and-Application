@@ -7,10 +7,12 @@ import {
   employmentTypeEnum,
   jobScores,
   jobs,
+  filingTypeEnum,
   jobStatusEnum,
   masterSkills,
   matchMethodEnum,
   newHireStatusEnum,
+  profile,
   resumeBullets,
   resumeKindEnum,
   resumes,
@@ -66,6 +68,10 @@ describe('db schema', () => {
     it('job status is active/closed (closed is retained, not deleted)', () => {
       expect(jobStatusEnum.enumValues).toEqual(['active', 'closed']);
     });
+
+    it('filing type labels change-of-status vs consular (unknown until set)', () => {
+      expect(filingTypeEnum.enumValues).toEqual(['change_of_status', 'consular', 'unknown']);
+    });
   });
 
   describe('embeddings', () => {
@@ -107,6 +113,19 @@ describe('db schema', () => {
       const cols = getTableColumns(applications);
       expect(cols.jobId.notNull).toBe(true);
       expect(cols.resumeId.notNull).toBe(false);
+    });
+
+    it('carries a filing-type flag (defaults handled at the column)', () => {
+      expect(getTableColumns(applications)).toHaveProperty('filingType');
+    });
+  });
+
+  describe('visa profile', () => {
+    it('stores OPT / STEM-OPT dates (nullable until set)', () => {
+      const cols = getTableColumns(profile);
+      expect(cols).toHaveProperty('optEndDate');
+      expect(cols).toHaveProperty('stemOptEndDate');
+      expect(cols.optEndDate.notNull).toBe(false);
     });
   });
 
