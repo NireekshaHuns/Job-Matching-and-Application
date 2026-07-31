@@ -2,7 +2,8 @@
  * Job board queries. `list` returns enriched jobs with BOTH scores kept
  * separate: the H1B `sponsorTier` (on the job) and the resume `relevanceScore`
  * (left-joined from job_scores for a selected resume "lens"). The `combined`
- * sort is a display-only blend (tier-weighted + fit); the scores are never
+ * sort is a display-only Apply Priority Score — a configurable weighted blend of
+ * tier + fit + freshness — computed at read time; the two scores are never
  * merged into one stored value.
  */
 import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
@@ -16,7 +17,10 @@ import {
   seniorityEnum,
   sponsorTierEnum,
 } from '@/server/db/schema';
+import { DEFAULT_PRIORITY_WEIGHTS, resolveWeights, type PriorityWeights } from '@/lib/priority';
 import { createTRPCRouter, publicProcedure } from '../trpc';
+
+export { DEFAULT_PRIORITY_WEIGHTS, resolveWeights, type PriorityWeights } from '@/lib/priority';
 
 export const jobListInput = z.object({
   /** Resume "lens": left-joins its fit score + skill gaps onto each job. */
@@ -103,23 +107,6 @@ export function escapeLike(term: string): string {
  *   freshness — linear recency, 100 at 0 days old → 0 at the window edge
  */
 export const FRESHNESS_WINDOW_DAYS = 30;
-
-export interface PriorityWeights {
-  tier: number;
-  fit: number;
-  freshness: number;
-}
-
-/** Tier-dominant default mix (percentages; the blend is a weighted average). */
-export const DEFAULT_PRIORITY_WEIGHTS: PriorityWeights = { tier: 60, fit: 30, freshness: 10 };
-
-/** Fall back to the default mix when weights are absent or sum to zero. */
-export function resolveWeights(w?: Partial<PriorityWeights> | null): PriorityWeights {
-  if (!w) return DEFAULT_PRIORITY_WEIGHTS;
-  const merged = { ...DEFAULT_PRIORITY_WEIGHTS, ...w };
-  const sum = merged.tier + merged.fit + merged.freshness;
-  return sum > 0 ? merged : DEFAULT_PRIORITY_WEIGHTS;
-}
 
 /** Sponsor tier → 0..100 component (mirrors the SQL CASE below). */
 export function tierScore(tierRank: number): number {
@@ -245,7 +232,9 @@ export const jobsRouter = createTRPCRouter({
         relevanceScore: jobScores.relevanceScore,
         skillGaps: jobScores.skillGaps,
         // Apply-priority score + its component breakdown (0..100 each), for the
-        // "why this rank" display. Consistent with the combined-sort ORDER BY.
+        // "why this rank" display. ORDER BY uses the UNROUNDED priority above;
+        // only the displayed value is rounded, so rows that show the same number
+        // still order deterministically. Keep it that way.
         priorityScore: sql<number>`round(${priority})::int`,
         priorityTier: sql<number>`round(${TIER_SCORE})::int`,
         priorityFit: sql<number>`round(${FIT_SCORE})::int`,
