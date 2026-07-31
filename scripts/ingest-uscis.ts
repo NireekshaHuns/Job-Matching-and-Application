@@ -16,6 +16,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import {
   aggregateFilings,
   aggregateSponsors,
+  decodeUscisBuffer,
   loadSponsorFilings,
   loadSponsors,
   parseUscisCsv,
@@ -35,7 +36,9 @@ async function main() {
 
   const db = drizzle(neon(process.env.DATABASE_URL), { schema });
 
-  const records = files.flatMap((f) => parseUscisCsv(readFileSync(f, 'utf8')));
+  // Read as a Buffer so `decodeUscisBuffer` can honor the file's BOM (the
+  // current Data Hub export is UTF-16LE; the legacy one is UTF-8).
+  const records = files.flatMap((f) => parseUscisCsv(decodeUscisBuffer(readFileSync(f))));
   const aggregates = aggregateSponsors(records);
   const filings = aggregateFilings(records);
   const written = await loadSponsors(db, aggregates);
