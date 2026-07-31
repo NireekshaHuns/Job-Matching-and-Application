@@ -12,6 +12,7 @@ import {
   masterSkills,
   matchMethodEnum,
   newHireStatusEnum,
+  peopleCache,
   profile,
   resumeBullets,
   resumeKindEnum,
@@ -126,6 +127,15 @@ describe('db schema', () => {
       expect(cols).toHaveProperty('optEndDate');
       expect(cols).toHaveProperty('stemOptEndDate');
       expect(cols.optEndDate.notNull).toBe(false);
+    });
+  });
+
+  describe('people-finder cache', () => {
+    it('keys results by a unique cache key with a fetched-at TTL anchor', () => {
+      const cols = getTableColumns(peopleCache);
+      expect(cols).toHaveProperty('cacheKey');
+      expect(cols).toHaveProperty('results');
+      expect(cols).toHaveProperty('fetchedAt');
     });
   });
 
