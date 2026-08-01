@@ -41,8 +41,8 @@ describe('enrichPostings', () => {
       new Set(['b']),
       deps,
     );
-    // 4 in -> 3 unique -> b already exists -> a and c enriched.
-    expect(result.stats).toEqual({ fetched: 4, deduped: 3, enriched: 2 });
+    // 4 in -> 3 unique -> b already exists -> a and c enriched (both SWE titles).
+    expect(result.stats).toEqual({ fetched: 4, deduped: 3, filtered: 0, enriched: 2 });
     expect(result.rows.map((r) => r.fingerprint).sort()).toEqual(['a', 'c']);
     expect(result.rows[0].sponsorTier).toBe('Low');
     // Unmatched company -> badge is unknown, confidence null (never fabricated).
@@ -55,5 +55,37 @@ describe('enrichPostings', () => {
     const result = await enrichPostings([posting('a')], new Set(['a']), deps);
     expect(result.rows).toHaveLength(0);
     expect(result.stats.enriched).toBe(0);
+  });
+
+  it('drops non-software titles before the (paid) classify step', async () => {
+    let classifyCalls = 0;
+    const counting: EnrichDeps = {
+      ...deps,
+      chat: {
+        complete: async () => {
+          classifyCalls++;
+          return JSON.stringify({
+            employmentType: 'full_time',
+            roleFamily: 'backend',
+            seniority: 'entry',
+            skills: ['go'],
+          });
+        },
+      },
+    };
+    const result = await enrichPostings(
+      [
+        posting('a', { title: 'Software Engineer' }),
+        posting('b', { title: 'Registered Nurse' }),
+        posting('c', { title: 'Backend Developer' }),
+        posting('d', { title: 'Sales Coordinator' }),
+      ],
+      new Set(),
+      counting,
+    );
+    // Only the two software titles reach the LLM; the nurse/sales rows are dropped.
+    expect(classifyCalls).toBe(2);
+    expect(result.stats).toEqual({ fetched: 4, deduped: 4, filtered: 2, enriched: 2 });
+    expect(result.rows.map((r) => r.fingerprint).sort()).toEqual(['a', 'c']);
   });
 });

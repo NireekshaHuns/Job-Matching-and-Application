@@ -6,7 +6,8 @@ description: Add or modify an Inngest enrichment pipeline step (dedup, sponsor m
 # Enrichment pipeline step
 
 The enrichment pipeline is a durable Inngest function whose steps each retry
-independently. Order: dedup by fingerprint → sponsor match → LLM classify
+independently. Order: dedup by fingerprint → drop non-software titles
+(`looksLikeSwe`, before any paid call) → sponsor match → LLM classify
 (employment_type + sponsor_tier + sponsor_reason + required skills) → embed JD →
 write scored row to `jobs`.
 
