@@ -21,7 +21,7 @@ test.describe('Job board', () => {
 
   test('default sort is Apply priority', async ({ page }) => {
     await page.goto('/jobs');
-    await expect(page.getByLabel('Sort')).toHaveValue('combined');
+    await expect(page.getByLabel('Sort', { exact: true })).toHaveValue('combined');
   });
 
   test('"Show excluded" reveals the excluded role', async ({ page }) => {
@@ -42,7 +42,7 @@ test.describe('Job board', () => {
     await page.goto('/jobs');
     const highCard = page.getByRole('listitem').filter({ hasText: SEED.high });
     await expect(highCard.getByText(/Fit \d+%/)).toHaveCount(0);
-    await page.getByLabel('Resume').selectOption({ label: SEED.resumeLabel });
+    await page.getByLabel('Resume', { exact: true }).selectOption({ label: SEED.resumeLabel });
     await expect(highCard.getByText(`Fit ${SEED.fitScore}%`)).toBeVisible();
   });
 });
