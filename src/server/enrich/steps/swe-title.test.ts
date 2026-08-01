@@ -34,6 +34,26 @@ describe('looksLikeSwe', () => {
     expect(looksLikeSwe('Engineering Intern')).toBe(true);
   });
 
+  it('lets a software signal win over a disqualifier (lenient, never false-drops)', () => {
+    // "embedded"/"software" beat the "hardware engineer"/"sales engineer" denylist.
+    expect(looksLikeSwe('Embedded Hardware Engineer')).toBe(true);
+    expect(looksLikeSwe('Software Sales Engineer')).toBe(true);
+    // ...but the plain disqualified forms (no software signal) still drop.
+    expect(looksLikeSwe('Hardware Engineer')).toBe(false);
+    expect(looksLikeSwe('Sales Engineer')).toBe(false);
+  });
+
+  it('keeps new-grad SWE titles (the board is new-grad focused)', () => {
+    for (const title of [
+      'Software Engineer, New Grad 2026',
+      'Software Development Engineer I',
+      'University Grad - Software Engineer',
+      'Associate Software Engineer',
+    ]) {
+      expect(looksLikeSwe(title), title).toBe(true);
+    }
+  });
+
   it('drops clear non-software roles', () => {
     for (const title of [
       'Junior Optical Technician',

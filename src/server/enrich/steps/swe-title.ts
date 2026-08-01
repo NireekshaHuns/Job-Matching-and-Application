@@ -4,16 +4,18 @@
  * fetch every open role at a company — sales, ops, technicians, nurses — not just
  * engineering). Pure + unit-tested, mirroring `staffing.ts`.
  *
- * Design: lenient toward software. It DROPS only clear non-software roles and
- * non-software *engineering* disciplines (mechanical/optical/civil/…); it KEEPS
- * anything with a software signal AND generic "engineer/engineering" (which, at
- * the seeded tech companies, is overwhelmingly SWE). Coarse by intent — the LLM
- * classify step still assigns the precise role_family to whatever passes, and the
- * board can filter further. Title-only (JD text is often empty at fetch time).
+ * Design: lenient toward software. A software signal wins FIRST (so a compound
+ * title like "Embedded Hardware Engineer" or "Software Sales Engineer" is kept,
+ * not dropped by the denylist); otherwise clear non-software roles and
+ * non-software *engineering* disciplines (mechanical/optical/civil/…) are dropped;
+ * a bare "engineer/engineering" is kept (at the seeded tech companies it's
+ * overwhelmingly SWE). Coarse by intent — the LLM classify step still assigns the
+ * precise role_family to whatever passes. Title-only (JD text is often empty at
+ * fetch time).
  *
- * This is a title heuristic, the very thing CLAUDE.md's "filter by classification,
- * not brittle title matching" cautions against — kept deliberately lenient so the
- * broad net holds; tune the arrays if real SWE roles get dropped.
+ * A false-drop here is unrecoverable (the job never reaches the DB), so the filter
+ * leans lenient — in the spirit of the project's "broad net over SWE titles, then
+ * filter by classification" approach. Tune the arrays if real SWE roles get dropped.
  */
 
 /** Clear non-software signals — if any matches, drop the posting. */
@@ -45,8 +47,9 @@ const SWE_POSITIVE_PATTERNS: RegExp[] = [
   /\bdata scientist\b|\bapplied scientist\b|\bresearch engineer\b/i,
   /\bmember of technical staff\b|\bmts\b/i,
   /\bblockchain\b|\bgameplay\b|\bqa\s+engineer\b|\btest engineer\b/i,
-  // Language / framework named engineering roles.
-  /\b(?:java|python|golang|rust|ruby|scala|kotlin|typescript|javascript|node(?:\.?js)?|react|angular|\.net|php|c\+\+|c#)\b[^.]{0,20}\b(?:engineer|developer)\b/i,
+  // Named-language roles are already covered by "developer" / generic "engineer";
+  // "golang" is the one language token that isn't a common English word on its own.
+  /\bgolang\b/i,
 ];
 
 /** Bare "engineer/engineering" — kept only after the non-software checks above. */
@@ -59,7 +62,9 @@ const GENERIC_ENGINEER = /\bengineer(?:ing)?\b/i;
  */
 export function looksLikeSwe(title: string | null | undefined): boolean {
   if (!title) return false;
-  if (NON_SWE_PATTERNS.some((re) => re.test(title))) return false;
+  // Software signal wins first, so a compound title with both a software term and
+  // a disqualifier (e.g. "Software Sales Engineer") is kept, not dropped.
   if (SWE_POSITIVE_PATTERNS.some((re) => re.test(title))) return true;
+  if (NON_SWE_PATTERNS.some((re) => re.test(title))) return false;
   return GENERIC_ENGINEER.test(title);
 }
