@@ -72,6 +72,9 @@ jobs:
 
       - name: Point the app + seed at the branch
         run: |
+          # Mask the connection string (it carries a password) so it never
+          # appears in plaintext in the run log.
+          echo "::add-mask::${{ steps.create-branch.outputs.db_url }}"
           echo "DATABASE_URL=${{ steps.create-branch.outputs.db_url }}" >> "$GITHUB_ENV"
           echo "E2E_DATABASE_URL=${{ steps.create-branch.outputs.db_url }}" >> "$GITHUB_ENV"
 

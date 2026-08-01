@@ -25,7 +25,10 @@ export default defineConfig({
   webServer: {
     command: 'pnpm build && pnpm start',
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse an already-running dev server: it may be bound to the real
+    // dev DATABASE_URL, so tests would run against a different DB than the one
+    // the seed populated. Always spawn a fresh server pinned to the test DB.
+    reuseExistingServer: false,
     timeout: 180_000,
     // The app reads DATABASE_URL; point it at the throwaway e2e DB so a run can
     // never touch the dev database.
