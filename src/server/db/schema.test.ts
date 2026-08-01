@@ -45,6 +45,7 @@ describe('db schema', () => {
         'ml',
         'mobile',
         'systems',
+        'software',
         'other',
       ]);
     });
