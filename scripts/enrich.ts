@@ -39,7 +39,7 @@ async function main() {
   const result = await runEnrichment({ db, postings, chat, embedder });
 
   console.log(
-    `fetched ${result.stats.fetched}, unique ${result.stats.deduped}, enriched ${result.stats.enriched}, inserted ${result.inserted}.`,
+    `fetched ${result.stats.fetched}, unique ${result.stats.deduped}, non-SWE filtered ${result.stats.filtered}, enriched ${result.stats.enriched}, inserted ${result.inserted}.`,
   );
   console.log(
     `freshness: refreshed ${result.reconcile.refreshed}, closed ${result.reconcile.closed} stale; aliases upserted ${result.aliasesWritten}.`,
