@@ -39,24 +39,35 @@ export function mergeBoards<T>(seed: T[], discovered: T[] | undefined, key: (b: 
 }
 
 /**
- * Hand-seeded starter tokens per ATS. A later ticket discovers more from the
- * SimplifyJobs listing URLs + public seed lists. Validate tokens against the
- * live API before relying on them (~20–40% churn at any time).
+ * Curated seed tokens per ATS — a focused set of well-known H1B-sponsor
+ * companies (tokens validated against the live ATS APIs). This is the board's
+ * durable source of truth; `pnpm ats:discover` can still widen the net into
+ * `ats-boards.json` (merged in, seeds win on collision). Tokens churn
+ * (~20–40%), so re-validate before relying on any single one.
  */
 export const GREENHOUSE_BOARDS: GreenhouseBoard[] = [
   { token: 'stripe', company: 'Stripe' },
   { token: 'databricks', company: 'Databricks' },
   { token: 'airbnb', company: 'Airbnb' },
+  { token: 'figma', company: 'Figma' },
+  { token: 'anthropic', company: 'Anthropic' },
+  { token: 'purestorage', company: 'Pure Storage' },
+  { token: 'twitch', company: 'Twitch' },
+  { token: 'sigmacomputing', company: 'Sigma Computing' },
 ];
 
 export const LEVER_BOARDS: LeverBoard[] = [
-  { token: 'netflix', company: 'Netflix' },
   { token: 'plaid', company: 'Plaid' },
+  { token: 'palantir', company: 'Palantir' },
+  { token: 'spotify', company: 'Spotify' },
+  { token: 'veeva', company: 'Veeva Systems' },
 ];
 
 export const ASHBY_BOARDS: AshbyBoard[] = [
   { board: 'ramp', company: 'Ramp' },
   { board: 'notion', company: 'Notion' },
+  { board: 'snowflake', company: 'Snowflake' },
+  { board: 'baseten', company: 'Baseten' },
 ];
 
 /**
