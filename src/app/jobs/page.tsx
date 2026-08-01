@@ -90,6 +90,7 @@ export default function JobsPage() {
         <label className="flex items-center gap-1">
           Sort
           <select
+            aria-label="Sort"
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
             className="rounded border border-zinc-300 px-1 py-1"
@@ -103,6 +104,7 @@ export default function JobsPage() {
         <label className="flex items-center gap-1">
           Resume
           <select
+            aria-label="Resume"
             value={resumeId ?? ''}
             onChange={(e) => setResumeId(e.target.value ? Number(e.target.value) : undefined)}
             className="rounded border border-zinc-300 px-1 py-1"
@@ -118,6 +120,7 @@ export default function JobsPage() {
         <label className="flex items-center gap-1">
           New hires
           <select
+            aria-label="New hires"
             value={newHire}
             onChange={(e) => setNewHire(e.target.value as NewHireFilter)}
             className="rounded border border-zinc-300 px-1 py-1"
