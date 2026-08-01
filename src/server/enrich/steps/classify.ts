@@ -22,7 +22,7 @@ export const CLASSIFY_SYSTEM_PROMPT = [
   'You classify software-engineering job postings. Respond with ONLY a JSON object, no prose.',
   'Fields:',
   `- employmentType: one of ${employmentTypeEnum.enumValues.join(', ')} (contract/staffing/C2C/1099 => "contract", direct-hire => "full_time").`,
-  `- roleFamily: one of ${roleFamilyEnum.enumValues.join(', ')}.`,
+  `- roleFamily: one of ${roleFamilyEnum.enumValues.join(', ')}. Use "software" for a general software-engineering role with no specific specialty (e.g. a plain "Software Engineer"); use "other" ONLY for genuinely non-software roles.`,
   `- seniority: one of ${seniorityEnum.enumValues.join(', ')} ("entry" = new-grad/junior, "mid" = a few years, everything senior/staff/lead/manager => "other").`,
   '- skills: array of concrete technical keywords — technologies/tools/languages named (e.g. ["go", "kafka", "react"]). Exclude generic basics. Empty array if none.',
   '- softKeywords: array of soft skills/competencies the posting emphasizes (e.g. ["ownership", "cross-functional collaboration", "mentorship"]). Exclude basic expectations. Empty array if none.',

@@ -44,7 +44,11 @@ export const employmentTypeEnum = pgEnum('employment_type', ['full_time', 'contr
  */
 export const sponsorTierEnum = pgEnum('sponsor_tier', ['High', 'Medium', 'Low', 'Excluded']);
 
-/** Normalized role family assigned by the LLM classify step. */
+/**
+ * Normalized role family assigned by the LLM classify step. `software` is the
+ * general software-engineering bucket (a plain "Software Engineer" with no
+ * declared specialty); `other` is reserved for genuinely non-software roles.
+ */
 export const roleFamilyEnum = pgEnum('role_family', [
   'frontend',
   'backend',
@@ -54,6 +58,7 @@ export const roleFamilyEnum = pgEnum('role_family', [
   'ml',
   'mobile',
   'systems',
+  'software',
   'other',
 ]);
 
