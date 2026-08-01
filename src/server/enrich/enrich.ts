@@ -14,6 +14,7 @@ import { dedupPostings } from './steps/dedup';
 import { embedJd } from './steps/embed';
 import type { SponsorResolver } from './steps/resolver';
 import { matchSponsor } from './steps/sponsor-match';
+import { looksLikeSwe } from './steps/swe-title';
 import type { ChatClient, Embedder } from './types';
 
 export interface EnrichDeps {
@@ -35,12 +36,13 @@ export async function enrichPosting(posting: RawPosting, deps: EnrichDeps): Prom
 
 export interface EnrichResult {
   rows: NewJob[];
-  stats: { fetched: number; deduped: number; enriched: number };
+  /** `filtered` = non-software titles dropped before the (paid) classify step. */
+  stats: { fetched: number; deduped: number; filtered: number; enriched: number };
 }
 
 /**
- * Dedup a batch, drop postings already in `jobs`, and enrich the rest. Runs
- * sequentially to stay gentle on LLM rate limits.
+ * Dedup a batch, drop postings already in `jobs` and non-software titles, then
+ * enrich the rest. Runs sequentially to stay gentle on LLM rate limits.
  */
 export async function enrichPostings(
   postings: RawPosting[],
@@ -49,9 +51,12 @@ export async function enrichPostings(
 ): Promise<EnrichResult> {
   const deduped = dedupPostings(postings);
   const fresh = deduped.filter((p) => !existingFingerprints.has(p.fingerprint));
+  // Drop obviously-non-software titles BEFORE the paid classify/embed loop, so a
+  // sales/technician/ops posting never costs an LLM call.
+  const swe = fresh.filter((p) => looksLikeSwe(p.title));
 
   const rows: NewJob[] = [];
-  for (const posting of fresh) {
+  for (const posting of swe) {
     rows.push(await enrichPosting(posting, deps));
   }
 
@@ -60,7 +65,8 @@ export async function enrichPostings(
     stats: {
       fetched: postings.length,
       deduped: deduped.length,
-      enriched: fresh.length,
+      filtered: fresh.length - swe.length,
+      enriched: swe.length,
     },
   };
 }
