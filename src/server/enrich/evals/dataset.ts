@@ -70,4 +70,11 @@ export const CLASSIFY_DATASET: ClassifyExample[] = [
     'Train and deploy models. PyTorch. Recent MS/PhD grads welcome.',
     { employmentType: 'full_time', roleFamily: 'ml', seniority: 'entry' },
   ),
+  example(
+    'generic-software',
+    'Software Engineer, New Grad',
+    'Join our engineering team building products end to end. New grads welcome.',
+    // No declared specialty -> the general "software" bucket, not "other".
+    { employmentType: 'full_time', roleFamily: 'software', seniority: 'entry' },
+  ),
 ];

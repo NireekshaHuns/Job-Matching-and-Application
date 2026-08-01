@@ -1,0 +1,1 @@
+ALTER TYPE "public"."role_family" ADD VALUE 'software' BEFORE 'other';
