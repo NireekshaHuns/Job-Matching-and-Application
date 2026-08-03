@@ -7,14 +7,24 @@
  * compile is intentionally local (Overleaf or `pnpm resume:pdf`) — the serverless
  * host has no LaTeX engine.
  */
+import type { inferRouterOutputs } from '@trpc/server';
 import { useState } from 'react';
-import { ErrorState } from '@/components/page-state';
+import { ErrorState, LoadingSkeleton } from '@/components/page-state';
+import type { AppRouter } from '@/server/trpc/root';
 import { trpc } from '@/trpc/react';
+
+type TailorResult = inferRouterOutputs<AppRouter>['resumes']['tailor'];
 
 const selectCls =
   'rounded-md border border-zinc-300 px-2 py-1 text-sm focus:border-zinc-500 focus:outline-none';
 const btnCls =
   'rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50';
+
+/** Parse a <select> value to an id, or undefined if it isn't a real number. */
+function toId(value: string): number | undefined {
+  const n = Number(value);
+  return Number.isNaN(n) ? undefined : n;
+}
 
 function download(filename: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/x-tex' }));
@@ -47,78 +57,88 @@ export default function StudioPage() {
         </p>
       </header>
 
-      <div className="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 p-4">
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Job
-          <select
-            className={`${selectCls} min-w-64`}
-            aria-label="Job to tailor for"
-            value={effectiveJobId ?? ''}
-            onChange={(e) => setJobId(Number(e.target.value))}
-          >
-            {jobs.data?.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.company} — {j.title}
-              </option>
-            ))}
-          </select>
-        </label>
+      {jobs.isError ? (
+        <ErrorState message={jobs.error.message} onRetry={() => jobs.refetch()} />
+      ) : resumes.isError ? (
+        <ErrorState message={resumes.error.message} onRetry={() => resumes.refetch()} />
+      ) : !jobs.data || !resumes.data ? (
+        <LoadingSkeleton rows={2} />
+      ) : (
+        <>
+          <div className="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 p-4">
+            <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              Job
+              <select
+                className={`${selectCls} min-w-64`}
+                value={effectiveJobId ?? ''}
+                onChange={(e) => setJobId(toId(e.target.value))}
+              >
+                {jobs.data.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.company} — {j.title}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <label className="flex flex-col gap-1 text-xs text-zinc-500">
-          Base résumé
-          <select
-            className={selectCls}
-            aria-label="Base résumé lens"
-            value={effectiveResumeId ?? ''}
-            onChange={(e) => setResumeId(Number(e.target.value))}
-          >
-            {resumes.data?.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              Base résumé
+              <select
+                className={selectCls}
+                value={effectiveResumeId ?? ''}
+                onChange={(e) => setResumeId(toId(e.target.value))}
+              >
+                {resumes.data.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <button
-          type="button"
-          className={btnCls}
-          disabled={!canGenerate}
-          onClick={() =>
-            effectiveJobId != null &&
-            effectiveResumeId != null &&
-            tailor.mutate({ jobId: effectiveJobId, resumeId: effectiveResumeId })
-          }
-        >
-          {tailor.isPending ? 'Generating…' : 'Generate'}
-        </button>
-      </div>
+            <button
+              type="button"
+              className={btnCls}
+              disabled={!canGenerate}
+              onClick={() =>
+                effectiveJobId != null &&
+                effectiveResumeId != null &&
+                tailor.mutate({ jobId: effectiveJobId, resumeId: effectiveResumeId })
+              }
+            >
+              {tailor.isPending ? 'Generating…' : 'Generate'}
+            </button>
+          </div>
 
-      {resumes.data?.length === 0 && (
-        <p className="mb-4 text-sm text-amber-700">
-          No base résumé yet. Add one in{' '}
-          <a className="underline" href="/settings">
-            Settings
-          </a>{' '}
-          first.
-        </p>
+          {resumes.data.length === 0 && (
+            <p className="mb-4 text-sm text-amber-700">
+              No base résumé yet. Add one in{' '}
+              <a className="underline" href="/settings">
+                Settings
+              </a>{' '}
+              first.
+            </p>
+          )}
+
+          {tailor.isError && <ErrorState message={tailor.error.message} />}
+          {tailor.data && <Result data={tailor.data} />}
+        </>
       )}
-
-      {tailor.isError && <ErrorState message={tailor.error.message} />}
-
-      {tailor.data && <Result data={tailor.data} />}
     </main>
   );
 }
 
-type TailorResult = NonNullable<ReturnType<typeof trpc.resumes.tailor.useMutation>['data']>;
-
 function Result({ data }: { data: TailorResult }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    await navigator.clipboard.writeText(data.latex);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard?.writeText(data.latex);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be unavailable (insecure context / denied) — the .tex is
+      // still downloadable, so just leave the button label unchanged.
+    }
   };
 
   return (
