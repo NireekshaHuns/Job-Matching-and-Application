@@ -53,7 +53,8 @@ Five stages: gather → check sponsorship → filter junk → rank vs. resume �
 - New ingestion sources implement the common connector interface with a dedup fingerprint and fixture-based tests (see the `add-job-source` skill).
 - Inngest steps are small and individually testable (see the `enrichment-step` skill).
 - Secrets live in `.env` (git-ignored); keep `.env.example` current. Never commit secrets.
-- Conventional Commit messages. Small, logical commits.
+- Small, logical commits with plain, concise messages — usually a single line, like normal day-to-day development (a Conventional-Commit prefix is fine but not required).
+- **Never** add a `Co-Authored-By: Claude`/AI trailer to commits, and never mention Claude, AI, or code generators anywhere in commit messages or PR titles/descriptions. Commits and PRs must read as ordinary human authorship.
 
 ## Working process
 
