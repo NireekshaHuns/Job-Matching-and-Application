@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DB } from '@/server/db';
 import type { Context } from '@/server/trpc/context';
 import { createCaller } from '@/server/trpc/root';
+import { tailorInput } from './resumes';
 
 /**
  * Fake db returning queued row-lists for each `.select().from().where().limit()`
@@ -75,5 +76,85 @@ describe('resumes.tailoringSuggestions', () => {
     expect(res.matched).toEqual(['go']);
     expect(res.gaps).toEqual(['rust']);
     expect(res.addable).toEqual([]);
+  });
+});
+
+describe('tailorInput', () => {
+  it('requires integer jobId and resumeId', () => {
+    expect(() => tailorInput.parse({ jobId: 1.5, resumeId: 1 })).toThrow();
+    expect(() => tailorInput.parse({ jobId: 1 })).toThrow();
+    expect(tailorInput.parse({ jobId: 1, resumeId: 2 })).toMatchObject({ jobId: 1, resumeId: 2 });
+  });
+
+  it('bounds maxAttempts to 1–5 when provided', () => {
+    expect(() => tailorInput.parse({ jobId: 1, resumeId: 2, maxAttempts: 0 })).toThrow();
+    expect(() => tailorInput.parse({ jobId: 1, resumeId: 2, maxAttempts: 6 })).toThrow();
+    expect(tailorInput.parse({ jobId: 1, resumeId: 2, maxAttempts: 3 }).maxAttempts).toBe(3);
+  });
+});
+
+describe('resumes.tailor', () => {
+  // Force the deterministic fallback path regardless of the dev's real env.
+  afterEach(() => vi.unstubAllEnvs());
+  const noKey = () => vi.stubEnv('OPENAI_API_KEY', '');
+
+  it('throws NOT_FOUND when the job is missing', async () => {
+    noKey();
+    await expect(
+      caller([[], [{ content: '\\section*{X}', roleFamily: 'backend' }]]).resumes.tailor({
+        jobId: 1,
+        resumeId: 1,
+      }),
+    ).rejects.toThrow(/Job not found/);
+  });
+
+  it('throws NOT_FOUND when the résumé is missing', async () => {
+    noKey();
+    await expect(
+      caller([
+        [{ title: 'BE', company: 'Acme', techKeywords: ['go'], softKeywords: [] }],
+        [],
+      ]).resumes.tailor({ jobId: 1, resumeId: 999 }),
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it('throws BAD_REQUEST when the base résumé has no content', async () => {
+    noKey();
+    await expect(
+      caller([
+        [{ title: 'BE', company: 'Acme', techKeywords: ['go'], softKeywords: [] }],
+        [{ content: null, roleFamily: 'backend' }],
+      ]).resumes.tailor({ jobId: 1, resumeId: 1 }),
+    ).rejects.toThrow(/no content/i);
+  });
+
+  it('falls back to the base résumé (source: base) with a fit snapshot when no key is set', async () => {
+    noKey();
+    const res = await caller([
+      // job
+      [
+        {
+          title: 'Backend Engineer',
+          company: 'Acme',
+          techKeywords: ['go', 'rust'],
+          softKeywords: [],
+        },
+      ],
+      // resume (base LaTeX + role)
+      [{ content: '\\section*{EXPERIENCE}\nbase body', roleFamily: 'backend' }],
+      // master skills
+      [{ skill: 'go' }],
+      // bullets
+      [{ text: 'Shipped a Go service.', skills: ['go'], roleFamily: 'backend' }],
+    ]).resumes.tailor({ jobId: 1, resumeId: 1 });
+
+    expect(res.source).toBe('base');
+    expect(res.report).toBeNull();
+    expect(res.latex).toContain('base body');
+    // "go" matched via the bullet; "rust" is an honest gap (not in inventory).
+    expect(res.fit.matched).toEqual(['go']);
+    expect(res.fit.missingGap).toEqual(['rust']);
+    expect(res.coverableKeywords).toContain('go');
+    expect(res.trueGaps).toEqual(['rust']);
   });
 });
