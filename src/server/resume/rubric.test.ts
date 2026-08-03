@@ -21,4 +21,11 @@ describe('RESUME_RUBRIC_PROMPT', () => {
   it('has a sane word target', () => {
     expect(WORD_MIN).toBeLessThan(WORD_MAX);
   });
+
+  it('instructs the model to preserve template structure (headings + PROJECTS)', () => {
+    const p = RESUME_RUBRIC_PROMPT.toLowerCase();
+    expect(p).toContain('heading');
+    expect(p).toContain('projects');
+    expect(p).toContain('verbatim');
+  });
 });
