@@ -93,15 +93,35 @@ const US_METROS = [
   'philadelphia',
   'pittsburgh',
   'portland',
+  'phoenix',
+  'columbus',
+  'charlotte',
+  'indianapolis',
+  'san antonio',
+  'jacksonville',
+  'nashville',
+  'miami',
+  'minneapolis',
+  'detroit',
+  'sacramento',
+  'raleigh',
+  'kansas city',
+  'salt lake city',
 ];
 
 /** Explicit US markers (matched as substrings, dots/spaces tolerant). */
 const US_MARKERS = ['united states', 'u.s.a', 'u.s.', 'usa', 'us-remote', 'us remote', 'remote us'];
 
-/** Two-letter state codes — only counted when comma-prefixed ("Austin, TX"). */
-const US_STATE_CODES =
-  'al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy';
-const STATE_CODE_RE = new RegExp(`,\\s*(?:${US_STATE_CODES})\\b`, 'i');
+/**
+ * Two-letter state codes, only counted when comma-prefixed ("Austin, TX").
+ * DELIBERATELY excludes state codes that are also ISO-3166 country codes
+ * (CA/IN/IL/DE/GA/AL/AR/AZ/CO/ID/KY/LA/MA/MD/ME/MN/MO/MS/MT/NC/NE/PA/SC/SD/TN/VA),
+ * so "Toronto, CA" / "Mumbai, IN" aren't mislabeled US — the non-US city name
+ * wins for those. Cities using an ambiguous code fall through to `null` (shown),
+ * which is safer than a false US positive.
+ */
+const SAFE_STATE_CODES = 'ak|ct|fl|hi|ia|ks|mi|nv|nh|nj|nm|ny|nd|oh|ok|or|ri|tx|ut|vt|wa|wv|wi|wy';
+const STATE_CODE_RE = new RegExp(`,\\s*(?:${SAFE_STATE_CODES})\\b`, 'i');
 
 /** Known non-US countries, cities, and regions. */
 const NON_US = [
@@ -113,8 +133,11 @@ const NON_US = [
   'ottawa',
   'waterloo',
   'calgary',
-  // UK / Ireland
+  // UK / Ireland ('uk' short form included; 'manchester' also a US city but
+  // rare in these feeds — a "Manchester, NH" style US code still wins via SAFE state codes)
   'united kingdom',
+  'uk',
+  'britain',
   'england',
   'scotland',
   'london',
@@ -176,11 +199,19 @@ const NON_US = [
   'tel aviv',
   'dubai',
   'uae',
+  'argentina',
+  'buenos aires',
+  'colombia',
+  'bogota',
+  'philippines',
+  'manila',
+  'vietnam',
+  'indonesia',
+  'jakarta',
   // Regions
   'emea',
   'apac',
   'latam',
-  'united kingdom',
 ];
 
 /** Word-boundary presence for any term in a list. */

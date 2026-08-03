@@ -222,6 +222,7 @@ export const jobsRouter = createTRPCRouter({
         title: jobs.title,
         location: jobs.location,
         isRemote: jobs.isRemote,
+        isUs: jobs.isUs,
         url: jobs.url,
         source: jobs.source,
         postedDate: jobs.postedDate,

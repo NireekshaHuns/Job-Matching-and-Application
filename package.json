@@ -29,6 +29,7 @@
     "inventory:extract": "tsx scripts/extract-inventory.ts",
     "inventory:suggest": "tsx scripts/suggest-inventory.ts",
     "score:fits": "tsx scripts/score-fits.ts",
+    "backfill:is-us": "tsx scripts/backfill-is-us.ts",
     "people:purge": "tsx scripts/purge-people-cache.ts",
     "tailor": "tsx scripts/tailor.ts",
     "resume:pdf": "tsx scripts/compile-resume.ts"

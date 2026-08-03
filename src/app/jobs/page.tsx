@@ -242,6 +242,11 @@ export default function JobsPage() {
                   {job.company}
                   {job.location ? ` · ${job.location}` : ''}
                   {job.isRemote ? ' · Remote' : ''}
+                  {job.isUs === false && (
+                    <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-xs text-amber-800">
+                      Non-US
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">

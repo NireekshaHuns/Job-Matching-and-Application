@@ -228,6 +228,28 @@ describe('buildJobRow', () => {
     expect(row.employmentType).toBe('contract');
   });
 
+  it('derives is_us=false for a known non-US location', () => {
+    const row = buildJobRow(
+      posting({ location: 'London, UK' }),
+      {
+        tier: 'Low',
+        reason: 'why',
+        sponsorCount: 0,
+        newHireStatus: 'unknown',
+        matchConfidence: null,
+      },
+      {
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: ['go'],
+        softKeywords: [],
+      },
+      null,
+    );
+    expect(row.isUs).toBe(false);
+  });
+
   it('leaves a genuine full_time role untouched', () => {
     const row = buildJobRow(
       posting({ jdText: 'Join our platform team building payments in Go.' }),

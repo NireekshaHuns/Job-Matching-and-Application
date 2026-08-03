@@ -33,6 +33,21 @@ describe('deriveIsUs', () => {
 
   it('prefers US when a role spans US and non-US', () => {
     expect(deriveIsUs('US or Canada')).toBe(true);
-    expect(deriveIsUs('Vancouver, WA')).toBe(true); // Washington state, not BC
+    expect(deriveIsUs('Vancouver, WA')).toBe(true); // Washington (safe code), not BC
+  });
+
+  it('does not mislabel non-US cities whose state-code doubles as a country code', () => {
+    // CA/IN/IL/DE/AR are US state codes AND ISO country codes; the city name wins.
+    expect(deriveIsUs('Toronto, CA')).toBe(false);
+    expect(deriveIsUs('Mumbai, IN')).toBe(false);
+    expect(deriveIsUs('Tel Aviv, IL')).toBe(false);
+    expect(deriveIsUs('Berlin, DE')).toBe(false);
+    expect(deriveIsUs('Buenos Aires, AR')).toBe(false);
+  });
+
+  it('keeps US cities that use a US metro or an unambiguous state code', () => {
+    expect(deriveIsUs('Manchester, NH')).toBe(true); // New Hampshire, not UK
+    expect(deriveIsUs('Sacramento, CA')).toBe(true); // metro match despite ambiguous CA
+    expect(deriveIsUs('Austin, TX')).toBe(true);
   });
 });
