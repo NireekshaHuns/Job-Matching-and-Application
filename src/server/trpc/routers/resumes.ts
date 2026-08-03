@@ -7,7 +7,14 @@
 import { TRPCError } from '@trpc/server';
 import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { jobs, masterSkills, resumeBullets, resumes } from '@/server/db/schema';
+import {
+  jobs,
+  masterSkills,
+  resumeBullets,
+  resumes,
+  roleFamilyEnum,
+  skillKindEnum,
+} from '@/server/db/schema';
 import { buildTailoringSuggestions } from '@/server/resume/suggestions';
 import {
   selectTailoringInputs,
@@ -23,6 +30,67 @@ export const tailorInput = z.object({
   resumeId: z.number().int(),
   maxAttempts: z.number().int().min(1).max(5).optional(),
 });
+
+// ---- Settings / inventory management (master skills, bullet bank, base résumés) ----
+
+export const addSkillInput = z.object({
+  skill: z.string().trim().min(1).max(100),
+  kind: z.enum(skillKindEnum.enumValues),
+});
+export const removeSkillInput = z.object({ skill: z.string().trim().min(1) });
+
+const skillTag = z.string().trim().min(1).max(100);
+
+export const addBulletInput = z.object({
+  text: z.string().trim().min(1).max(500),
+  skills: z.array(skillTag).default([]),
+  roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
+  company: z.string().trim().max(200).nullish(),
+});
+export const updateBulletInput = z.object({
+  id: z.number().int(),
+  text: z.string().trim().min(1).max(500).optional(),
+  skills: z.array(skillTag).optional(),
+  // nullish: undefined = leave unchanged, null = clear.
+  roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
+  company: z.string().trim().max(200).nullish(),
+});
+export type UpdateBulletInput = z.infer<typeof updateBulletInput>;
+
+export const upsertBaseResumeInput = z.object({
+  id: z.number().int().optional(),
+  label: z.string().trim().min(1).max(200),
+  roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
+  content: z.string().min(1),
+});
+
+const idInput = z.object({ id: z.number().int() });
+
+/** Lowercase, trim, drop empties, dedupe — matches the fit-scoring join key. */
+export function normalizeSkillList(skills: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const s of skills) {
+    const n = s.trim().toLowerCase();
+    if (n && !seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    }
+  }
+  return out;
+}
+
+/** Pure: columns to change for a bullet update (undefined = leave, null = clear). */
+export function buildBulletUpdate(
+  input: UpdateBulletInput,
+): Partial<typeof resumeBullets.$inferInsert> {
+  const set: Partial<typeof resumeBullets.$inferInsert> = {};
+  if (input.text !== undefined) set.text = input.text;
+  if (input.skills !== undefined) set.skills = normalizeSkillList(input.skills);
+  if (input.roleFamily !== undefined) set.roleFamily = input.roleFamily;
+  if (input.company !== undefined) set.company = input.company;
+  return set;
+}
 
 export const resumesRouter = createTRPCRouter({
   listBase: publicProcedure.query(async ({ ctx }) => {
@@ -189,5 +257,104 @@ export const resumesRouter = createTRPCRouter({
       coverableKeywords: inputs.coverableKeywords,
       trueGaps: inputs.trueGaps,
     };
+  }),
+
+  /** Full résumé inventory for the settings page. */
+  inventory: publicProcedure.query(async ({ ctx }) => {
+    const [skills, bullets, baseResumes] = await Promise.all([
+      ctx.db
+        .select({ skill: masterSkills.skill, kind: masterSkills.kind })
+        .from(masterSkills)
+        .orderBy(asc(masterSkills.skill)),
+      ctx.db
+        .select({
+          id: resumeBullets.id,
+          text: resumeBullets.text,
+          skills: resumeBullets.skills,
+          roleFamily: resumeBullets.roleFamily,
+          company: resumeBullets.company,
+        })
+        .from(resumeBullets)
+        .orderBy(asc(resumeBullets.id)),
+      ctx.db
+        .select({
+          id: resumes.id,
+          label: resumes.label,
+          roleFamily: resumes.roleFamily,
+          content: resumes.content,
+        })
+        .from(resumes)
+        .where(eq(resumes.kind, 'base'))
+        .orderBy(asc(resumes.label)),
+    ]);
+    return { skills, bullets, baseResumes };
+  }),
+
+  addSkill: publicProcedure.input(addSkillInput).mutation(async ({ ctx, input }) => {
+    // Lowercase before insert so the app-enforced uniqueness on master_skills.skill
+    // (a raw-column unique constraint) can't get case-variant duplicates, and so it
+    // matches the lowercase fit-scoring join key (see resume/fit.ts).
+    const skill = input.skill.trim().toLowerCase();
+    await ctx.db.insert(masterSkills).values({ skill, kind: input.kind }).onConflictDoNothing();
+    return { skill };
+  }),
+
+  removeSkill: publicProcedure.input(removeSkillInput).mutation(async ({ ctx, input }) => {
+    const skill = input.skill.trim().toLowerCase();
+    await ctx.db.delete(masterSkills).where(eq(masterSkills.skill, skill));
+    return { skill };
+  }),
+
+  addBullet: publicProcedure.input(addBulletInput).mutation(async ({ ctx, input }) => {
+    const [row] = await ctx.db
+      .insert(resumeBullets)
+      .values({
+        text: input.text,
+        skills: normalizeSkillList(input.skills),
+        roleFamily: input.roleFamily ?? null,
+        company: input.company ?? null,
+      })
+      .returning({ id: resumeBullets.id });
+    return row;
+  }),
+
+  updateBullet: publicProcedure.input(updateBulletInput).mutation(async ({ ctx, input }) => {
+    const set = buildBulletUpdate(input);
+    if (Object.keys(set).length > 0) {
+      await ctx.db.update(resumeBullets).set(set).where(eq(resumeBullets.id, input.id));
+    }
+    return { id: input.id };
+  }),
+
+  removeBullet: publicProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+    await ctx.db.delete(resumeBullets).where(eq(resumeBullets.id, input.id));
+    return { id: input.id };
+  }),
+
+  upsertBaseResume: publicProcedure
+    .input(upsertBaseResumeInput)
+    .mutation(async ({ ctx, input }) => {
+      if (input.id !== undefined) {
+        await ctx.db
+          .update(resumes)
+          .set({ label: input.label, roleFamily: input.roleFamily ?? null, content: input.content })
+          .where(eq(resumes.id, input.id));
+        return { id: input.id };
+      }
+      const [row] = await ctx.db
+        .insert(resumes)
+        .values({
+          label: input.label,
+          kind: 'base',
+          roleFamily: input.roleFamily ?? null,
+          content: input.content,
+        })
+        .returning({ id: resumes.id });
+      return row;
+    }),
+
+  removeBaseResume: publicProcedure.input(idInput).mutation(async ({ ctx, input }) => {
+    await ctx.db.delete(resumes).where(eq(resumes.id, input.id));
+    return { id: input.id };
   }),
 });
