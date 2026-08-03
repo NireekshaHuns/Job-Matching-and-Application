@@ -198,13 +198,40 @@ describe('lintResume', () => {
       expect(hasRule(report, 'section-structure')).toBe(true);
     });
 
-    it('respects a custom lockedSections override', () => {
+    it('locks additional sections via lockedSections (extends, not replaces)', () => {
       const changedSkills = TAILORED_OK.replace('Go, Kafka, PostgreSQL', 'Rust');
       const report = lintResume(changedSkills, {
         base: BASE_RESUME,
         lockedSections: ['technical skills'],
       });
       expect(hasRule(report, 'locked-section')).toBe(true);
+    });
+
+    it('always keeps PROJECTS locked even when lockedSections omits it', () => {
+      const tampered = TAILORED_OK.replace(
+        'ranked postings for 1,000 users',
+        'ranked postings for 9,000 users',
+      );
+      const report = lintResume(tampered, {
+        base: BASE_RESUME,
+        lockedSections: ['technical skills'], // note: no 'projects'
+      });
+      expect(hasRule(report, 'locked-section')).toBe(true);
+    });
+
+    it('flags reordered headings even when the set is identical', () => {
+      const a = '\\section*{A}\nx\n\\section*{B}\ny';
+      const reordered = '\\section*{B}\ny\n\\section*{A}\nx';
+      const report = lintResume(reordered, { base: a });
+      expect(hasRule(report, 'section-structure')).toBe(true);
+    });
+
+    it('warns and skips lock checks when the base has no sections', () => {
+      const report = lintResume('- Shipped an API that cut latency by 40% for users.', {
+        base: 'plain base resume, no section headings',
+      });
+      expect(hasRule(report, 'template-structure')).toBe(true);
+      for (const rule of structuralRules) expect(hasRule(report, rule)).toBe(false);
     });
   });
 
@@ -225,6 +252,20 @@ describe('lintResume', () => {
       const { header, sections } = extractSections('- just a bullet, no sections');
       expect(sections).toEqual([]);
       expect(header).toContain('just a bullet');
+    });
+
+    it('handles headings with nested braces', () => {
+      const tex = String.raw`\section*{\textbf{Technical Skills}} Java, Python`;
+      const { sections } = extractSections(tex);
+      expect(sections).toHaveLength(1);
+      expect(sections[0].title).toBe(String.raw`\textbf{Technical Skills}`);
+      expect(sections[0].body.trim()).toBe('Java, Python');
+    });
+
+    it('ignores commented-out section headings', () => {
+      const tex = ['\\section*{EDUCATION}', 'MS CS', '% \\section*{OLD}', 'more'].join('\n');
+      const { sections } = extractSections(tex);
+      expect(sections.map((s) => s.title)).toEqual(['EDUCATION']);
     });
   });
 });

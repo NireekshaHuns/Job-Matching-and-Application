@@ -59,9 +59,6 @@ export interface ResumeStructure {
   sections: ResumeSection[];
 }
 
-// \section{...} or \section*{...}; titles here are simple (no nested braces).
-const SECTION_RE = /\\section\*?\s*\{([^}]*)\}/g;
-
 /** Collapse whitespace + trim, for structural (whitespace-insensitive) compares. */
 function normBlock(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
@@ -71,17 +68,58 @@ function normKey(s: string): string {
   return normBlock(s).toLowerCase();
 }
 
-/** Split a LaTeX résumé into its header and \section blocks. */
-export function extractSections(text: string): ResumeStructure {
-  const matches = [...text.matchAll(SECTION_RE)];
-  if (matches.length === 0) return { header: text, sections: [] };
+/** Drop LaTeX line comments (unescaped %) so commented-out headings don't register. */
+function stripComments(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      let out = '';
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] === '%' && line[i - 1] !== '\\') break;
+        out += line[i];
+      }
+      return out;
+    })
+    .join('\n');
+}
 
-  const header = text.slice(0, matches[0].index ?? 0);
-  const sections: ResumeSection[] = matches.map((m, i) => {
-    const start = (m.index ?? 0) + m[0].length;
-    const end = i + 1 < matches.length ? (matches[i + 1].index ?? text.length) : text.length;
-    const title = m[1].trim();
-    return { title, key: normKey(title), body: text.slice(start, end) };
+/**
+ * From the index of an opening `{`, return the inner content and the index of
+ * the matching `}` (brace-depth aware, skipping escaped `\{`/`\}`). Handles
+ * nested-brace headings like `\section{\textbf{Skills}}`.
+ */
+function readBalancedBraces(text: string, open: number): { content: string; end: number } {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '\\') {
+      i++; // skip the escaped character
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return { content: text.slice(open + 1, i), end: i };
+  }
+  return { content: text.slice(open + 1), end: text.length - 1 };
+}
+
+/** Split a LaTeX résumé into its header and \section blocks. */
+export function extractSections(raw: string): ResumeStructure {
+  const text = stripComments(raw);
+  const cmd = /\\section\*?\s*\{/g;
+  const heads: { cmdStart: number; bodyStart: number; title: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = cmd.exec(text)) !== null) {
+    const braceOpen = m.index + m[0].length - 1; // index of the '{'
+    const { content, end } = readBalancedBraces(text, braceOpen);
+    heads.push({ cmdStart: m.index, bodyStart: end + 1, title: content.trim() });
+    cmd.lastIndex = end + 1; // resume scanning past the (possibly nested) title
+  }
+  if (heads.length === 0) return { header: text, sections: [] };
+
+  const header = text.slice(0, heads[0].cmdStart);
+  const sections: ResumeSection[] = heads.map((h, i) => {
+    const bodyEnd = i + 1 < heads.length ? heads[i + 1].cmdStart : text.length;
+    return { title: h.title, key: normKey(h.title), body: text.slice(h.bodyStart, bodyEnd) };
   });
   return { header, sections };
 }
@@ -270,41 +308,58 @@ export function lintResume(text: string, opts: LintOptions = {}): LintReport {
 
   // Template contract: when a base résumé is given, headings + header + the
   // locked sections must survive tailoring untouched.
-  if (opts.base) {
+  if (opts.base !== undefined) {
     const base = extractSections(opts.base);
-    const tailored = extractSections(text);
-    const lockedKeys = new Set((opts.lockedSections ?? DEFAULT_LOCKED_SECTIONS).map(normKey));
-
-    const baseTitles = base.sections.map((s) => s.key).join('|');
-    const tailoredTitles = tailored.sections.map((s) => s.key).join('|');
-    if (baseTitles !== tailoredTitles) {
+    if (base.sections.length === 0) {
+      // No headings to anchor on — treating the whole doc as a locked header
+      // would flag every legitimate edit, so skip the checks and surface why.
       violations.push({
-        rule: 'section-structure',
-        severity: 'error',
-        message: `Section headings must match the template. Expected [${base.sections
-          .map((s) => s.title)
-          .join(', ')}], got [${tailored.sections.map((s) => s.title).join(', ')}].`,
+        rule: 'template-structure',
+        severity: 'warn',
+        message: 'Base résumé has no \\section headings; structural lock checks skipped.',
       });
-    }
+    } else {
+      const tailored = extractSections(text);
+      // PROJECTS is always locked; callers can only add to the set, never unlock it.
+      const lockedKeys = new Set(
+        [...DEFAULT_LOCKED_SECTIONS, ...(opts.lockedSections ?? [])].map(normKey),
+      );
 
-    if (normBlock(base.header) !== normBlock(tailored.header)) {
-      violations.push({
-        rule: 'header-changed',
-        severity: 'error',
-        message: 'Header (name, contact, preamble) must be preserved verbatim.',
-      });
-    }
-
-    const tailoredByKey = new Map(tailored.sections.map((s) => [s.key, s]));
-    for (const s of base.sections) {
-      if (!lockedKeys.has(s.key)) continue;
-      const t = tailoredByKey.get(s.key);
-      if (!t || normBlock(t.body) !== normBlock(s.body)) {
+      const baseKeys = base.sections.map((s) => s.key);
+      const tailoredKeys = tailored.sections.map((s) => s.key);
+      const sameStructure =
+        baseKeys.length === tailoredKeys.length && baseKeys.every((k, i) => k === tailoredKeys[i]);
+      if (!sameStructure) {
         violations.push({
-          rule: 'locked-section',
+          rule: 'section-structure',
           severity: 'error',
-          message: `Section "${s.title}" is locked and must be preserved verbatim.`,
+          message: `Section headings must match the template. Expected [${base.sections
+            .map((s) => s.title)
+            .join(', ')}], got [${tailored.sections.map((s) => s.title).join(', ')}].`,
         });
+      }
+
+      if (normBlock(base.header) !== normBlock(tailored.header)) {
+        violations.push({
+          rule: 'header-changed',
+          severity: 'error',
+          message: 'Header (name, contact, preamble) must be preserved verbatim.',
+        });
+      }
+
+      // Keyed by normalized title; duplicate titles in a one-pager are not
+      // expected — if present, only the last same-titled section is compared.
+      const tailoredByKey = new Map(tailored.sections.map((s) => [s.key, s]));
+      for (const s of base.sections) {
+        if (!lockedKeys.has(s.key)) continue;
+        const t = tailoredByKey.get(s.key);
+        if (!t || normBlock(t.body) !== normBlock(s.body)) {
+          violations.push({
+            rule: 'locked-section',
+            severity: 'error',
+            message: `Section "${s.title}" is locked and must be preserved verbatim.`,
+          });
+        }
       }
     }
   }

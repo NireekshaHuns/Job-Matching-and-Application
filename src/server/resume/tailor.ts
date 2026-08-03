@@ -162,7 +162,10 @@ export async function tailorResume(
     const latex = stripFences(
       await chat.complete(buildTailorMessages(baseResumeLatex, job, inputs, violations)),
     );
-    const lint = lintResume(latex, { jdKeywords: inputs.coverableKeywords });
+    const lint = lintResume(latex, {
+      jdKeywords: inputs.coverableKeywords,
+      base: baseResumeLatex,
+    });
     if (!best || errorCount(lint) < errorCount(best.lint)) best = { latex, lint };
     if (lint.ok) break;
     violations = lint.violations.filter((v) => v.severity === 'error').map((v) => v.message);
