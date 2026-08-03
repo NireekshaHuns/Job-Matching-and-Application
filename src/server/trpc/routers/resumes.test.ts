@@ -1,7 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DB } from '@/server/db';
 import type { Context } from '@/server/trpc/context';
 import { createCaller } from '@/server/trpc/root';
+import { tailorInput } from './resumes';
+
+// The tailor mutation dynamically imports these on the LLM path; stub them so we
+// can drive a controlled `complete` (success or throw) without a real key.
+const llm = vi.hoisted(() => ({
+  complete: null as null | ((m: { system: string; user: string }) => Promise<string>),
+}));
+vi.mock('openai', () => ({ default: class FakeOpenAI {} }));
+vi.mock('@/server/enrich/openai', () => ({
+  openaiChat: () => ({
+    complete: (m: { system: string; user: string }) => {
+      if (!llm.complete) throw new Error('llm.complete not configured for this test');
+      return llm.complete(m);
+    },
+  }),
+}));
 
 /**
  * Fake db returning queued row-lists for each `.select().from().where().limit()`
@@ -75,5 +91,124 @@ describe('resumes.tailoringSuggestions', () => {
     expect(res.matched).toEqual(['go']);
     expect(res.gaps).toEqual(['rust']);
     expect(res.addable).toEqual([]);
+  });
+});
+
+describe('tailorInput', () => {
+  it('requires integer jobId and resumeId', () => {
+    expect(() => tailorInput.parse({ jobId: 1.5, resumeId: 1 })).toThrow();
+    expect(() => tailorInput.parse({ jobId: 1 })).toThrow();
+    expect(tailorInput.parse({ jobId: 1, resumeId: 2 })).toMatchObject({ jobId: 1, resumeId: 2 });
+  });
+
+  it('bounds maxAttempts to 1–5 when provided', () => {
+    expect(() => tailorInput.parse({ jobId: 1, resumeId: 2, maxAttempts: 0 })).toThrow();
+    expect(() => tailorInput.parse({ jobId: 1, resumeId: 2, maxAttempts: 6 })).toThrow();
+    expect(tailorInput.parse({ jobId: 1, resumeId: 2, maxAttempts: 3 }).maxAttempts).toBe(3);
+  });
+});
+
+describe('resumes.tailor', () => {
+  // Force the deterministic fallback path regardless of the dev's real env.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    llm.complete = null;
+    vi.restoreAllMocks();
+  });
+  const noKey = () => vi.stubEnv('OPENAI_API_KEY', '');
+  const jobRow = { title: 'BE', company: 'Acme', techKeywords: ['go'], softKeywords: [] };
+  const baseRows = () => [
+    [jobRow],
+    [{ content: '\\section*{EXPERIENCE}\nbase body', roleFamily: 'backend' }],
+    [{ skill: 'go' }],
+    [{ text: 'Shipped a Go service.', skills: ['go'], roleFamily: 'backend' }],
+  ];
+
+  it('throws NOT_FOUND when the job is missing', async () => {
+    noKey();
+    await expect(
+      caller([[], [{ content: '\\section*{X}', roleFamily: 'backend' }]]).resumes.tailor({
+        jobId: 1,
+        resumeId: 1,
+      }),
+    ).rejects.toThrow(/Job not found/);
+  });
+
+  it('throws NOT_FOUND when the résumé is missing', async () => {
+    noKey();
+    await expect(
+      caller([
+        [{ title: 'BE', company: 'Acme', techKeywords: ['go'], softKeywords: [] }],
+        [],
+      ]).resumes.tailor({ jobId: 1, resumeId: 999 }),
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it('throws BAD_REQUEST when the base résumé has no content', async () => {
+    noKey();
+    await expect(
+      caller([
+        [{ title: 'BE', company: 'Acme', techKeywords: ['go'], softKeywords: [] }],
+        [{ content: null, roleFamily: 'backend' }],
+      ]).resumes.tailor({ jobId: 1, resumeId: 1 }),
+    ).rejects.toThrow(/no content/i);
+  });
+
+  it('falls back to the base résumé (source: base) with a fit snapshot when no key is set', async () => {
+    noKey();
+    const res = await caller([
+      // job
+      [
+        {
+          title: 'Backend Engineer',
+          company: 'Acme',
+          techKeywords: ['go', 'rust'],
+          softKeywords: [],
+        },
+      ],
+      // resume (base LaTeX + role)
+      [{ content: '\\section*{EXPERIENCE}\nbase body', roleFamily: 'backend' }],
+      // master skills
+      [{ skill: 'go' }],
+      // bullets
+      [{ text: 'Shipped a Go service.', skills: ['go'], roleFamily: 'backend' }],
+    ]).resumes.tailor({ jobId: 1, resumeId: 1 });
+
+    expect(res.source).toBe('base');
+    expect(res.report).toBeNull();
+    expect(res.latex).toContain('base body');
+    // "go" matched via the bullet; "rust" is an honest gap (not in inventory).
+    expect(res.fit.matched).toEqual(['go']);
+    expect(res.fit.missingGap).toEqual(['rust']);
+    expect(res.coverableKeywords).toContain('go');
+    expect(res.trueGaps).toEqual(['rust']);
+  });
+
+  it('returns source: llm with a report when the LLM succeeds', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    llm.complete = async () => '\\section*{EXPERIENCE}\ntailored body';
+    const res = await caller(baseRows()).resumes.tailor({
+      jobId: 1,
+      resumeId: 1,
+      maxAttempts: 1,
+    });
+    expect(res.source).toBe('llm');
+    expect(res.report).not.toBeNull();
+    expect(res.latex).toContain('tailored body');
+  });
+
+  it('falls back to source: base when a key is set but the LLM throws', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    llm.complete = async () => {
+      throw new Error('boom');
+    };
+    const res = await caller(baseRows()).resumes.tailor({
+      jobId: 1,
+      resumeId: 1,
+      maxAttempts: 1,
+    });
+    expect(res.source).toBe('base');
+    expect(res.latex).toContain('base body');
   });
 });

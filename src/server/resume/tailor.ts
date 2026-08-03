@@ -11,7 +11,7 @@
  * The network call is behind an injected ChatClient (fakes-first).
  */
 import type { ChatClient } from '@/server/enrich/types';
-import { computeFit, resumeSkillsFromBullets, type BulletLike } from './fit';
+import { computeFit, resumeSkillsFromBullets, type BulletLike, type FitResult } from './fit';
 import { lintResume, type LintReport } from './quality';
 import { RESUME_RUBRIC_PROMPT } from './rubric';
 
@@ -33,6 +33,8 @@ export interface TailorInputs {
   trueGaps: string[];
   /** Real bullets relevant to this job, scoped to the resume's role. */
   relevantBullets: TailorBullet[];
+  /** The fit computation these inputs were derived from (as-is vs. achievable). */
+  fit: FitResult;
 }
 
 /** Max bullets handed to the model — enough context without bloating the prompt. */
@@ -64,7 +66,7 @@ export function selectTailoringInputs(
     .filter((b) => b.skills.some((s) => coverableSet.has(s.trim().toLowerCase())))
     .slice(0, MAX_RELEVANT_BULLETS);
 
-  return { coverableKeywords, trueGaps: fit.missingGap, relevantBullets };
+  return { coverableKeywords, trueGaps: fit.missingGap, relevantBullets, fit };
 }
 
 export function buildTailorMessages(

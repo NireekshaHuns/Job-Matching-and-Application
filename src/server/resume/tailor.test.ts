@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatClient } from '@/server/enrich/types';
+import type { FitResult } from './fit';
 import {
   buildTailorMessages,
   selectTailoringInputs,
@@ -8,6 +9,17 @@ import {
   type TailorInputs,
   type TailorJob,
 } from './tailor';
+
+/** Placeholder fit for hand-built TailorInputs (tailorResume never reads it). */
+const emptyFit = (over: Partial<FitResult> = {}): FitResult => ({
+  relevanceScore: 0,
+  achievableScore: 0,
+  matched: [],
+  missing: [],
+  missingAddable: [],
+  missingGap: [],
+  ...over,
+});
 
 // A lint-passing LaTeX resume: \item bullets with strong verbs, metrics,
 // consistent periods, and enough words to hit the 475–600 target.
@@ -71,6 +83,9 @@ describe('selectTailoringInputs', () => {
     // rust is not in master -> true gap, never coverable.
     expect(inputs.coverableKeywords.sort()).toEqual(['go', 'kafka', 'leadership']);
     expect(inputs.trueGaps).toEqual(['rust']);
+    // fit is exposed (single source of truth for the router's snapshot).
+    expect(inputs.fit.relevanceScore).toBe(50); // go, kafka of {go, kafka, rust, leadership}
+    expect(inputs.fit.achievableScore).toBe(75); // + leadership (addable)
   });
 
   it('selects role-relevant bullets that hit coverable keywords', () => {
@@ -88,6 +103,7 @@ describe('buildTailorMessages', () => {
       coverableKeywords: ['go', 'kafka'],
       trueGaps: ['rust'],
       relevantBullets: [],
+      fit: emptyFit(),
     };
     const { user } = buildTailorMessages('\\documentclass{article}', job, inputs);
     expect(user).toContain('go, kafka');
@@ -100,6 +116,7 @@ describe('tailorResume', () => {
     coverableKeywords: ['go', 'kafka'],
     trueGaps: ['rust'],
     relevantBullets: bullets.slice(0, 2),
+    fit: emptyFit(),
   };
 
   it('returns a passing resume on the first attempt', async () => {
@@ -170,6 +187,7 @@ describe('tailorResume', () => {
       coverableKeywords: ['go', 'kafka'],
       trueGaps: ['rust'],
       relevantBullets: [],
+      fit: emptyFit({ missingGap: ['rust'] }),
     };
     // The base resume legitimately mentions rust; it survives into the output.
     const withRust = goodLatex().replace(
