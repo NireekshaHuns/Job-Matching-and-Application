@@ -4,6 +4,21 @@ import type { Context } from '@/server/trpc/context';
 import { createCaller } from '@/server/trpc/root';
 import { tailorInput } from './resumes';
 
+// The tailor mutation dynamically imports these on the LLM path; stub them so we
+// can drive a controlled `complete` (success or throw) without a real key.
+const llm = vi.hoisted(() => ({
+  complete: null as null | ((m: { system: string; user: string }) => Promise<string>),
+}));
+vi.mock('openai', () => ({ default: class FakeOpenAI {} }));
+vi.mock('@/server/enrich/openai', () => ({
+  openaiChat: () => ({
+    complete: (m: { system: string; user: string }) => {
+      if (!llm.complete) throw new Error('llm.complete not configured for this test');
+      return llm.complete(m);
+    },
+  }),
+}));
+
 /**
  * Fake db returning queued row-lists for each `.select().from().where().limit()`
  * (or `.from(table)` for the master-skills/bullets reads). Order of calls in
@@ -95,8 +110,19 @@ describe('tailorInput', () => {
 
 describe('resumes.tailor', () => {
   // Force the deterministic fallback path regardless of the dev's real env.
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    llm.complete = null;
+    vi.restoreAllMocks();
+  });
   const noKey = () => vi.stubEnv('OPENAI_API_KEY', '');
+  const jobRow = { title: 'BE', company: 'Acme', techKeywords: ['go'], softKeywords: [] };
+  const baseRows = () => [
+    [jobRow],
+    [{ content: '\\section*{EXPERIENCE}\nbase body', roleFamily: 'backend' }],
+    [{ skill: 'go' }],
+    [{ text: 'Shipped a Go service.', skills: ['go'], roleFamily: 'backend' }],
+  ];
 
   it('throws NOT_FOUND when the job is missing', async () => {
     noKey();
@@ -156,5 +182,33 @@ describe('resumes.tailor', () => {
     expect(res.fit.missingGap).toEqual(['rust']);
     expect(res.coverableKeywords).toContain('go');
     expect(res.trueGaps).toEqual(['rust']);
+  });
+
+  it('returns source: llm with a report when the LLM succeeds', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    llm.complete = async () => '\\section*{EXPERIENCE}\ntailored body';
+    const res = await caller(baseRows()).resumes.tailor({
+      jobId: 1,
+      resumeId: 1,
+      maxAttempts: 1,
+    });
+    expect(res.source).toBe('llm');
+    expect(res.report).not.toBeNull();
+    expect(res.latex).toContain('tailored body');
+  });
+
+  it('falls back to source: base when a key is set but the LLM throws', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    llm.complete = async () => {
+      throw new Error('boom');
+    };
+    const res = await caller(baseRows()).resumes.tailor({
+      jobId: 1,
+      resumeId: 1,
+      maxAttempts: 1,
+    });
+    expect(res.source).toBe('base');
+    expect(res.latex).toContain('base body');
   });
 });

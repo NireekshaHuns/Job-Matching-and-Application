@@ -34,6 +34,27 @@ describe('openaiChat', () => {
     } as unknown as OpenAI;
     expect(await openaiChat(client, 'm').complete({ system: 's', user: 'u' })).toBe('{}');
   });
+
+  it('omits response_format and falls back to "" in text mode (jsonMode: false)', async () => {
+    let params: Record<string, unknown> | undefined;
+    const client = {
+      chat: {
+        completions: {
+          create: async (p: Record<string, unknown>) => {
+            params = p;
+            return { choices: [] };
+          },
+        },
+      },
+    } as unknown as OpenAI;
+
+    const out = await openaiChat(client, 'm', { jsonMode: false }).complete({
+      system: 's',
+      user: 'u',
+    });
+    expect(out).toBe('');
+    expect(params).not.toHaveProperty('response_format');
+  });
 });
 
 describe('openaiEmbedder', () => {

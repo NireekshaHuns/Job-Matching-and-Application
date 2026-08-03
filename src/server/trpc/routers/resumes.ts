@@ -8,7 +8,6 @@ import { TRPCError } from '@trpc/server';
 import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { jobs, masterSkills, resumeBullets, resumes } from '@/server/db/schema';
-import { computeFit, resumeSkillsFromBullets } from '@/server/resume/fit';
 import { buildTailoringSuggestions } from '@/server/resume/suggestions';
 import {
   selectTailoringInputs,
@@ -140,18 +139,14 @@ export const resumesRouter = createTRPCRouter({
       resume.roleFamily,
     );
 
-    // Two-score-safe fit snapshot: as-is coverage vs. what truthful tailoring can reach.
-    const fitResult = computeFit({
-      jobKeywords: [...tailorJob.techKeywords, ...tailorJob.softKeywords],
-      resumeSkills: resumeSkillsFromBullets(tailorBullets, resume.roleFamily),
-      masterSkills: masterSkillList,
-    });
+    // Two-score-safe fit snapshot: as-is coverage vs. what truthful tailoring can
+    // reach. Reuse the fit selectTailoringInputs already computed (single source).
     const fit = {
-      before: fitResult.relevanceScore,
-      achievable: fitResult.achievableScore,
-      matched: fitResult.matched,
-      missingAddable: fitResult.missingAddable,
-      missingGap: fitResult.missingGap,
+      before: inputs.fit.relevanceScore,
+      achievable: inputs.fit.achievableScore,
+      matched: inputs.fit.matched,
+      missingAddable: inputs.fit.missingAddable,
+      missingGap: inputs.fit.missingGap,
     };
 
     const key = process.env.OPENAI_API_KEY;
@@ -159,9 +154,11 @@ export const resumesRouter = createTRPCRouter({
       try {
         const { default: OpenAI } = await import('openai');
         const { openaiChat } = await import('@/server/enrich/openai');
+        // Text mode: tailoring returns a raw LaTeX document, not JSON.
         const chat = openaiChat(
           new OpenAI({ apiKey: key }),
           process.env.OPENAI_TAILOR_MODEL ?? process.env.OPENAI_CLASSIFY_MODEL ?? 'gpt-4o-mini',
+          { jsonMode: false },
         );
         const result = await tailorResume(baseLatex, tailorJob, inputs, chat, {
           maxAttempts: input.maxAttempts,
@@ -177,7 +174,10 @@ export const resumesRouter = createTRPCRouter({
       } catch (err) {
         // Fall through to the base résumé on any LLM/parse failure, but log it so
         // a persistently broken LLM path is visible rather than silently no-op'd.
-        console.warn('resumes.tailor: LLM tailoring failed, returning base résumé', err);
+        console.warn(
+          `resumes.tailor: LLM tailoring failed for job ${input.jobId} / résumé ${input.resumeId}, returning base résumé`,
+          err,
+        );
       }
     }
 
