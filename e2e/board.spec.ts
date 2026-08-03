@@ -19,9 +19,10 @@ test.describe('Job board', () => {
     await expect(page.getByText(SEED.contract)).toHaveCount(0);
   });
 
-  test('default sort is Apply priority', async ({ page }) => {
+  test('default sort is Recommended', async ({ page }) => {
     await page.goto('/jobs');
     await expect(page.getByLabel('Sort', { exact: true })).toHaveValue('combined');
+    await expect(page.getByLabel('Sort', { exact: true })).toContainText('Recommended');
   });
 
   test('"Show excluded" reveals the excluded role', async ({ page }) => {

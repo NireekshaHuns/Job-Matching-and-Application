@@ -13,10 +13,10 @@ import {
   TIER_STYLES,
   type NewHireStatus,
 } from '@/components/tier';
-import { DEFAULT_PRIORITY_WEIGHTS, resolveWeights } from '@/lib/priority';
 import { trpc } from '@/trpc/react';
 
-type Sort = 'combined' | 'sponsor' | 'fit' | 'recent';
+// Recommended = the default sponsorship×fit×freshness blend (server-side).
+type Sort = 'combined' | 'fit' | 'recent';
 type NewHireFilter = NewHireStatus | 'all';
 
 export default function JobsPage() {
@@ -32,10 +32,6 @@ export default function JobsPage() {
   const [newHire, setNewHire] = useState<NewHireFilter>('all');
   const [correcting, setCorrecting] = useState<number | null>(null);
   const [tailoring, setTailoring] = useState<number | null>(null);
-  // Apply-priority weights (percentages) for the default priority sort.
-  const [weights, setWeights] = useState({ ...DEFAULT_PRIORITY_WEIGHTS });
-  // What the server actually ranks by (all-zero falls back to the default mix).
-  const effectiveWeights = resolveWeights(weights);
 
   const deferredSearch = useDeferredValue(search);
   const utils = trpc.useUtils();
@@ -68,7 +64,6 @@ export default function JobsPage() {
     employmentType: allEmployment ? 'all' : 'full_time',
     includeClosed,
     newHireStatuses: newHire === 'all' ? undefined : [newHire],
-    weights,
   });
 
   return (
@@ -97,9 +92,8 @@ export default function JobsPage() {
             onChange={(e) => setSort(e.target.value as Sort)}
             className="rounded border border-zinc-300 px-1 py-1"
           >
-            <option value="combined">Apply priority</option>
-            <option value="sponsor">H1B tier</option>
-            <option value="fit">Resume fit</option>
+            <option value="combined">Recommended</option>
+            <option value="fit">Most fit</option>
             <option value="recent">Most recent</option>
           </select>
         </label>
@@ -184,34 +178,6 @@ export default function JobsPage() {
         </label>
       </div>
 
-      {sort === 'combined' && (
-        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-dashed border-zinc-200 p-3 text-sm">
-          <span className="font-medium text-zinc-600">Priority weights</span>
-          {(['tier', 'fit', 'freshness'] as const).map((k) => (
-            <label key={k} className="flex items-center gap-1 capitalize">
-              {k === 'tier' ? 'sponsorship' : k}
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                value={weights[k]}
-                onChange={(e) =>
-                  setWeights((w) => ({
-                    ...w,
-                    [k]: Math.round(Math.max(0, Math.min(100, Number(e.target.value) || 0))),
-                  }))
-                }
-                className="w-16 rounded border border-zinc-300 px-1 py-1"
-              />
-            </label>
-          ))}
-          <span className="text-xs text-zinc-400">
-            Relative weights for the “Tier × fit” sort — the score is a weighted average.
-          </span>
-        </div>
-      )}
-
       {jobsQuery.isLoading && <LoadingSkeleton />}
       {jobsQuery.isError && (
         <ErrorState
@@ -283,9 +249,9 @@ export default function JobsPage() {
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <span
                 className="rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-700"
-                title={`Why this rank: sponsorship ${job.priorityTier} · fit ${job.priorityFit} · freshness ${job.priorityFreshness} (weights ${effectiveWeights.tier}/${effectiveWeights.fit}/${effectiveWeights.freshness})`}
+                title={`Why recommended: sponsorship ${job.priorityTier} · fit ${job.priorityFit} · freshness ${job.priorityFreshness}`}
               >
-                Priority {job.priorityScore}
+                Recommended {job.priorityScore}
               </span>
               {job.relevanceScore != null && (
                 <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
