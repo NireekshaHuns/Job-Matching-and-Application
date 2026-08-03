@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { lintResume } from './quality';
+import { extractSections, lintResume } from './quality';
+
+/** A minimal one-page-style LaTeX résumé with the user's fixed section set. */
+const BASE_RESUME = String.raw`\begin{document}
+\begin{center}\textbf{JANE DOE} | jane@example.com | New York, NY\end{center}
+\section*{EDUCATION}
+\textbf{MS Computer Science} \hfill Aug 2026
+\section*{EXPERIENCE}
+\textbf{Software Engineer}
+\begin{itemize}
+\item Shipped a payments API that cut p99 latency by 40\% for active users.
+\end{itemize}
+\section*{PROJECTS}
+\textbf{Job Board} | Next.js, tRPC
+\begin{itemize}
+\item Built a Kanban tracker that ranked postings for 1,000 users.
+\end{itemize}
+\section*{TECHNICAL SKILLS}
+Java, Python, TypeScript
+\end{document}`;
+
+/** Tailor only the editable regions (an EXPERIENCE bullet + the SKILLS list). */
+const TAILORED_OK = BASE_RESUME.replace(
+  'Java, Python, TypeScript',
+  'Go, Kafka, PostgreSQL',
+).replace('cut p99 latency by 40\\% for active users', 'boosted throughput by 3x for active users');
 
 /**
  * Distinct, realistic bullets with varied strong verbs (incl. ones NOT in the
@@ -134,5 +159,72 @@ describe('lintResume', () => {
       jdKeywords: ['c++', 'c#', '.net', 'ci/cd'],
     });
     expect(report.keywordCoverage?.matched.sort()).toEqual(['.net', 'c#', 'c++', 'ci/cd']);
+  });
+
+  describe('template contract (base provided)', () => {
+    const structuralRules = ['section-structure', 'header-changed', 'locked-section'];
+    const hasRule = (r: ReturnType<typeof lintResume>, rule: string) =>
+      r.violations.some((v) => v.rule === rule);
+
+    it('does not run structural checks when no base is provided', () => {
+      const report = lintResume(TAILORED_OK);
+      for (const rule of structuralRules) expect(hasRule(report, rule)).toBe(false);
+    });
+
+    it('accepts changes confined to editable sections', () => {
+      const report = lintResume(TAILORED_OK, { base: BASE_RESUME });
+      for (const rule of structuralRules) expect(hasRule(report, rule)).toBe(false);
+    });
+
+    it('flags edits to a locked section (PROJECTS)', () => {
+      const tampered = TAILORED_OK.replace(
+        'ranked postings for 1,000 users',
+        'ranked postings for 5,000 users',
+      );
+      const report = lintResume(tampered, { base: BASE_RESUME });
+      expect(hasRule(report, 'locked-section')).toBe(true);
+      expect(report.ok).toBe(false);
+    });
+
+    it('flags a changed header (name/contact)', () => {
+      const tampered = TAILORED_OK.replace('JANE DOE', 'JANE Q. DOE');
+      const report = lintResume(tampered, { base: BASE_RESUME });
+      expect(hasRule(report, 'header-changed')).toBe(true);
+    });
+
+    it('flags added/removed/renamed section headings', () => {
+      const renamed = TAILORED_OK.replace('TECHNICAL SKILLS', 'SKILLS');
+      const report = lintResume(renamed, { base: BASE_RESUME });
+      expect(hasRule(report, 'section-structure')).toBe(true);
+    });
+
+    it('respects a custom lockedSections override', () => {
+      const changedSkills = TAILORED_OK.replace('Go, Kafka, PostgreSQL', 'Rust');
+      const report = lintResume(changedSkills, {
+        base: BASE_RESUME,
+        lockedSections: ['technical skills'],
+      });
+      expect(hasRule(report, 'locked-section')).toBe(true);
+    });
+  });
+
+  describe('extractSections', () => {
+    it('splits header and section blocks', () => {
+      const { header, sections } = extractSections(BASE_RESUME);
+      expect(header).toContain('JANE DOE');
+      expect(sections.map((s) => s.title)).toEqual([
+        'EDUCATION',
+        'EXPERIENCE',
+        'PROJECTS',
+        'TECHNICAL SKILLS',
+      ]);
+      expect(sections[2].body).toContain('Job Board');
+    });
+
+    it('returns the whole text as header when there are no sections', () => {
+      const { header, sections } = extractSections('- just a bullet, no sections');
+      expect(sections).toEqual([]);
+      expect(header).toContain('just a bullet');
+    });
   });
 });

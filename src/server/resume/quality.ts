@@ -31,6 +31,59 @@ export interface LintOptions {
   jdKeywords?: string[];
   /** Warn if coverage ratio is below this. */
   minKeywordCoverage?: number;
+  /**
+   * The base résumé the tailored output must respect. When provided, the linter
+   * enforces the template contract: section headings + header verbatim, and the
+   * locked sections (default: PROJECTS) unchanged. Omit for free-form resumes.
+   */
+  base?: string;
+  /** Section titles (case-insensitive) whose bodies must be preserved verbatim. */
+  lockedSections?: string[];
+}
+
+/** Sections tailoring must never touch unless the caller overrides. */
+export const DEFAULT_LOCKED_SECTIONS = ['projects'];
+
+export interface ResumeSection {
+  /** Heading as written, e.g. "TECHNICAL SKILLS". */
+  title: string;
+  /** Normalized title for matching (lowercased, whitespace-collapsed). */
+  key: string;
+  /** Raw text from after this heading up to the next section (or EOF). */
+  body: string;
+}
+
+export interface ResumeStructure {
+  /** Everything before the first \section — preamble + name/contact block. */
+  header: string;
+  sections: ResumeSection[];
+}
+
+// \section{...} or \section*{...}; titles here are simple (no nested braces).
+const SECTION_RE = /\\section\*?\s*\{([^}]*)\}/g;
+
+/** Collapse whitespace + trim, for structural (whitespace-insensitive) compares. */
+function normBlock(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function normKey(s: string): string {
+  return normBlock(s).toLowerCase();
+}
+
+/** Split a LaTeX résumé into its header and \section blocks. */
+export function extractSections(text: string): ResumeStructure {
+  const matches = [...text.matchAll(SECTION_RE)];
+  if (matches.length === 0) return { header: text, sections: [] };
+
+  const header = text.slice(0, matches[0].index ?? 0);
+  const sections: ResumeSection[] = matches.map((m, i) => {
+    const start = (m.index ?? 0) + m[0].length;
+    const end = i + 1 < matches.length ? (matches[i + 1].index ?? text.length) : text.length;
+    const title = m[1].trim();
+    return { title, key: normKey(title), body: text.slice(start, end) };
+  });
+  return { header, sections };
 }
 
 // Bullets: markdown markers, LaTeX \item, or common resume-template item macros
@@ -212,6 +265,47 @@ export function lintResume(text: string, opts: LintOptions = {}): LintReport {
         severity: 'warn',
         message: `Contains fluff/cliche: "${word}".`,
       });
+    }
+  }
+
+  // Template contract: when a base résumé is given, headings + header + the
+  // locked sections must survive tailoring untouched.
+  if (opts.base) {
+    const base = extractSections(opts.base);
+    const tailored = extractSections(text);
+    const lockedKeys = new Set((opts.lockedSections ?? DEFAULT_LOCKED_SECTIONS).map(normKey));
+
+    const baseTitles = base.sections.map((s) => s.key).join('|');
+    const tailoredTitles = tailored.sections.map((s) => s.key).join('|');
+    if (baseTitles !== tailoredTitles) {
+      violations.push({
+        rule: 'section-structure',
+        severity: 'error',
+        message: `Section headings must match the template. Expected [${base.sections
+          .map((s) => s.title)
+          .join(', ')}], got [${tailored.sections.map((s) => s.title).join(', ')}].`,
+      });
+    }
+
+    if (normBlock(base.header) !== normBlock(tailored.header)) {
+      violations.push({
+        rule: 'header-changed',
+        severity: 'error',
+        message: 'Header (name, contact, preamble) must be preserved verbatim.',
+      });
+    }
+
+    const tailoredByKey = new Map(tailored.sections.map((s) => [s.key, s]));
+    for (const s of base.sections) {
+      if (!lockedKeys.has(s.key)) continue;
+      const t = tailoredByKey.get(s.key);
+      if (!t || normBlock(t.body) !== normBlock(s.body)) {
+        violations.push({
+          rule: 'locked-section',
+          severity: 'error',
+          message: `Section "${s.title}" is locked and must be preserved verbatim.`,
+        });
+      }
     }
   }
 
