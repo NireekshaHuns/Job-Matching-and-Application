@@ -26,6 +26,7 @@ export default function JobsPage() {
   const [includeExcluded, setIncludeExcluded] = useState(false);
   const [includeSenior, setIncludeSenior] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [includeNonUs, setIncludeNonUs] = useState(false);
   const [allEmployment, setAllEmployment] = useState(false);
   const [includeClosed, setIncludeClosed] = useState(false);
   const [newHire, setNewHire] = useState<NewHireFilter>('all');
@@ -63,6 +64,7 @@ export default function JobsPage() {
     includeExcluded,
     includeSenior,
     remoteOnly,
+    includeNonUs,
     employmentType: allEmployment ? 'all' : 'full_time',
     includeClosed,
     newHireStatuses: newHire === 'all' ? undefined : [newHire],
@@ -139,6 +141,14 @@ export default function JobsPage() {
             onChange={(e) => setRemoteOnly(e.target.checked)}
           />
           Remote only
+        </label>
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={includeNonUs}
+            onChange={(e) => setIncludeNonUs(e.target.checked)}
+          />
+          Include non-US
         </label>
         <label className="flex items-center gap-1">
           <input

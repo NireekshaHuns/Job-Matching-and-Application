@@ -37,6 +37,8 @@ export const jobListInput = z.object({
   includeSenior: z.boolean().default(false),
   employmentType: z.enum([...employmentTypeEnum.enumValues, 'all']).default('full_time'),
   remoteOnly: z.boolean().default(false),
+  /** Off by default: the board is scoped to US jobs (on-site + remote); unknowns stay. */
+  includeNonUs: z.boolean().default(false),
   search: z.string().trim().max(100).optional(),
   sort: z.enum(['combined', 'sponsor', 'fit', 'recent']).default('combined'),
   /** Apply-priority weights for the `combined` sort; absent/all-zero → defaults. */
@@ -67,6 +69,8 @@ export interface JobQueryPlan {
   hideSenior: boolean;
   employmentType: (typeof employmentTypeEnum.enumValues)[number] | null;
   remoteOnly: boolean;
+  /** Hide known non-US postings (is_us = false) unless the toggle is on; US + unknown stay. */
+  hideNonUs: boolean;
   search: string | null;
   sort: JobListInput['sort'];
 }
@@ -85,6 +89,7 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
     hideSenior: !input.includeSenior && seniorities === null,
     employmentType: input.employmentType === 'all' ? null : input.employmentType,
     remoteOnly: input.remoteOnly,
+    hideNonUs: !input.includeNonUs,
     search: input.search ? input.search : null,
     sort: input.sort,
   };
@@ -183,6 +188,8 @@ export const jobsRouter = createTRPCRouter({
     else if (plan.hideSenior) where.push(sql`${jobs.seniority} is distinct from 'other'`);
     if (plan.employmentType) where.push(eq(jobs.employmentType, plan.employmentType));
     if (plan.remoteOnly) where.push(eq(jobs.isRemote, true));
+    // US + unknown by default; only positively-identified non-US is hidden.
+    if (plan.hideNonUs) where.push(sql`${jobs.isUs} is not false`);
     if (plan.search) {
       const esc = `%${escapeLike(plan.search)}%`;
       where.push(or(ilike(jobs.company, esc), ilike(jobs.title, esc)));

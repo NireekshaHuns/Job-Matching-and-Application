@@ -200,6 +200,7 @@ describe('buildJobRow', () => {
     expect(row.newHireStatus).toBe('sponsors_new_hires');
     expect(row.sponsorMatchConfidence).toBe(0.9);
     expect(row.isRemote).toBe(true);
+    expect(row.isUs).toBe(true); // location carries a US signal
     expect(row.techKeywords).toEqual(['go']);
     expect(row.softKeywords).toEqual(['ownership']);
     expect(row).not.toHaveProperty('relevanceScore');

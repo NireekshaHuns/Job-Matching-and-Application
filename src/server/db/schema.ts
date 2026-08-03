@@ -273,6 +273,8 @@ export const jobs = pgTable(
     title: text('title').notNull(),
     location: text('location'),
     isRemote: boolean('is_remote').notNull().default(false),
+    /** US-based? true = US, false = known non-US, null = unknown (derived from location). */
+    isUs: boolean('is_us'),
     jdText: text('jd_text').notNull(),
     embedding: vector('embedding', { dimensions: EMBEDDING_DIMENSIONS }),
     employmentType: employmentTypeEnum('employment_type').notNull(),
