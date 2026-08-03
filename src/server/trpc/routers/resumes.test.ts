@@ -2,7 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DB } from '@/server/db';
 import type { Context } from '@/server/trpc/context';
 import { createCaller } from '@/server/trpc/root';
-import { tailorInput } from './resumes';
+import {
+  addBulletInput,
+  addSkillInput,
+  buildBulletUpdate,
+  normalizeSkillList,
+  tailorInput,
+  updateBulletInput,
+  upsertBaseResumeInput,
+} from './resumes';
 
 // The tailor mutation dynamically imports these on the LLM path; stub them so we
 // can drive a controlled `complete` (success or throw) without a real key.
@@ -210,5 +218,56 @@ describe('resumes.tailor', () => {
     });
     expect(res.source).toBe('base');
     expect(res.latex).toContain('base body');
+  });
+});
+
+describe('normalizeSkillList', () => {
+  it('lowercases, trims, drops empties, and dedupes preserving order', () => {
+    expect(normalizeSkillList([' Go ', 'KAFKA', 'go', '', '  ', 'Redis'])).toEqual([
+      'go',
+      'kafka',
+      'redis',
+    ]);
+  });
+});
+
+describe('settings input schemas', () => {
+  it('addSkillInput requires a non-empty skill and a valid kind', () => {
+    expect(() => addSkillInput.parse({ skill: '', kind: 'technical' })).toThrow();
+    expect(() => addSkillInput.parse({ skill: 'go', kind: 'wizardry' })).toThrow();
+    expect(addSkillInput.parse({ skill: 'go', kind: 'soft' })).toMatchObject({ kind: 'soft' });
+  });
+
+  it('addBulletInput requires text and defaults skills to []', () => {
+    expect(() => addBulletInput.parse({ skills: ['go'] })).toThrow();
+    expect(addBulletInput.parse({ text: 'Shipped X.' }).skills).toEqual([]);
+    expect(addBulletInput.parse({ text: 'Shipped X.', roleFamily: 'backend' }).roleFamily).toBe(
+      'backend',
+    );
+  });
+
+  it('upsertBaseResumeInput requires label + content; id optional', () => {
+    expect(() => upsertBaseResumeInput.parse({ label: 'Base', content: '' })).toThrow();
+    expect(() => upsertBaseResumeInput.parse({ label: '', content: 'x' })).toThrow();
+    expect(upsertBaseResumeInput.parse({ label: 'Base', content: '\\doc' })).not.toHaveProperty(
+      'id',
+    );
+  });
+});
+
+describe('buildBulletUpdate', () => {
+  it('omits fields left undefined (no-op)', () => {
+    expect(buildBulletUpdate({ id: 1 })).toEqual({});
+  });
+
+  it('normalizes skills, and clears roleFamily/company with null', () => {
+    expect(buildBulletUpdate({ id: 1, skills: [' Go ', 'go', 'Kafka'] })).toEqual({
+      skills: ['go', 'kafka'],
+    });
+    expect(buildBulletUpdate({ id: 1, roleFamily: null, company: null })).toEqual({
+      roleFamily: null,
+      company: null,
+    });
+    expect(updateBulletInput.parse({ id: 1, text: 'New.' }).text).toBe('New.');
   });
 });
