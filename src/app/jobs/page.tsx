@@ -1,6 +1,7 @@
 'use client';
 
 import { useDeferredValue, useState } from 'react';
+import { ApplyDialog } from '@/components/apply-dialog';
 import { Chip } from '@/components/chip';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { SponsorCorrection } from '@/components/sponsor-correction';
@@ -32,6 +33,12 @@ export default function JobsPage() {
   const [newHire, setNewHire] = useState<NewHireFilter>('all');
   const [correcting, setCorrecting] = useState<number | null>(null);
   const [tailoring, setTailoring] = useState<number | null>(null);
+  // The job whose apply-confirmation dialog is open (set after opening its posting).
+  const [applyFor, setApplyFor] = useState<{
+    id: number;
+    company: string;
+    title: string;
+  } | null>(null);
 
   const deferredSearch = useDeferredValue(search);
   const utils = trpc.useUtils();
@@ -287,13 +294,13 @@ export default function JobsPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() =>
-                      markApplied.mutate({ jobId: job.id, resumeId, resumeLabel: lensLabel })
-                    }
-                    disabled={markApplied.isPending}
-                    className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50 disabled:opacity-50"
+                    onClick={() => {
+                      window.open(job.url, '_blank', 'noopener,noreferrer');
+                      setApplyFor({ id: job.id, company: job.company, title: job.title });
+                    }}
+                    className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50"
                   >
-                    Mark applied
+                    Apply
                   </button>
                 )}
               </span>
@@ -311,6 +318,19 @@ export default function JobsPage() {
           </li>
         ))}
       </ul>
+
+      {applyFor && (
+        <ApplyDialog
+          company={applyFor.company}
+          title={applyFor.title}
+          pending={markApplied.isPending}
+          onConfirm={() => {
+            markApplied.mutate({ jobId: applyFor.id, resumeId, resumeLabel: lensLabel });
+            setApplyFor(null);
+          }}
+          onClose={() => setApplyFor(null)}
+        />
+      )}
     </main>
   );
 }
