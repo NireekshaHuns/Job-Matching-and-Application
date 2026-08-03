@@ -39,16 +39,18 @@ export const addSkillInput = z.object({
 });
 export const removeSkillInput = z.object({ skill: z.string().trim().min(1) });
 
+const skillTag = z.string().trim().min(1).max(100);
+
 export const addBulletInput = z.object({
   text: z.string().trim().min(1).max(500),
-  skills: z.array(z.string()).default([]),
+  skills: z.array(skillTag).default([]),
   roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
   company: z.string().trim().max(200).nullish(),
 });
 export const updateBulletInput = z.object({
   id: z.number().int(),
   text: z.string().trim().min(1).max(500).optional(),
-  skills: z.array(z.string()).optional(),
+  skills: z.array(skillTag).optional(),
   // nullish: undefined = leave unchanged, null = clear.
   roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
   company: z.string().trim().max(200).nullish(),
@@ -289,6 +291,9 @@ export const resumesRouter = createTRPCRouter({
   }),
 
   addSkill: publicProcedure.input(addSkillInput).mutation(async ({ ctx, input }) => {
+    // Lowercase before insert so the app-enforced uniqueness on master_skills.skill
+    // (a raw-column unique constraint) can't get case-variant duplicates, and so it
+    // matches the lowercase fit-scoring join key (see resume/fit.ts).
     const skill = input.skill.trim().toLowerCase();
     await ctx.db.insert(masterSkills).values({ skill, kind: input.kind }).onConflictDoNothing();
     return { skill };

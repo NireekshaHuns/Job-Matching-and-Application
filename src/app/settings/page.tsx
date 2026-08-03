@@ -9,22 +9,8 @@
 import { useState } from 'react';
 import { Chip } from '@/components/chip';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
+import { ROLE_FAMILIES, type RoleFamily } from '@/lib/role-families';
 import { trpc } from '@/trpc/react';
-
-/** Role families a bullet/résumé can target (mirrors the DB enum). */
-const ROLE_FAMILIES = [
-  'frontend',
-  'backend',
-  'fullstack',
-  'sre',
-  'data',
-  'ml',
-  'mobile',
-  'systems',
-  'software',
-  'other',
-] as const;
-type RoleFamily = (typeof ROLE_FAMILIES)[number];
 
 const SKILL_KINDS = ['technical', 'soft'] as const;
 type SkillKind = (typeof SKILL_KINDS)[number];
@@ -41,6 +27,12 @@ const inputCls =
   'rounded-md border border-zinc-300 px-2 py-1 text-sm focus:border-zinc-500 focus:outline-none';
 const btnCls =
   'rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50';
+
+/** Inline mutation error, matching the app's ErrorState tone. */
+function MutationError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-xs text-red-600">{message}</p>;
+}
 
 export default function SettingsPage() {
   const inventory = trpc.resumes.inventory.useQuery();
@@ -128,6 +120,7 @@ function SkillsSection({ skills }: { skills: { skill: string; kind: SkillKind }[
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
           className={inputCls}
+          aria-label="Add a skill"
           placeholder="Add a skill (e.g. GraphQL)"
           value={skill}
           onChange={(e) => setSkill(e.target.value)}
@@ -135,6 +128,7 @@ function SkillsSection({ skills }: { skills: { skill: string; kind: SkillKind }[
         />
         <select
           className={inputCls}
+          aria-label="Skill kind"
           value={kind}
           onChange={(e) => setKind(e.target.value as SkillKind)}
         >
@@ -148,6 +142,7 @@ function SkillsSection({ skills }: { skills: { skill: string; kind: SkillKind }[
           Add
         </button>
       </div>
+      <MutationError message={add.error?.message ?? remove.error?.message} />
     </section>
   );
 }
@@ -207,12 +202,14 @@ function BulletsSection({ bullets }: { bullets: Bullet[] }) {
       <div className="flex flex-col gap-2 border-t border-zinc-100 pt-3">
         <textarea
           className={`${inputCls} min-h-16`}
+          aria-label="Bullet text"
           placeholder="Accomplishment (Google XYZ: shipped X, measured by Y, by doing Z)"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         <input
           className={inputCls}
+          aria-label="Bullet skills (comma-separated)"
           placeholder="Skills, comma-separated (e.g. java, spring boot, kafka)"
           value={skills}
           onChange={(e) => setSkills(e.target.value)}
@@ -220,6 +217,7 @@ function BulletsSection({ bullets }: { bullets: Bullet[] }) {
         <div className="flex flex-wrap items-center gap-2">
           <select
             className={inputCls}
+            aria-label="Bullet role family"
             value={roleFamily}
             onChange={(e) => setRoleFamily(e.target.value as RoleFamily | '')}
           >
@@ -232,6 +230,7 @@ function BulletsSection({ bullets }: { bullets: Bullet[] }) {
           </select>
           <input
             className={inputCls}
+            aria-label="Bullet company"
             placeholder="Company (optional)"
             value={company}
             onChange={(e) => setCompany(e.target.value)}
@@ -240,6 +239,7 @@ function BulletsSection({ bullets }: { bullets: Bullet[] }) {
             Add bullet
           </button>
         </div>
+        <MutationError message={add.error?.message} />
       </div>
     </section>
   );
@@ -252,20 +252,28 @@ function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => voi
   const [text, setText] = useState(bullet.text);
   const [skills, setSkills] = useState(bullet.skills.join(', '));
 
+  /** Reset the draft to the current bullet (used on open + cancel). */
+  const resetDraft = () => {
+    setText(bullet.text);
+    setSkills(bullet.skills.join(', '));
+  };
+
   if (editing) {
     return (
       <li className="rounded-md border border-zinc-200 p-2">
         <textarea
           className={`${inputCls} mb-2 w-full`}
+          aria-label="Edit bullet text"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         <input
           className={`${inputCls} mb-2 w-full`}
+          aria-label="Edit bullet skills"
           value={skills}
           onChange={(e) => setSkills(e.target.value)}
         />
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             className={btnCls}
@@ -277,9 +285,17 @@ function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => voi
           >
             Save
           </button>
-          <button type="button" className={btnCls} onClick={() => setEditing(false)}>
+          <button
+            type="button"
+            className={btnCls}
+            onClick={() => {
+              resetDraft();
+              setEditing(false);
+            }}
+          >
             Cancel
           </button>
+          <MutationError message={update.error?.message} />
         </div>
       </li>
     );
@@ -299,7 +315,10 @@ function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => voi
         <button
           type="button"
           className="ml-auto text-xs text-zinc-500 hover:text-zinc-900"
-          onClick={() => setEditing(true)}
+          onClick={() => {
+            resetDraft();
+            setEditing(true);
+          }}
         >
           Edit
         </button>
@@ -311,6 +330,7 @@ function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => voi
           Remove
         </button>
       </div>
+      <MutationError message={remove.error?.message} />
     </li>
   );
 }
@@ -363,6 +383,13 @@ function BaseResumeRow({ resume }: { resume: BaseResume }) {
   });
   const [editing, setEditing] = useState(false);
 
+  const confirmRemove = () => {
+    // Deleting a base résumé cascades its job relevance scores (job_scores).
+    if (window.confirm(`Delete "${resume.label}"? This also clears its fit scores.`)) {
+      remove.mutate({ id: resume.id });
+    }
+  };
+
   return (
     <li className="rounded-md border border-zinc-200 p-2">
       <div className="flex items-center gap-2">
@@ -379,11 +406,12 @@ function BaseResumeRow({ resume }: { resume: BaseResume }) {
         <button
           type="button"
           className="text-xs text-zinc-500 hover:text-red-600"
-          onClick={() => remove.mutate({ id: resume.id })}
+          onClick={confirmRemove}
         >
           Remove
         </button>
       </div>
+      <MutationError message={remove.error?.message} />
       {editing && <BaseResumeEditor resume={resume} onDone={() => setEditing(false)} />}
     </li>
   );
@@ -406,12 +434,14 @@ function BaseResumeEditor({ resume, onDone }: { resume?: BaseResume; onDone: () 
       <div className="flex flex-wrap items-center gap-2">
         <input
           className={inputCls}
+          aria-label="Résumé label"
           placeholder="Label (e.g. Backend base)"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
         />
         <select
           className={inputCls}
+          aria-label="Résumé role family"
           value={roleFamily}
           onChange={(e) => setRoleFamily(e.target.value as RoleFamily | '')}
         >
@@ -425,6 +455,7 @@ function BaseResumeEditor({ resume, onDone }: { resume?: BaseResume; onDone: () 
       </div>
       <textarea
         className={`${inputCls} min-h-48 font-mono text-xs`}
+        aria-label="Résumé LaTeX source"
         placeholder="\documentclass... (full LaTeX source)"
         value={content}
         onChange={(e) => setContent(e.target.value)}
@@ -446,6 +477,7 @@ function BaseResumeEditor({ resume, onDone }: { resume?: BaseResume; onDone: () 
           {resume ? 'Save' : 'Add'}
         </button>
       </div>
+      <MutationError message={upsert.error?.message} />
     </div>
   );
 }

@@ -52,6 +52,34 @@ function caller(results: unknown[][]) {
   return createCaller({ db: fakeDb(results) } as Context);
 }
 
+/**
+ * Fake db that records write ops (insert/update/delete) and returns configured
+ * `.returning()` rows. Chain methods are no-ops so the mutation bodies run
+ * without a real DB — enough to assert the create-vs-update branch, echoed ids,
+ * and no-op updates.
+ */
+function writeCaller(returning: unknown[] = [{ id: 1 }]) {
+  const ops: Array<'insert' | 'update' | 'delete'> = [];
+  const make = (op: 'insert' | 'update' | 'delete') => () => {
+    ops.push(op);
+    const chain = {
+      values: () => chain,
+      set: () => chain,
+      where: () => chain,
+      onConflictDoNothing: () => Promise.resolve(undefined),
+      returning: () => Promise.resolve(returning),
+      then: (r: (v: unknown) => unknown) => r(undefined),
+    };
+    return chain;
+  };
+  const db = {
+    insert: make('insert'),
+    update: make('update'),
+    delete: make('delete'),
+  } as unknown as DB;
+  return { caller: createCaller({ db } as Context), ops };
+}
+
 describe('resumes.tailoringSuggestions', () => {
   it('rejects non-integer ids', async () => {
     await expect(
@@ -252,6 +280,51 @@ describe('settings input schemas', () => {
     expect(upsertBaseResumeInput.parse({ label: 'Base', content: '\\doc' })).not.toHaveProperty(
       'id',
     );
+  });
+});
+
+describe('resumes settings mutations (write path)', () => {
+  it('upsertBaseResume inserts when no id is given', async () => {
+    const { caller: c, ops } = writeCaller([{ id: 7 }]);
+    const res = await c.resumes.upsertBaseResume({ label: 'Base', content: '\\doc' });
+    expect(res).toEqual({ id: 7 });
+    expect(ops).toContain('insert');
+    expect(ops).not.toContain('update');
+  });
+
+  it('upsertBaseResume updates when an id is given', async () => {
+    const { caller: c, ops } = writeCaller();
+    const res = await c.resumes.upsertBaseResume({ id: 3, label: 'Base', content: '\\doc' });
+    expect(res).toEqual({ id: 3 });
+    expect(ops).toContain('update');
+    expect(ops).not.toContain('insert');
+  });
+
+  it('addSkill lowercases before insert', async () => {
+    const { caller: c, ops } = writeCaller();
+    const res = await c.resumes.addSkill({ skill: 'GraphQL', kind: 'technical' });
+    expect(res).toEqual({ skill: 'graphql' });
+    expect(ops).toContain('insert');
+  });
+
+  it('addBullet returns the new row id', async () => {
+    const { caller: c } = writeCaller([{ id: 9 }]);
+    const res = await c.resumes.addBullet({ text: 'Shipped X by 40%.', skills: ['go'] });
+    expect(res).toEqual({ id: 9 });
+  });
+
+  it('updateBullet with no fields is a no-op (no update issued)', async () => {
+    const { caller: c, ops } = writeCaller();
+    const res = await c.resumes.updateBullet({ id: 5 });
+    expect(res).toEqual({ id: 5 });
+    expect(ops).not.toContain('update');
+  });
+
+  it('removeBaseResume deletes and echoes the id', async () => {
+    const { caller: c, ops } = writeCaller();
+    const res = await c.resumes.removeBaseResume({ id: 2 });
+    expect(res).toEqual({ id: 2 });
+    expect(ops).toContain('delete');
   });
 });
 
