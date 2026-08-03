@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "is_us" boolean;

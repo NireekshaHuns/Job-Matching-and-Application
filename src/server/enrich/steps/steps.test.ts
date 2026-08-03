@@ -200,6 +200,7 @@ describe('buildJobRow', () => {
     expect(row.newHireStatus).toBe('sponsors_new_hires');
     expect(row.sponsorMatchConfidence).toBe(0.9);
     expect(row.isRemote).toBe(true);
+    expect(row.isUs).toBe(true); // location carries a US signal
     expect(row.techKeywords).toEqual(['go']);
     expect(row.softKeywords).toEqual(['ownership']);
     expect(row).not.toHaveProperty('relevanceScore');
@@ -225,6 +226,28 @@ describe('buildJobRow', () => {
       null,
     );
     expect(row.employmentType).toBe('contract');
+  });
+
+  it('derives is_us=false for a known non-US location', () => {
+    const row = buildJobRow(
+      posting({ location: 'London, UK' }),
+      {
+        tier: 'Low',
+        reason: 'why',
+        sponsorCount: 0,
+        newHireStatus: 'unknown',
+        matchConfidence: null,
+      },
+      {
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: ['go'],
+        softKeywords: [],
+      },
+      null,
+    );
+    expect(row.isUs).toBe(false);
   });
 
   it('leaves a genuine full_time role untouched', () => {
