@@ -21,7 +21,7 @@ const FEATURES = [
   {
     href: '/jobs',
     title: 'Job Board',
-    detail: 'Filter and sort by sponsor tier, résumé fit, and freshness.',
+    detail: 'Sort by Recommended, résumé fit, or most recent — US roles only.',
   },
   {
     href: '/tracker',
