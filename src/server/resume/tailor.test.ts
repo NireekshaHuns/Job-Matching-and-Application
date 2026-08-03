@@ -26,6 +26,20 @@ function goodLatex(n = 46): string {
   return `\\begin{document}\n${body}\n\\end{document}`;
 }
 
+/** A lint-passing résumé WITH the fixed section set, for template-contract tests. */
+function sectionedLatex(n = 44): string {
+  const body = Array.from({ length: n }, (_, i) => ITEMS[i % ITEMS.length]).join('\n');
+  return [
+    '\\begin{document}',
+    '\\begin{center}\\textbf{JANE DOE} | jane@example.com\\end{center}',
+    '\\section*{EXPERIENCE}',
+    body,
+    '\\section*{PROJECTS}',
+    '\\item Built a Kanban tracker that ranked postings for 1,000 users.',
+    '\\end{document}',
+  ].join('\n');
+}
+
 function makeChat(responses: string[]) {
   const calls: Array<{ system: string; user: string }> = [];
   let i = 0;
@@ -128,6 +142,25 @@ describe('tailorResume', () => {
     );
     const chat = makeChat([warnOnly]);
     const { report } = await tailorResume('base', job, inputs, chat.client, { maxAttempts: 3 });
+    expect(report.attempts).toBe(1);
+    expect(report.lint.ok).toBe(true);
+  });
+
+  it('re-prompts when the model breaks the locked template, then accepts a compliant fix', async () => {
+    const base = sectionedLatex();
+    // First attempt renames the locked PROJECTS heading -> section-structure error.
+    const broken = base.replace('\\section*{PROJECTS}', '\\section*{SIDE PROJECTS}');
+    const chat = makeChat([broken, base]);
+    const { report } = await tailorResume(base, job, inputs, chat.client, { maxAttempts: 3 });
+    expect(report.attempts).toBe(2);
+    expect(report.lint.ok).toBe(true);
+    expect(chat.calls[1].user).toContain('Fix these issues');
+  });
+
+  it('accepts a first attempt that respects the locked template', async () => {
+    const base = sectionedLatex();
+    const chat = makeChat([base]);
+    const { report } = await tailorResume(base, job, inputs, chat.client);
     expect(report.attempts).toBe(1);
     expect(report.lint.ok).toBe(true);
   });
