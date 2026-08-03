@@ -17,6 +17,7 @@ describe('jobListInput', () => {
       includeExcluded: false,
       employmentType: 'full_time',
       remoteOnly: false,
+      includeNonUs: false,
       sort: 'combined',
       limit: 50,
       offset: 0,
@@ -51,6 +52,11 @@ describe('resolveJobQueryPlan', () => {
   it('hides closed jobs by default, shows them only when the toggle is on', () => {
     expect(plan().hideClosed).toBe(true);
     expect(plan({ includeClosed: true }).hideClosed).toBe(false);
+  });
+
+  it('hides non-US jobs by default, shows them only when the toggle is on', () => {
+    expect(plan().hideNonUs).toBe(true);
+    expect(plan({ includeNonUs: true }).hideNonUs).toBe(false);
   });
 
   it("maps employmentType 'all' to no filter", () => {

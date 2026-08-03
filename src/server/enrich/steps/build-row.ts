@@ -6,6 +6,7 @@
 import type { NewJob } from '@/server/db/schema';
 import type { RawPosting } from '@/server/ingest/types';
 import type { Classification } from '../types';
+import { deriveIsUs } from './location';
 import { looksLikeStaffing } from './staffing';
 import type { SponsorMatch } from './sponsor-match';
 
@@ -32,6 +33,7 @@ export function buildJobRow(
     title: posting.title,
     location: posting.location,
     isRemote: looksRemote(posting),
+    isUs: deriveIsUs(posting.location),
     jdText: posting.jdText,
     embedding,
     // A JD the LLM read as full-time but that carries staffing signals (C2C,
