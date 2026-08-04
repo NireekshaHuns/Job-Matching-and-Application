@@ -206,7 +206,7 @@ function Result({ data }: { data: TailorResult }) {
         <textarea
           readOnly
           aria-label="Tailored résumé LaTeX"
-          className="border-border min-h-80 w-full rounded-md border p-2 font-mono text-xs"
+          className="border-border bg-surface text-fg min-h-80 w-full rounded-md border p-2 font-mono text-xs"
           value={data.latex}
         />
       </div>

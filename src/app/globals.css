@@ -3,6 +3,14 @@
 /* Class-based dark mode (next-themes toggles `.dark` on <html>). */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Match native controls (select popups, scrollbars) to the active theme. */
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
 /*
  * Semantic color tokens defined as theme variables (light defaults), so Tailwind
  * emits `bg-bg`, `text-fg`, `text-muted`, `border-border`, `bg-brand`, … utilities
