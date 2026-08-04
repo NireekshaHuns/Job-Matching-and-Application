@@ -26,9 +26,11 @@ type Application = inferRouterOutputs<AppRouter>['applications']['list'][number]
 type FilingType = Application['filingType'];
 
 const NUDGE_STYLE: Record<NudgeLevel, string> = {
-  urgent: 'bg-red-50 text-red-800 border-red-200',
-  warning: 'bg-amber-50 text-amber-800 border-amber-200',
-  info: 'bg-blue-50 text-blue-800 border-blue-200',
+  urgent:
+    'bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-300/50 dark:border-rose-500/25',
+  warning:
+    'bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-300/50 dark:border-amber-500/25',
+  info: 'bg-blue-500/10 text-blue-800 dark:text-blue-300 border-blue-300/50 dark:border-blue-500/25',
 };
 
 /**
@@ -58,7 +60,7 @@ function FindPeople({
   if (!status.data) return null;
   if (!status.data.configured) {
     return (
-      <p className="text-xs text-zinc-400">
+      <p className="text-faint text-xs">
         Email inference is off — set <code>HUNTER_API_KEY</code> or <code>APOLLO_API_KEY</code> to
         find contacts automatically. (The compliant search links above always work.)
       </p>
@@ -68,41 +70,43 @@ function FindPeople({
   const people = find.data?.people ?? [];
 
   return (
-    <div className="rounded-lg border border-dashed border-zinc-200 p-2">
+    <div className="border-border rounded-lg border border-dashed p-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-medium text-zinc-600">Find people</span>
+        <span className="text-muted font-medium">Find people</span>
         <input
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           placeholder="company domain (optional, e.g. stripe.com)"
           aria-label="Company domain"
-          className="min-w-56 flex-1 rounded border border-zinc-300 px-2 py-1 text-xs"
+          className="border-border bg-surface min-w-56 flex-1 rounded border px-2 py-1 text-xs"
         />
         <button
           type="button"
           disabled={find.isPending}
           onClick={() => find.mutate({ company, domain: domain.trim() || undefined })}
-          className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
+          className="border-border hover:bg-surface-2 rounded border px-2 py-1 text-xs disabled:opacity-50"
         >
           {find.isPending ? 'Searching…' : 'Search'}
         </button>
-        {find.data?.cached && <span className="text-xs text-zinc-400">cached</span>}
+        {find.data?.cached && <span className="text-faint text-xs">cached</span>}
         <button
           type="button"
           onClick={() => purge.mutate()}
           disabled={purge.isPending}
           title="Delete all cached third-party results (privacy)"
-          className="text-xs text-zinc-400 hover:text-zinc-600 hover:underline disabled:opacity-50"
+          className="text-faint hover:text-muted text-xs hover:underline disabled:opacity-50"
         >
           Clear cache
         </button>
       </div>
 
       {find.isError && (
-        <p className="mt-1 text-xs text-red-600">Search failed: {find.error.message}</p>
+        <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+          Search failed: {find.error.message}
+        </p>
       )}
       {find.isSuccess && people.length === 0 && (
-        <p className="mt-1 text-xs text-zinc-500">No people found for “{company}”.</p>
+        <p className="text-muted mt-1 text-xs">No people found for “{company}”.</p>
       )}
 
       {people.length > 0 &&
@@ -112,7 +116,7 @@ function FindPeople({
           if (items.length === 0) return null;
           return (
             <div key={key} className="mt-2">
-              <div className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+              <div className="text-muted text-[11px] font-medium tracking-wide uppercase">
                 {label}
               </div>
               <ul className="space-y-1">
@@ -120,13 +124,13 @@ function FindPeople({
                   const rowKey = `${key}:${i}:${p.email ?? p.name}`;
                   return (
                     <li key={rowKey} className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-medium text-zinc-800">{p.name}</span>
-                      {p.title && <span className="text-zinc-500">{p.title}</span>}
-                      {p.email && <span className="text-zinc-500">{p.email}</span>}
+                      <span className="text-fg font-medium">{p.name}</span>
+                      {p.title && <span className="text-muted">{p.title}</span>}
+                      {p.email && <span className="text-muted">{p.email}</span>}
                       {p.emailConfidence != null && (
-                        <span className="text-zinc-400">{p.emailConfidence}%</span>
+                        <span className="text-faint">{p.emailConfidence}%</span>
                       )}
-                      <span className="text-zinc-400">· {p.source}</span>
+                      <span className="text-faint">· {p.source}</span>
                       <button
                         type="button"
                         disabled={importPerson.isPending || imported.has(rowKey)}
@@ -141,7 +145,7 @@ function FindPeople({
                             { onSuccess: () => setImported((s) => new Set(s).add(rowKey)) },
                           )
                         }
-                        className="ml-auto rounded border border-zinc-300 px-1.5 py-0.5 hover:bg-zinc-50 disabled:opacity-50"
+                        className="border-border hover:bg-surface-2 ml-auto rounded border px-1.5 py-0.5 disabled:opacity-50"
                       >
                         {imported.has(rowKey) ? 'Added ✓' : 'Add as contact'}
                       </button>
@@ -216,7 +220,7 @@ function OutreachPanel({
   };
 
   return (
-    <div className="mt-3 space-y-3 border-t border-zinc-100 pt-3">
+    <div className="border-border mt-3 space-y-3 border-t pt-3">
       <div className="flex flex-wrap gap-2">
         {outreachLinks(company).map((link) => (
           <a
@@ -224,7 +228,7 @@ function OutreachPanel({
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50"
+            className="border-border hover:bg-surface-2 rounded border px-2 py-1 text-xs"
           >
             {link.label} <span aria-hidden>↗</span>
           </a>
@@ -237,19 +241,19 @@ function OutreachPanel({
         {contactsQuery.data?.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium">{c.name}</span>
-            {c.title && <span className="text-zinc-500">{c.title}</span>}
-            {c.email && <span className="text-zinc-500">{c.email}</span>}
+            {c.title && <span className="text-muted">{c.title}</span>}
+            {c.email && <span className="text-muted">{c.email}</span>}
             {c.linkedinUrl && (
               <a
                 href={c.linkedinUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-700 hover:underline"
+                className="text-blue-700 hover:underline dark:text-blue-300"
               >
                 profile
               </a>
             )}
-            <span className="text-xs text-zinc-400">
+            <span className="text-faint text-xs">
               {c.touches} touch{c.touches === 1 ? '' : 'es'}
               {c.lastContactedAt
                 ? ` · last ${new Date(c.lastContactedAt).toLocaleDateString()}`
@@ -260,21 +264,21 @@ function OutreachPanel({
                 type="button"
                 disabled={pendingContactId === c.id}
                 onClick={() => draftForContact(c)}
-                className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-zinc-50 disabled:opacity-50"
+                className="border-border hover:bg-surface-2 rounded border px-1.5 py-0.5 text-xs disabled:opacity-50"
               >
                 {pendingContactId === c.id ? 'Drafting…' : 'Draft email'}
               </button>
               <button
                 type="button"
                 onClick={() => logTouch.mutate({ contactId: c.id, channel: 'linkedin' })}
-                className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-zinc-50"
+                className="border-border hover:bg-surface-2 rounded border px-1.5 py-0.5 text-xs"
               >
                 Log LinkedIn
               </button>
               <button
                 type="button"
                 onClick={() => logTouch.mutate({ contactId: c.id, channel: 'email' })}
-                className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-zinc-50"
+                className="border-border hover:bg-surface-2 rounded border px-1.5 py-0.5 text-xs"
               >
                 Log email
               </button>
@@ -282,7 +286,7 @@ function OutreachPanel({
                 type="button"
                 aria-label={`Remove ${c.name}`}
                 onClick={() => removeContact.mutate({ id: c.id })}
-                className="rounded border border-red-200 px-1.5 py-0.5 text-xs text-red-700 hover:bg-red-50"
+                className="rounded border border-rose-300/50 px-1.5 py-0.5 text-xs text-rose-700 hover:bg-rose-500/10 dark:border-rose-500/25 dark:text-rose-300"
               >
                 ✕
               </button>
@@ -292,13 +296,15 @@ function OutreachPanel({
       </ul>
 
       {draftEmail.isError && (
-        <p className="text-sm text-red-600">Failed to draft email: {draftEmail.error.message}</p>
+        <p className="text-sm text-rose-600 dark:text-rose-400">
+          Failed to draft email: {draftEmail.error.message}
+        </p>
       )}
 
       {draft && (
-        <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+        <div className="border-border bg-surface-2 space-y-2 rounded-lg border p-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500">
+            <span className="text-muted text-xs font-medium">
               Draft email{' '}
               {draft.source === 'template' ? '(template — set OPENAI_API_KEY for AI)' : '(AI)'}
             </span>
@@ -306,7 +312,7 @@ function OutreachPanel({
               type="button"
               aria-label="Close draft"
               onClick={() => setDraft(null)}
-              className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-white"
+              className="border-border hover:bg-surface-2 rounded border px-1.5 py-0.5 text-xs"
             >
               ✕
             </button>
@@ -315,14 +321,14 @@ function OutreachPanel({
             value={draft.subject}
             onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
             aria-label="Email subject"
-            className="w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+            className="border-border bg-surface w-full rounded border px-2 py-1 text-sm"
           />
           <textarea
             value={draft.body}
             onChange={(e) => setDraft({ ...draft, body: e.target.value })}
             aria-label="Email body"
             rows={10}
-            className="w-full rounded border border-zinc-300 px-2 py-1 font-mono text-xs"
+            className="border-border bg-surface w-full rounded border px-2 py-1 font-mono text-xs"
           />
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -349,24 +355,28 @@ function OutreachPanel({
               onClick={() =>
                 navigator.clipboard?.writeText(`Subject: ${draft.subject}\n\n${draft.body}`)
               }
-              className="rounded bg-zinc-900 px-3 py-1 text-xs text-white"
+              className="bg-brand rounded px-3 py-1 text-xs text-white"
             >
               Copy
             </button>
             <a
               href={`mailto:${draft.contactEmail ?? ''}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
-              className="rounded border border-zinc-300 px-3 py-1 text-xs hover:bg-white"
+              className="border-border hover:bg-surface-2 rounded border px-3 py-1 text-xs"
             >
               Open in email
             </a>
             {!draft.contactEmail && (
-              <span className="text-xs text-zinc-500">Add an email to this contact to send</span>
+              <span className="text-muted text-xs">Add an email to this contact to send</span>
             )}
           </div>
           {sendEmail.isError && (
-            <p className="text-sm text-red-600">Send failed: {sendEmail.error.message}</p>
+            <p className="text-sm text-rose-600 dark:text-rose-400">
+              Send failed: {sendEmail.error.message}
+            </p>
           )}
-          {sendEmail.isSuccess && <p className="text-sm text-green-700">Sent ✓</p>}
+          {sendEmail.isSuccess && (
+            <p className="text-sm text-emerald-700 dark:text-emerald-400">Sent ✓</p>
+          )}
         </div>
       )}
 
@@ -399,14 +409,14 @@ function OutreachPanel({
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
           aria-label="Contact name"
-          className="rounded border border-zinc-300 px-2 py-1 text-sm"
+          className="border-border bg-surface rounded border px-2 py-1 text-sm"
         />
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Title"
           aria-label="Contact title"
-          className="rounded border border-zinc-300 px-2 py-1 text-sm"
+          className="border-border bg-surface rounded border px-2 py-1 text-sm"
         />
         <input
           type="email"
@@ -414,19 +424,19 @@ function OutreachPanel({
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email (to send)"
           aria-label="Contact email"
-          className="rounded border border-zinc-300 px-2 py-1 text-sm"
+          className="border-border bg-surface rounded border px-2 py-1 text-sm"
         />
         <input
           value={linkedinUrl}
           onChange={(e) => setLinkedinUrl(e.target.value)}
           placeholder="LinkedIn URL"
           aria-label="Contact LinkedIn URL"
-          className="min-w-48 flex-1 rounded border border-zinc-300 px-2 py-1 text-sm"
+          className="border-border bg-surface min-w-48 flex-1 rounded border px-2 py-1 text-sm"
         />
         <button
           type="submit"
           disabled={addContact.isPending}
-          className="rounded bg-zinc-900 px-3 py-1 text-xs text-white disabled:opacity-50"
+          className="bg-brand rounded px-3 py-1 text-xs text-white disabled:opacity-50"
         >
           Add contact
         </button>
@@ -447,7 +457,7 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
   const remove = trpc.applications.remove.useMutation({ onSuccess: onChanged });
 
   return (
-    <li className="rounded-lg border border-zinc-200 p-4">
+    <li className="border-border bg-surface rounded-lg border p-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <a
@@ -458,10 +468,10 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
           >
             {app.title}
           </a>
-          <div className="text-sm text-zinc-600">
+          <div className="text-muted text-sm">
             {app.company} · applied {new Date(app.appliedAt).toLocaleDateString()}
             {app.confirmedAt && (
-              <span className="ml-1 text-green-700">
+              <span className="ml-1 text-emerald-700 dark:text-emerald-400">
                 · ✉ confirmed {new Date(app.confirmedAt).toLocaleDateString()}
               </span>
             )}
@@ -471,7 +481,7 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
           value={app.status}
           disabled={update.isPending}
           onChange={(e) => update.mutate({ id: app.id, status: e.target.value as Status })}
-          className="rounded border border-zinc-300 px-1 py-1 text-sm disabled:opacity-50"
+          className="border-border bg-surface rounded border px-1 py-1 text-sm disabled:opacity-50"
         >
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -484,7 +494,7 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
           disabled={update.isPending}
           title="H-1B filing type (change-of-status vs. consular)"
           onChange={(e) => update.mutate({ id: app.id, filingType: e.target.value as FilingType })}
-          className="rounded border border-zinc-300 px-1 py-1 text-sm disabled:opacity-50"
+          className="border-border bg-surface rounded border px-1 py-1 text-sm disabled:opacity-50"
         >
           <option value="unknown">Filing: —</option>
           <option value="change_of_status">Change of status</option>
@@ -493,21 +503,21 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50"
+          className="border-border hover:bg-surface-2 rounded border px-2 py-1 text-xs"
         >
           {open ? 'Hide resume' : 'Resume used'}
         </button>
         <button
           type="button"
           onClick={() => setOutreachOpen((o) => !o)}
-          className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50"
+          className="border-border hover:bg-surface-2 rounded border px-2 py-1 text-xs"
         >
           {outreachOpen ? 'Hide outreach' : 'Outreach'}
         </button>
         <button
           type="button"
           onClick={() => remove.mutate({ id: app.id })}
-          className="rounded border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+          className="rounded border border-rose-300/50 px-2 py-1 text-xs text-rose-700 hover:bg-rose-500/10 dark:border-rose-500/25 dark:text-rose-300"
         >
           Remove
         </button>
@@ -523,19 +533,19 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
       )}
 
       {open && (
-        <div className="mt-3 space-y-2 border-t border-zinc-100 pt-3">
+        <div className="border-border mt-3 space-y-2 border-t pt-3">
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="Resume label (e.g. Backend — Stripe)"
-            className="w-full rounded border border-zinc-300 px-2 py-1 text-sm"
+            className="border-border bg-surface w-full rounded border px-2 py-1 text-sm"
           />
           <textarea
             value={snapshot}
             onChange={(e) => setSnapshot(e.target.value)}
             placeholder="Paste the exact resume text you used for this application…"
             rows={10}
-            className="w-full rounded border border-zinc-300 px-2 py-1 font-mono text-xs"
+            className="border-border bg-surface w-full rounded border px-2 py-1 font-mono text-xs"
           />
           <button
             type="button"
@@ -547,7 +557,7 @@ function ApplicationRow({ app, onChanged }: { app: Application; onChanged: () =>
               })
             }
             disabled={update.isPending}
-            className="rounded bg-zinc-900 px-3 py-1 text-xs text-white disabled:opacity-50"
+            className="bg-brand rounded px-3 py-1 text-xs text-white disabled:opacity-50"
           >
             Save resume version
           </button>
@@ -566,8 +576,8 @@ function VisaEditor({ data, onSaved }: { data: VisaProfile; onSaved: () => void 
   const save = trpc.profile.set.useMutation({ onSuccess: onSaved });
 
   return (
-    <section className="mb-6 rounded-lg border border-zinc-200 p-4">
-      <h2 className="text-sm font-semibold text-zinc-700">Visa timeline</h2>
+    <section className="border-border bg-surface mb-6 rounded-lg border p-4">
+      <h2 className="text-muted text-sm font-semibold">Visa timeline</h2>
       {data.nudges.length > 0 ? (
         <ul className="mt-2 space-y-1">
           {data.nudges.map((n) => (
@@ -577,7 +587,7 @@ function VisaEditor({ data, onSaved }: { data: VisaProfile; onSaved: () => void 
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-xs text-zinc-500">No time-sensitive visa reminders right now.</p>
+        <p className="text-muted mt-2 text-xs">No time-sensitive visa reminders right now.</p>
       )}
       <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
         <label className="flex flex-col gap-1">
@@ -586,7 +596,7 @@ function VisaEditor({ data, onSaved }: { data: VisaProfile; onSaved: () => void 
             type="date"
             value={opt}
             onChange={(e) => setOpt(e.target.value)}
-            className="rounded border border-zinc-300 px-2 py-1"
+            className="border-border bg-surface rounded border px-2 py-1"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -595,19 +605,19 @@ function VisaEditor({ data, onSaved }: { data: VisaProfile; onSaved: () => void 
             type="date"
             value={stem}
             onChange={(e) => setStem(e.target.value)}
-            className="rounded border border-zinc-300 px-2 py-1"
+            className="border-border bg-surface rounded border px-2 py-1"
           />
         </label>
         <button
           type="button"
           disabled={save.isPending}
           onClick={() => save.mutate({ optEndDate: opt || null, stemOptEndDate: stem || null })}
-          className="rounded bg-zinc-900 px-3 py-1 text-xs text-white disabled:opacity-50"
+          className="bg-brand rounded px-3 py-1 text-xs text-white disabled:opacity-50"
         >
           Save dates
         </button>
       </div>
-      <p className="mt-2 text-[11px] text-zinc-400">
+      <p className="text-faint mt-2 text-[11px]">
         Reminders are calendar-based (approximate) — not legal or lottery advice.
       </p>
     </section>
@@ -644,12 +654,12 @@ export default function Tracker() {
       <header className="mb-6 flex items-baseline justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Application Tracker</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-muted text-sm">
             Every application, its status, and the resume version you used.
           </p>
         </div>
-        <span className="text-sm text-zinc-500">
-          Outreach today: <span className="font-medium text-zinc-900">{todayQuery.data ?? 0}</span>
+        <span className="text-muted text-sm">
+          Outreach today: <span className="text-fg font-medium">{todayQuery.data ?? 0}</span>
         </span>
       </header>
 
@@ -665,7 +675,7 @@ export default function Tracker() {
       {query.data?.length === 0 && (
         <EmptyState title="No applications yet.">
           Mark a job applied from the{' '}
-          <Link href="/jobs" className="text-blue-700 hover:underline">
+          <Link href="/jobs" className="text-blue-700 hover:underline dark:text-blue-300">
             job board
           </Link>
           .
@@ -678,12 +688,12 @@ export default function Tracker() {
             <section key={col.key} aria-labelledby={`col-${col.key}`} className="w-80 shrink-0">
               <h2
                 id={`col-${col.key}`}
-                className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-700"
+                className="text-muted mb-2 flex items-center gap-2 text-sm font-semibold"
               >
                 {col.label}
                 <span
                   aria-hidden
-                  className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500"
+                  className="bg-surface-2 text-muted rounded-full px-2 py-0.5 text-xs"
                 >
                   {col.apps.length}
                 </span>
@@ -698,7 +708,7 @@ export default function Tracker() {
                 ))}
               </ul>
               {col.apps.length === 0 && (
-                <p className="rounded-lg border border-dashed border-zinc-200 p-4 text-center text-xs text-zinc-400">
+                <p className="border-border text-faint rounded-lg border border-dashed p-4 text-center text-xs">
                   Nothing here yet
                 </p>
               )}
