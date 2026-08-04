@@ -81,8 +81,12 @@ export const applicationSourceEnum = pgEnum('application_source', ['manual', 'ou
 /** Channel used for hiring-manager outreach. */
 export const outreachChannelEnum = pgEnum('outreach_channel', ['linkedin', 'email', 'other']);
 
-/** A base resume (hand-authored) vs. a tailored one generated for a job. */
-export const resumeKindEnum = pgEnum('resume_kind', ['base', 'tailored']);
+/**
+ * Resume kind. `base` = a hand-authored template; `tailored` = generated for a
+ * specific job; `uploaded` = a past resume added to the corpus that the tailoring
+ * engine mines for real bullets/skills (RAG source).
+ */
+export const resumeKindEnum = pgEnum('resume_kind', ['base', 'tailored', 'uploaded']);
 
 /** Whether a master-inventory skill is technical or a soft competency. */
 export const skillKindEnum = pgEnum('skill_kind', ['technical', 'soft']);
@@ -229,8 +233,10 @@ export const masterSkills = pgTable('master_skills', {
 });
 
 /**
- * Bullet bank — real accomplishment bullets, each tagged with the skills it
- * demonstrates. Tailoring selects/reworders from these (never invents).
+ * Bullet corpus — real accomplishment bullets auto-extracted from uploaded
+ * resumes, each tagged with the skills it demonstrates. The tailoring engine
+ * retrieves the most relevant of these per JD (pgvector similarity + keyword
+ * overlap) as raw material to synthesize new, JD-aligned bullets from.
  */
 export const resumeBullets = pgTable(
   'resume_bullets',
@@ -241,9 +247,19 @@ export const resumeBullets = pgTable(
     skills: jsonb('skills').$type<string[]>().notNull().default([]),
     roleFamily: roleFamilyEnum('role_family'),
     company: text('company'),
+    /** Resume this bullet was extracted from; deleting it removes the bullets. */
+    sourceResumeId: integer('source_resume_id').references(() => resumes.id, {
+      onDelete: 'cascade',
+    }),
+    /** Embedding of the bullet text for semantic retrieval (null until embedded). */
+    embedding: vector('embedding', { dimensions: EMBEDDING_DIMENSIONS }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('resume_bullets_role_family_idx').on(t.roleFamily)],
+  (t) => [
+    index('resume_bullets_role_family_idx').on(t.roleFamily),
+    index('resume_bullets_source_resume_idx').on(t.sourceResumeId),
+    index('resume_bullets_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
+  ],
 );
 
 /**
@@ -429,6 +445,31 @@ export const profile = pgTable('profile', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Single-user resume profile — the fixed candidate facts that head every
+ * generated resume (name, contacts, links, cert) plus `knownMetrics`/`stackNotes`
+ * the tailoring engine prefers before inventing anything. One row (id=1, upsert
+ * in the router). Distinct from `profile`, which holds visa dates.
+ */
+export const resumeProfile = pgTable('resume_profile', {
+  id: serial('id').primaryKey(),
+  name: text('name'),
+  email: text('email'),
+  phone: text('phone'),
+  linkedinUrl: text('linkedin_url'),
+  githubUrl: text('github_url'),
+  /** Free text (e.g. "December 2026") — kept as text so phrasing stays flexible. */
+  gradDate: text('grad_date'),
+  /** Certification line shown in the resume (e.g. "AWS Certified Solutions Architect"). */
+  certText: text('cert_text'),
+  certUrl: text('cert_url'),
+  /** Real, verified metrics the engine should prefer before inventing any number. */
+  knownMetrics: text('known_metrics'),
+  /** Confirmed tech stack per role, so invented detail stays consistent with reality. */
+  stackNotes: text('stack_notes'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Relations (for Drizzle's relational query API)
 // ---------------------------------------------------------------------------
@@ -513,3 +554,5 @@ export type MasterSkill = typeof masterSkills.$inferSelect;
 export type NewMasterSkill = typeof masterSkills.$inferInsert;
 export type ResumeBullet = typeof resumeBullets.$inferSelect;
 export type NewResumeBullet = typeof resumeBullets.$inferInsert;
+export type ResumeProfileRow = typeof resumeProfile.$inferSelect;
+export type NewResumeProfileRow = typeof resumeProfile.$inferInsert;
