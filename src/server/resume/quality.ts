@@ -144,7 +144,7 @@ const METRIC_RE = new RegExp(
 );
 
 /** Remove LaTeX commands/braces so analysis sees plain text. */
-function stripLatex(s: string): string {
+export function stripLatex(s: string): string {
   return s
     .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
     .replace(/[{}$&#~^_\\]/g, ' ')
@@ -291,6 +291,22 @@ export function lintResume(text: string, opts: LintOptions = {}): LintReport {
         rule: 'punctuation',
         severity: 'error',
         message: `Inconsistent bullet punctuation: ${periodBullets}/${bullets.length} end with a period.`,
+      });
+    }
+
+    // Verb variety: reusing the same opening verb reads as templated. Warn (not
+    // error) so it nudges the generator without thrashing on valid repeats.
+    const leadCounts = new Map<string, number>();
+    for (const b of bullets) {
+      const v = firstWord(b);
+      if (v) leadCounts.set(v, (leadCounts.get(v) ?? 0) + 1);
+    }
+    const repeated = [...leadCounts.entries()].filter(([, n]) => n > 1).map(([v]) => v);
+    if (repeated.length > 0) {
+      violations.push({
+        rule: 'verb-variety',
+        severity: 'warn',
+        message: `Repeated opening verb(s): ${repeated.join(', ')}. Vary the lead verb across bullets.`,
       });
     }
   }

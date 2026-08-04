@@ -5,12 +5,14 @@ test.beforeAll(async () => {
   await resetAndSeed();
 });
 
-test('settings renders the inventory editors and can add a master skill', async ({ page }) => {
+test('settings renders the profile + skills editors and can add a master skill', async ({
+  page,
+}) => {
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Candidate profile' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Master skills' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Bullet bank' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Base résumés' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Base résumé format' })).toBeVisible();
 
   // Add a skill and confirm it appears (proves the mutation + invalidation wiring).
   await page.getByPlaceholder('Add a skill (e.g. GraphQL)').fill('graphql-e2e');

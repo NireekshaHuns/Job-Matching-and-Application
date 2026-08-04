@@ -80,35 +80,37 @@ export const BUZZWORDS = [
   'passionate',
 ];
 
-/** The system prompt the tailoring LLM must follow (Inc 4 uses this). */
+/**
+ * The shared formatting / quality contract every tailoring prompt follows, kept
+ * in sync with the deterministic linter (`quality.ts`). It is deliberately
+ * *stance-neutral* about truthfulness — each caller adds its own line (the
+ * legacy job×base path forbids invention; the corpus Studio path allows
+ * aggressive-but-coherent invention).
+ */
 export const RESUME_RUBRIC_PROMPT = [
-  'You tailor a software-engineering resume for a specific job. Follow these rules strictly.',
+  'You write a one-page software-engineering resume tailored to a specific job. Follow these rules strictly.',
   '',
-  'Truthfulness (non-negotiable): only use skills and accomplishments from the provided master',
-  'inventory. Never invent skills, employers, or metrics. If the JD wants something the',
-  'candidate lacks, leave it out — do not fabricate.',
+  'Voice — be the builder, never a bystander:',
+  `- Start every bullet with a strong ownership verb (e.g. ${STRONG_VERBS.slice(0, 12).join(', ')}).`,
+  `- Never start with a bystander verb (${WEAK_VERBS.join(', ')}) and never undersell your role — take full credit for what you shipped.`,
+  '- Vary your verbs and technologies: never repeat the same lead verb, and do not lean on the same one or two technologies across bullets.',
   '',
-  'Bullets:',
-  '- Use the Google XYZ formula: "Accomplished X as measured by Y by doing Z", aligned to the JD.',
-  `- Start every bullet with a strong builder verb (e.g. ${STRONG_VERBS.slice(0, 10).join(', ')}).`,
-  `- Never start with a bystander verb: ${WEAK_VERBS.join(', ')}. Take credit.`,
-  '- Include real, specific metrics (latency, throughput, users, %, time saved).',
-  '- Bullets must read like real engineering work, not homework assignments. Keep them full.',
+  'Bullets (Google XYZ):',
+  '- "Accomplished X, as measured by Y, by doing Z" — every bullet aligned to what THIS job asks for.',
+  '- Put a concrete metric in most bullets: latency / throughput / reliability, users or scale impacted, % or time saved, or a tangible change you shipped.',
+  '- Be specific about the system and domain; bullets (including projects) must read like real production engineering, never like a homework assignment or a list of duties.',
   '',
   'Keywords:',
-  '- Weave the JD’s technical and soft keywords naturally throughout — never keyword-stuff.',
-  '- Omit basic software-engineer expectations; only surface differentiating keywords.',
-  '- Drop skills and content the JD does not need. Do not send a generic resume.',
+  "- Weave the job's technical AND soft keywords naturally across the whole resume; spread them thoughtfully — never keyword-stuff or list them mechanically.",
+  '- Skip basic software-engineer expectations; surface only the differentiating keywords this role actually cares about.',
+  '- Drop skills, sections, and detail the job does not need — this is a resume built FOR this job, not a generic one.',
   '',
-  'Structure (preserve the template exactly):',
-  '- Keep every section heading and the header block (name, contact) verbatim — same set, same order.',
-  '- Keep the PROJECTS section verbatim — never alter its wording, order, or metrics.',
-  '- Tailor ONLY: EXPERIENCE bullets, the TECHNICAL SKILLS list, and which coursework/certifications to surface.',
-  '- Return the complete LaTeX document on a single page.',
+  'Formatting (make it easy to find, read, and trust):',
+  '- One page. Full, even bullets — no stray half-line bullets, no wasted whitespace.',
+  '- Bold the important anchors (organization names). Work entries: job title first, then employer.',
+  '- Consistent end punctuation across every bullet (all end with a period, or none do).',
+  '- Clean, tight layout with no distracting clutter.',
   '',
-  `Banned words (fluff/cliches): ${BUZZWORDS.join(', ')}.`,
-  '',
-  `Form: ${WORD_MIN}–${WORD_MAX} words; Arial/Calibri; consistent end punctuation across bullets;`,
-  'bold organization names; list work experience as title first, then employer; tight layout',
-  'with no wasted whitespace; no buzzwords, cliches, or incorrect pronouns.',
+  `Banned (fluff / cliches — never use): ${BUZZWORDS.join(', ')}. No buzzwords, no cliches, no incorrect pronouns.`,
+  `Length: ${WORD_MIN}–${WORD_MAX} words on a single page. Return the complete LaTeX document.`,
 ].join('\n');

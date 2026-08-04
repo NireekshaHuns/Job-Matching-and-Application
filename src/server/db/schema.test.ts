@@ -170,7 +170,7 @@ describe('db schema', () => {
 
   describe('resume inventory tables', () => {
     it('has base/tailored and technical/soft enums', () => {
-      expect(resumeKindEnum.enumValues).toEqual(['base', 'tailored']);
+      expect(resumeKindEnum.enumValues).toEqual(['base', 'tailored', 'uploaded']);
       expect(skillKindEnum.enumValues).toEqual(['technical', 'soft']);
     });
 
