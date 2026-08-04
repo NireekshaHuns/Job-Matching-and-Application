@@ -36,7 +36,7 @@ function Breakdown({
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="border-border bg-surface rounded-lg border p-4">
-      <h2 className="text-muted mb-3 text-sm font-semibold">{title}</h2>
+      <h2 className="text-fg mb-3 text-sm font-semibold">{title}</h2>
       <ul className="space-y-2">
         {rows.map((r) => (
           <li key={r.key} className="flex items-center gap-3 text-sm">
@@ -49,7 +49,7 @@ function Breakdown({
                 style={{ width: `${(r.count / max) * 100}%` }}
               />
             </span>
-            <span className="text-muted w-10 shrink-0 text-right tabular-nums">{r.count}</span>
+            <span className="text-fg w-10 shrink-0 text-right tabular-nums">{r.count}</span>
           </li>
         ))}
       </ul>
@@ -80,7 +80,7 @@ function DashboardBody({ data }: { data: Summary }) {
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="border-border bg-surface rounded-lg border p-4">
-          <h2 className="text-muted mb-3 text-sm font-semibold">Top sponsors (by H1B history)</h2>
+          <h2 className="text-fg mb-3 text-sm font-semibold">Top sponsors (by H1B history)</h2>
           {data.topSponsors.length === 0 ? (
             <p className="text-muted text-sm">No jobs yet.</p>
           ) : (
@@ -98,7 +98,7 @@ function DashboardBody({ data }: { data: Summary }) {
           )}
         </div>
         <div className="border-border bg-surface rounded-lg border p-4">
-          <h2 className="text-muted mb-3 text-sm font-semibold">Freshness</h2>
+          <h2 className="text-fg mb-3 text-sm font-semibold">Freshness</h2>
           <p className="text-muted text-sm">
             <span className="text-fg font-medium tabular-nums">{data.recentJobs.last7}</span> jobs
             added in the last 7 days ·{' '}
