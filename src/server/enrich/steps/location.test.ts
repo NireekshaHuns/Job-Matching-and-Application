@@ -50,4 +50,25 @@ describe('deriveIsUs', () => {
     expect(deriveIsUs('Sacramento, CA')).toBe(true); // metro match despite ambiguous CA
     expect(deriveIsUs('Austin, TX')).toBe(true);
   });
+
+  it('flags foreign ISO country-code prefixes used by ATS feeds', () => {
+    expect(deriveIsUs('NO-Oslo-MSO')).toBe(false); // Norway
+    expect(deriveIsUs('GB-London')).toBe(false);
+    expect(deriveIsUs('FR-Paris')).toBe(false);
+    expect(deriveIsUs('PL-Warsaw-Lixa C')).toBe(false);
+  });
+
+  it('does not let a foreign prefix mislabel US locations', () => {
+    // Prefixes that collide with US state codes must NOT be treated as foreign.
+    expect(deriveIsUs('US-CO-Denver')).toBe(true); // US marker wins
+    expect(deriveIsUs('CO-Denver')).toBe(true); // Denver metro → US
+    expect(deriveIsUs('US-CA-San Francisco')).toBe(true);
+    expect(deriveIsUs('DE-Wilmington')).toBeNull(); // ambiguous (Delaware vs Germany) → unknown
+  });
+
+  it('recognizes newly-added non-US cities and NYC', () => {
+    expect(deriveIsUs('Oslo, Norway')).toBe(false);
+    expect(deriveIsUs('Milan, Italy')).toBe(false);
+    expect(deriveIsUs('NYC')).toBe(true);
+  });
 });
