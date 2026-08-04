@@ -54,6 +54,9 @@ async function loadFitSkills(
       : Promise.resolve([] as { roleFamily: (typeof resumes.$inferSelect)['roleFamily'] }[]),
   ]);
 
+  // Best-effort: an absent or unresolved resumeId falls back to the generalist
+  // role family (sees all bullets) rather than throwing — this is a draft aid,
+  // not the stricter résumé lookup in the resumes router.
   const fit = computeFit({
     jobKeywords: [...job.techKeywords, ...job.softKeywords],
     resumeSkills: resumeSkillsFromBullets(bullets, resume[0]?.roleFamily ?? null),

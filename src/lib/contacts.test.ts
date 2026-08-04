@@ -10,11 +10,21 @@ describe('categorizePerson', () => {
     expect(categorizePerson('Recruiting Manager')).toBe('recruiter');
   });
 
-  it('classifies hiring managers / leaders', () => {
+  it('classifies engineering hiring managers / leads', () => {
     expect(categorizePerson('Engineering Manager')).toBe('manager');
     expect(categorizePerson('Director of Engineering')).toBe('manager');
     expect(categorizePerson('Head of Platform')).toBe('manager');
     expect(categorizePerson('VP, Engineering')).toBe('manager');
+    expect(categorizePerson('Tech Lead')).toBe('manager');
+    expect(categorizePerson('CTO')).toBe('manager');
+    expect(categorizePerson('Data Engineering Manager')).toBe('manager');
+  });
+
+  it('does not classify non-engineering leaders as hiring managers', () => {
+    expect(categorizePerson('Product Manager')).toBe('other');
+    expect(categorizePerson('Account Manager')).toBe('other');
+    expect(categorizePerson('VP of Sales')).toBe('other');
+    expect(categorizePerson('Program Manager')).toBe('other');
   });
 
   it('everything else is other', () => {

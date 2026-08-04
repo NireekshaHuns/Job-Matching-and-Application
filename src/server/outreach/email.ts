@@ -61,6 +61,9 @@ export const OUTREACH_SYSTEM_PROMPT = [
 // Note: company/role/contact fields are the user's own trusted input (they add
 // their own contacts) and are interpolated into the prompt; the user reviews and
 // edits every draft before sending, so there's no third-party trust boundary here.
+// fitSkills likewise trace to the user's own resume/master-skill vocabulary — the
+// caller filters JD keywords down to what the user already has before passing them
+// (see loadFitSkills), so the "never invent skills" invariant holds at this boundary.
 export function buildOutreachMessages(req: OutreachRequest): { system: string; user: string } {
   const p = profileOf(req);
   const facts = [
@@ -111,6 +114,8 @@ export function templateOutreachEmail(req: OutreachRequest): OutreachEmail {
   const roleLine = req.role
     ? `I'm reaching out about ${req.role} opportunities at ${req.company}.`
     : `I'm reaching out about software engineering opportunities at ${req.company}.`;
+  // Cap at 4 here so the fixed template sentence stays readable; the LLM prompt
+  // gets the full (already ≤6) list and can weave them in more naturally.
   const fitLine =
     req.fitSkills && req.fitSkills.length > 0
       ? ` I think I'd be a strong fit — my background covers ${req.fitSkills.slice(0, 4).join(', ')}.`
