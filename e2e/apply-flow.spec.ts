@@ -5,12 +5,23 @@ test.beforeAll(async () => {
   await resetAndSeed();
 });
 
-test('mark-applied on the board appears in the tracker and status is editable', async ({
+test('apply on the board confirms, appears in the tracker, and status is editable', async ({
   page,
+  context,
 }) => {
   await page.goto('/jobs');
   const card = page.getByRole('listitem').filter({ hasText: SEED.high });
-  await card.getByRole('button', { name: 'Mark applied' }).click();
+
+  // Apply opens the posting in a new tab, then asks for confirmation.
+  const popupPromise = context.waitForEvent('page');
+  await card.getByRole('button', { name: 'Apply', exact: true }).click();
+  const popup = await popupPromise;
+  expect(popup).not.toBeNull();
+  await popup.close();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Yes, I applied' }).click();
   await expect(card.getByText('Applied ✓')).toBeVisible();
 
   await page.goto('/tracker');

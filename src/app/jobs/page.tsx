@@ -1,6 +1,7 @@
 'use client';
 
 import { useDeferredValue, useState } from 'react';
+import { ApplyDialog } from '@/components/apply-dialog';
 import { Chip } from '@/components/chip';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { SponsorCorrection } from '@/components/sponsor-correction';
@@ -32,6 +33,12 @@ export default function JobsPage() {
   const [newHire, setNewHire] = useState<NewHireFilter>('all');
   const [correcting, setCorrecting] = useState<number | null>(null);
   const [tailoring, setTailoring] = useState<number | null>(null);
+  // The job whose apply-confirmation dialog is open (set after opening its posting).
+  const [applyFor, setApplyFor] = useState<{
+    id: number;
+    company: string;
+    title: string;
+  } | null>(null);
 
   const deferredSearch = useDeferredValue(search);
   const utils = trpc.useUtils();
@@ -39,8 +46,8 @@ export default function JobsPage() {
   const appliedQuery = trpc.applications.appliedJobIds.useQuery();
   const applied = new Set(appliedQuery.data ?? []);
   const markApplied = trpc.applications.create.useMutation({
-    // Optimistically mark applied so the button flips immediately and a fast
-    // double-click can't create duplicate rows; roll back on error.
+    // Optimistically flip the job to applied so it updates immediately; the
+    // apply dialog stays open until this settles and rolls back on error.
     onMutate: async (vars) => {
       await utils.applications.appliedJobIds.cancel();
       const prev = utils.applications.appliedJobIds.getData();
@@ -287,13 +294,14 @@ export default function JobsPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() =>
-                      markApplied.mutate({ jobId: job.id, resumeId, resumeLabel: lensLabel })
-                    }
-                    disabled={markApplied.isPending}
-                    className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50 disabled:opacity-50"
+                    onClick={() => {
+                      markApplied.reset(); // clear any prior error before reopening
+                      window.open(job.url, '_blank', 'noopener,noreferrer');
+                      setApplyFor({ id: job.id, company: job.company, title: job.title });
+                    }}
+                    className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50"
                   >
-                    Mark applied
+                    Apply
                   </button>
                 )}
               </span>
@@ -311,6 +319,23 @@ export default function JobsPage() {
           </li>
         ))}
       </ul>
+
+      {applyFor && (
+        <ApplyDialog
+          company={applyFor.company}
+          title={applyFor.title}
+          pending={markApplied.isPending}
+          error={markApplied.error?.message}
+          onConfirm={() =>
+            // Attribute the résumé lens selected at confirm time; only close on success.
+            markApplied.mutate(
+              { jobId: applyFor.id, resumeId, resumeLabel: lensLabel },
+              { onSuccess: () => setApplyFor(null) },
+            )
+          }
+          onClose={() => setApplyFor(null)}
+        />
+      )}
     </main>
   );
 }
