@@ -2,14 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { BUZZWORDS, RESUME_RUBRIC_PROMPT, WEAK_VERBS, WORD_MAX, WORD_MIN } from './rubric';
 
 describe('RESUME_RUBRIC_PROMPT', () => {
-  it('encodes the non-negotiable rules', () => {
+  it('encodes the core formatting/quality rules', () => {
     const p = RESUME_RUBRIC_PROMPT.toLowerCase();
-    expect(p).toContain('truthful');
-    expect(p).toContain('never invent');
     expect(p).toContain('xyz');
     expect(p).toContain('keyword-stuff');
+    expect(p).toContain('one page');
     expect(p).toContain(`${WORD_MIN}`);
     expect(p).toContain(`${WORD_MAX}`);
+  });
+
+  it('is stance-neutral on truthfulness (each caller sets its own stance)', () => {
+    const p = RESUME_RUBRIC_PROMPT.toLowerCase();
+    // The shared rubric must not force "never invent" — the corpus flow allows
+    // aggressive-but-coherent invention; the legacy path adds its own ban.
+    expect(p).not.toContain('never invent');
   });
 
   it('tells the model exactly what the linter penalizes (no drift)', () => {
@@ -20,12 +26,5 @@ describe('RESUME_RUBRIC_PROMPT', () => {
 
   it('has a sane word target', () => {
     expect(WORD_MIN).toBeLessThan(WORD_MAX);
-  });
-
-  it('instructs the model to preserve template structure (headings + PROJECTS)', () => {
-    const p = RESUME_RUBRIC_PROMPT.toLowerCase();
-    expect(p).toContain('heading');
-    expect(p).toContain('projects');
-    expect(p).toContain('verbatim');
   });
 });
