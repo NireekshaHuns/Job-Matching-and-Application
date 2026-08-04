@@ -88,6 +88,7 @@ const US_METROS = [
   'dallas',
   'houston',
   'washington dc',
+  'nyc',
   'bellevue',
   'redmond',
   'philadelphia',
@@ -122,6 +123,75 @@ const US_MARKERS = ['united states', 'u.s.a', 'u.s.', 'usa', 'us-remote', 'us re
  */
 const SAFE_STATE_CODES = 'ak|ct|fl|hi|ia|ks|mi|nv|nh|nj|nm|ny|nd|oh|ok|or|ri|tx|ut|vt|wa|wv|wi|wy';
 const STATE_CODE_RE = new RegExp(`,\\s*(?:${SAFE_STATE_CODES})\\b`, 'i');
+
+/**
+ * Foreign ISO-3166 country codes that ATS feeds (Workday/Ashby) use as a
+ * location prefix — e.g. "NO-Oslo-MSO", "GB-London", "FR-Paris". DELIBERATELY
+ * excludes any code that is also a US state abbreviation (ca=California/Canada,
+ * co=Colorado/Colombia, de=Delaware/Germany, in=Indiana/India, id=Idaho/
+ * Indonesia, ga=Georgia, or/pa/va/wa/…), so a US "CO-Denver"-style location is
+ * never mislabeled non-US; those fall through to the name list or stay unknown.
+ */
+const FOREIGN_PREFIXES = new Set([
+  'gb',
+  'fr',
+  'no',
+  'se',
+  'dk',
+  'fi',
+  'nl',
+  'be',
+  'ch',
+  'at',
+  'ie',
+  'pt',
+  'pl',
+  'ro',
+  'cz',
+  'gr',
+  'it',
+  'es',
+  'ru',
+  'ua',
+  'tr',
+  'sg',
+  'jp',
+  'cn',
+  'hk',
+  'kr',
+  'tw',
+  'th',
+  'my',
+  'ph',
+  'vn',
+  'au',
+  'nz',
+  'za',
+  'eg',
+  'sa',
+  'ae',
+  'br',
+  'mx',
+  'cl',
+  'pe',
+  'uy',
+  'pk',
+  'bd',
+  'lk',
+  'sk',
+  'hu',
+  'bg',
+  'hr',
+  'rs',
+  'ee',
+  'lt',
+  'lv',
+  'is',
+  'lu',
+  'ng',
+  'ke',
+]);
+const FOREIGN_PREFIX_RE = /^([a-z]{2})-/;
 
 /** Known non-US countries, cities, and regions. */
 const NON_US = [
@@ -179,6 +249,27 @@ const NON_US = [
   'zurich',
   'sweden',
   'stockholm',
+  'norway',
+  'oslo',
+  'denmark',
+  'copenhagen',
+  'finland',
+  'helsinki',
+  'austria',
+  'vienna',
+  'belgium',
+  'brussels',
+  'italy',
+  'rome',
+  'milan',
+  'greece',
+  'athens',
+  'turkey',
+  'istanbul',
+  'russia',
+  'moscow',
+  'ukraine',
+  'kyiv',
   // APAC / other
   'australia',
   'sydney',
@@ -233,6 +324,12 @@ export function deriveIsUs(location: string | null | undefined): boolean | null 
     matchesAny(loc, US_METROS);
 
   if (usSignal) return true; // US is on offer, even for multi-region roles.
+
+  // Leading foreign ISO country-code prefix (e.g. "NO-Oslo-MSO") ⇒ non-US.
+  // Runs after the US check so "US-CA-…" is never caught here.
+  const prefix = loc.match(FOREIGN_PREFIX_RE);
+  if (prefix && FOREIGN_PREFIXES.has(prefix[1])) return false;
+
   if (matchesAny(loc, NON_US)) return false;
   return null;
 }
