@@ -4,8 +4,16 @@ import type { inferRouterOutputs } from '@trpc/server';
 import Link from 'next/link';
 import { useState } from 'react';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
+import { categorizePerson, type ContactKind } from '@/lib/contacts';
 import { groupByColumn } from '@/lib/kanban';
 import { outreachLinks } from '@/lib/outreach-links';
+
+/** People-finder result groups, in the order the user cares about. */
+const PEOPLE_GROUPS: { key: ContactKind; label: string }[] = [
+  { key: 'recruiter', label: 'Recruiters' },
+  { key: 'manager', label: 'Hiring managers' },
+  { key: 'other', label: 'Others' },
+];
 import type { NudgeLevel } from '@/lib/visa/nudges';
 import type { AppRouter } from '@/server/trpc/root';
 import { trpc } from '@/trpc/react';
@@ -97,42 +105,53 @@ function FindPeople({
         <p className="mt-1 text-xs text-zinc-500">No people found for “{company}”.</p>
       )}
 
-      {people.length > 0 && (
-        <ul className="mt-2 space-y-1">
-          {people.map((p, i) => {
-            const rowKey = `${p.email ?? p.name}:${i}`;
-            return (
-              <li key={rowKey} className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-medium text-zinc-800">{p.name}</span>
-                {p.title && <span className="text-zinc-500">{p.title}</span>}
-                {p.email && <span className="text-zinc-500">{p.email}</span>}
-                {p.emailConfidence != null && (
-                  <span className="text-zinc-400">{p.emailConfidence}%</span>
-                )}
-                <span className="text-zinc-400">· {p.source}</span>
-                <button
-                  type="button"
-                  disabled={importPerson.isPending || imported.has(rowKey)}
-                  onClick={() =>
-                    importPerson.mutate(
-                      {
-                        jobId,
-                        name: p.name,
-                        title: p.title ?? undefined,
-                        email: p.email ?? undefined,
-                      },
-                      { onSuccess: () => setImported((s) => new Set(s).add(rowKey)) },
-                    )
-                  }
-                  className="ml-auto rounded border border-zinc-300 px-1.5 py-0.5 hover:bg-zinc-50 disabled:opacity-50"
-                >
-                  {imported.has(rowKey) ? 'Added ✓' : 'Add as contact'}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {people.length > 0 &&
+        PEOPLE_GROUPS.map(({ key, label }) => {
+          // Up to ~5 per group so the user gets a focused set of managers + recruiters.
+          const items = people.filter((p) => categorizePerson(p.title) === key).slice(0, 5);
+          if (items.length === 0) return null;
+          return (
+            <div key={key} className="mt-2">
+              <div className="text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+                {label}
+              </div>
+              <ul className="space-y-1">
+                {items.map((p, i) => {
+                  const rowKey = `${key}:${i}:${p.email ?? p.name}`;
+                  return (
+                    <li key={rowKey} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium text-zinc-800">{p.name}</span>
+                      {p.title && <span className="text-zinc-500">{p.title}</span>}
+                      {p.email && <span className="text-zinc-500">{p.email}</span>}
+                      {p.emailConfidence != null && (
+                        <span className="text-zinc-400">{p.emailConfidence}%</span>
+                      )}
+                      <span className="text-zinc-400">· {p.source}</span>
+                      <button
+                        type="button"
+                        disabled={importPerson.isPending || imported.has(rowKey)}
+                        onClick={() =>
+                          importPerson.mutate(
+                            {
+                              jobId,
+                              name: p.name,
+                              title: p.title ?? undefined,
+                              email: p.email ?? undefined,
+                            },
+                            { onSuccess: () => setImported((s) => new Set(s).add(rowKey)) },
+                          )
+                        }
+                        className="ml-auto rounded border border-zinc-300 px-1.5 py-0.5 hover:bg-zinc-50 disabled:opacity-50"
+                      >
+                        {imported.has(rowKey) ? 'Added ✓' : 'Add as contact'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
     </div>
   );
 }
@@ -191,7 +210,7 @@ function OutreachPanel({
   }) => {
     setPendingContactId(c.id);
     draftEmail.mutate(
-      { company, role, contactName: c.name, contactTitle: c.title ?? undefined },
+      { company, role, contactName: c.name, contactTitle: c.title ?? undefined, jobId },
       { onSuccess: (d) => setDraft({ ...d, contactId: c.id, contactEmail: c.email }) },
     );
   };

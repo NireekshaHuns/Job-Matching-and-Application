@@ -27,6 +27,17 @@ describe('buildOutreachMessages', () => {
     expect(user).toMatch(/December 2026/);
   });
 
+  it('includes the sender fit strengths when provided', () => {
+    const { user } = buildOutreachMessages({ company: 'Ramp', fitSkills: ['go', 'kafka'] });
+    expect(user).toContain('relevant strengths');
+    expect(user).toContain('go, kafka');
+  });
+
+  it('omits the strengths line when there are none', () => {
+    const { user } = buildOutreachMessages({ company: 'Ramp' });
+    expect(user).not.toContain('relevant strengths');
+  });
+
   it('handles a missing contact and role gracefully', () => {
     const { user } = buildOutreachMessages({ company: 'Ramp' });
     expect(user).toContain('Ramp');
@@ -78,6 +89,12 @@ describe('templateOutreachEmail', () => {
     expect(email.body).toMatch(/F-1/);
     expect(email.body).toMatch(/December 2026/);
     expect(email.body).toContain('[Your name]');
+  });
+
+  it('weaves fit strengths into the template body when provided', () => {
+    const email = templateOutreachEmail({ company: 'Ramp', fitSkills: ['go', 'kafka'] });
+    expect(email.body).toContain('go, kafka');
+    expect(email.body.toLowerCase()).toContain('strong fit');
   });
 
   it('falls back to a generic greeting and role when unknown', () => {
