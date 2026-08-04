@@ -6,6 +6,7 @@ import {
   FRESHNESS_WINDOW_DAYS,
   freshnessScore,
   jobListInput,
+  locationMatchRegex,
   resolveJobQueryPlan,
   resolveWeights,
   tierScore,
@@ -98,6 +99,30 @@ describe('escapeLike', () => {
   it('escapes LIKE wildcards so the term is literal', () => {
     expect(escapeLike('50%_off')).toBe('50\\%\\_off');
     expect(escapeLike('c#')).toBe('c#');
+  });
+});
+
+describe('locationMatchRegex', () => {
+  // Exercise the regex the way Postgres `~*` would (case-insensitive).
+  const matches = (loc: string, term: string) =>
+    new RegExp(locationMatchRegex(term), 'i').test(loc);
+
+  it('matches a state code on word boundaries', () => {
+    expect(matches('Boston, MA', 'MA')).toBe(true);
+    expect(matches('Cambridge, MA 02139', 'ma')).toBe(true);
+    // Must NOT match "MA" inside another word.
+    expect(matches('Madison, WI', 'MA')).toBe(false);
+    expect(matches('Miami, FL', 'MA')).toBe(false);
+  });
+
+  it('matches a city name case-insensitively', () => {
+    expect(matches('Boston, MA', 'boston')).toBe(true);
+    expect(matches('New York, NY', 'boston')).toBe(false);
+  });
+
+  it('is included in the resolved plan', () => {
+    expect(resolveJobQueryPlan(jobListInput.parse({ location: 'MA' })).location).toBe('MA');
+    expect(resolveJobQueryPlan(jobListInput.parse({})).location).toBeNull();
   });
 });
 

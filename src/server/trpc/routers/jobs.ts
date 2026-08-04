@@ -40,6 +40,8 @@ export const jobListInput = z.object({
   /** Off by default: the board is scoped to US jobs (on-site + remote); unknowns stay. */
   includeNonUs: z.boolean().default(false),
   search: z.string().trim().max(100).optional(),
+  /** Location filter, e.g. "MA" or "Boston" — word-boundary match on jobs.location. */
+  location: z.string().trim().max(100).optional(),
   sort: z.enum(['combined', 'sponsor', 'fit', 'recent']).default('combined'),
   /** Apply-priority weights for the `combined` sort; absent/all-zero → defaults. */
   weights: z
@@ -72,6 +74,8 @@ export interface JobQueryPlan {
   /** Hide known non-US postings (is_us = false) unless the toggle is on; US + unknown stay. */
   hideNonUs: boolean;
   search: string | null;
+  /** Free-text location filter (state code or city), or null. */
+  location: string | null;
   sort: JobListInput['sort'];
 }
 
@@ -91,6 +95,7 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
     remoteOnly: input.remoteOnly,
     hideNonUs: !input.includeNonUs,
     search: input.search ? input.search : null,
+    location: input.location ? input.location : null,
     sort: input.sort,
   };
 }
@@ -98,6 +103,16 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
 /** Escape LIKE metacharacters so a search term is treated literally. */
 export function escapeLike(term: string): string {
   return term.replace(/[\\%_]/g, '\\$&');
+}
+
+/**
+ * POSIX regex that matches a location term on word boundaries, so "MA" matches
+ * "Boston, MA" but not "Madison" and "boston" matches case-insensitively. Regex
+ * metacharacters in the term are escaped; used with Postgres `~*`.
+ */
+export function locationMatchRegex(term: string): string {
+  const esc = term.replace(/[.^$*+?()[\]{}|\\]/g, '\\$&');
+  return `(^|[^a-zA-Z0-9])${esc}([^a-zA-Z0-9]|$)`;
 }
 
 /**
@@ -193,6 +208,11 @@ export const jobsRouter = createTRPCRouter({
     if (plan.search) {
       const esc = `%${escapeLike(plan.search)}%`;
       where.push(or(ilike(jobs.company, esc), ilike(jobs.title, esc)));
+    }
+    // Word-boundary match so "MA" hits "Boston, MA" but not "Madison". Jobs with
+    // no location are excluded when a location filter is active.
+    if (plan.location) {
+      where.push(sql`${jobs.location} ~* ${locationMatchRegex(plan.location)}`);
     }
 
     const weights = resolveWeights(input.weights);
