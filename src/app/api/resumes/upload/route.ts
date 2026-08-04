@@ -14,6 +14,10 @@ import { pdfToText } from '@/server/resume/pdf';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+/** Upload limits — résumés are small; keep cost/latency bounded. */
+const MAX_FILES = 10;
+const MAX_FILE_BYTES = 4_000_000; // 4MB per file
+
 /** Wire real OpenAI deps when a key is present; otherwise text-only ingest. */
 async function buildDeps(): Promise<IngestDeps> {
   const key = process.env.OPENAI_API_KEY;
@@ -55,6 +59,14 @@ export async function POST(req: Request) {
   if (files.length === 0) {
     return NextResponse.json({ error: 'No files uploaded.' }, { status: 400 });
   }
+  // Bound work per request: résumés are small, and each bullet triggers an embed
+  // call, so cap file count + size to keep cost/latency under maxDuration.
+  if (files.length > MAX_FILES) {
+    return NextResponse.json(
+      { error: `Too many files (max ${MAX_FILES} per upload).` },
+      { status: 413 },
+    );
+  }
   const roleFamily = parseRoleFamily(form.get('roleFamily'));
 
   const deps = await buildDeps();
@@ -63,6 +75,9 @@ export async function POST(req: Request) {
 
   for (const file of files) {
     try {
+      if (file.size > MAX_FILE_BYTES) {
+        throw new Error(`File is too large (max ${MAX_FILE_BYTES / 1_000_000}MB).`);
+      }
       const lower = file.name.toLowerCase();
       let text: string;
       if (lower.endsWith('.pdf')) {

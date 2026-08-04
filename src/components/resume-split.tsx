@@ -17,8 +17,11 @@ function downloadBlob(filename: string, blob: Blob) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Defer revoke so the browser has started the download before the URL dies.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** POST the LaTeX to Overleaf, opening it in a new project (real compile + preview). */

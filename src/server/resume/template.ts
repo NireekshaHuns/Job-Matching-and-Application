@@ -20,13 +20,21 @@ export function latexEscape(s: string): string {
   );
 }
 
+/**
+ * Sanitize a URL for `\href{...}`: strip braces/backslashes/whitespace that would
+ * break LaTeX. Query strings (& = ? #) are kept — they're fine inside `\href`.
+ */
+export function sanitizeUrl(url: string): string {
+  return url.trim().replace(/[{}\\\s]/g, '');
+}
+
 /** A hyperlinked contact chip, or a plain one when there's no URL. */
 function chip(url: string | null, label: string | null): string | null {
   if (!label || !label.trim()) return null;
   const text = latexEscape(label.trim());
-  if (!url || !url.trim()) return text;
-  // URLs go into \href verbatim (no escaping) so query strings survive.
-  return `\\href{${url.trim()}}{${text}}`;
+  const safeUrl = url ? sanitizeUrl(url) : '';
+  if (!safeUrl) return text;
+  return `\\href{${safeUrl}}{${text}}`;
 }
 
 /** Build the centered header (name + contact line) from the profile. */
@@ -35,8 +43,9 @@ export function buildHeader(p: ResumeProfileFacts): string {
   const contacts = [
     chip(p.email ? `mailto:${p.email}` : null, p.email),
     chip(null, p.phone),
-    chip(p.linkedinUrl, 'LinkedIn'),
-    chip(p.githubUrl, 'GitHub'),
+    // LinkedIn/GitHub are just labels for a link — omit them when there's no URL.
+    p.linkedinUrl ? chip(p.linkedinUrl, 'LinkedIn') : null,
+    p.githubUrl ? chip(p.githubUrl, 'GitHub') : null,
   ]
     .filter((c): c is string => c !== null)
     .join(' \\;|\\; ');
@@ -75,7 +84,7 @@ export function buildDefaultTemplate(p: ResumeProfileFacts): string {
   const cert = p.certText
     ? `\\resumesection{Certifications}\n${
         p.certUrl
-          ? `\\href{${p.certUrl.trim()}}{${latexEscape(p.certText.trim())}}`
+          ? `\\href{${sanitizeUrl(p.certUrl)}}{${latexEscape(p.certText.trim())}}`
           : latexEscape(p.certText.trim())
       }`
     : '';

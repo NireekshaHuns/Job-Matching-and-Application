@@ -20,6 +20,7 @@ import type { ChatClient, Embedder } from '@/server/enrich/types';
 import { ingestResume, type IngestDeps } from '@/server/resume/corpus-ingest';
 import { extractJdKeywords } from '@/server/resume/jd-keywords';
 import { withProfileDefaults } from '@/server/resume/profile';
+import { stripLatex } from '@/server/resume/quality';
 import { rankCorpusBullets, type CorpusBullet } from '@/server/resume/retrieve';
 import { buildTailoringSuggestions } from '@/server/resume/suggestions';
 import {
@@ -621,8 +622,15 @@ export const resumesRouter = createTRPCRouter({
       chat: chat ?? undefined,
       embedder: embedder ?? undefined,
     };
+    // Store the raw LaTeX as the résumé, but extract bullets/skills from the
+    // markup-stripped plain text so the corpus doesn't learn LaTeX commands.
     const result = await ingestResume(
-      { label: input.label, text: input.latex, kind: 'tailored' },
+      {
+        label: input.label,
+        text: input.latex,
+        extractText: stripLatex(input.latex),
+        kind: 'tailored',
+      },
       deps,
     );
     return result;

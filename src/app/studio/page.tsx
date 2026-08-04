@@ -146,8 +146,15 @@ export default function StudioPage() {
   function onSave() {
     if (!latex) return;
     const label = `${jobTitle}${company ? ` — ${company}` : ''}`.slice(0, 200) || 'Tailored résumé';
-    save.mutate({ label, latex }, { onSuccess: () => void utils.resumes.listCorpus.invalidate() });
-    setSaved(true);
+    save.mutate(
+      { label, latex },
+      {
+        onSuccess: () => {
+          setSaved(true);
+          void utils.resumes.listCorpus.invalidate();
+        },
+      },
+    );
   }
 
   const kwData = extractKw.data;
@@ -377,6 +384,11 @@ export default function StudioPage() {
                 saving={save.isPending}
                 saved={saved}
               />
+              {save.isError && (
+                <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">
+                  Save failed: {save.error.message}
+                </p>
+              )}
             </div>
           )}
         </Section>

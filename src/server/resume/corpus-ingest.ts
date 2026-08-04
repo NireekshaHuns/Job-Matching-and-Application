@@ -26,6 +26,12 @@ export interface IngestResumeInput {
   roleFamily?: RoleFamily | null;
   /** `uploaded` (a past résumé) by default; `tailored` when saving a generated one. */
   kind?: 'uploaded' | 'tailored';
+  /**
+   * Text to run extraction against, when it differs from what's stored. Used to
+   * feed plain text (LaTeX markup stripped) to the extractor while `content`
+   * keeps the original LaTeX. Defaults to `text`.
+   */
+  extractText?: string;
 }
 
 export interface IngestResult {
@@ -45,7 +51,7 @@ export async function ingestResume(
   const { db, chat, embedder } = deps;
 
   const inventory = chat
-    ? (await extractInventory(input.text, chat)).inventory
+    ? (await extractInventory(input.extractText ?? input.text, chat)).inventory
     : { skills: [], bullets: [], baseResumes: [] };
 
   // Insert the résumé first so bullets can reference it (FK).

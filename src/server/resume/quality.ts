@@ -144,7 +144,7 @@ const METRIC_RE = new RegExp(
 );
 
 /** Remove LaTeX commands/braces so analysis sees plain text. */
-function stripLatex(s: string): string {
+export function stripLatex(s: string): string {
   return s
     .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
     .replace(/[{}$&#~^_\\]/g, ' ')

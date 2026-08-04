@@ -80,12 +80,7 @@ async function getEngine(): Promise<PdfTeXEngineInstance> {
   }
 }
 
-/**
- * Compile a LaTeX document to PDF bytes. Serializes on the shared engine, so
- * callers should not invoke it concurrently (the Studio disables its button
- * while a compile is in flight). Throws `LatexCompileError` on a failed build.
- */
-export async function compileLatexToPdf(latex: string): Promise<Uint8Array> {
+async function runCompile(latex: string): Promise<Uint8Array> {
   const engine = await getEngine();
   engine.writeMemFSFile('main.tex', latex);
   engine.setEngineMainFile('main.tex');
@@ -94,4 +89,20 @@ export async function compileLatexToPdf(latex: string): Promise<Uint8Array> {
     throw new LatexCompileError('LaTeX failed to compile.', result.log ?? '');
   }
   return result.pdf;
+}
+
+// The engine has one shared MemFS; serialize compiles through a chained promise
+// so overlapping calls can't interleave writes/reads on the same file.
+let queue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Compile a LaTeX document to PDF bytes. Calls are serialized on the shared
+ * engine (a later call waits for the current one). Throws `LatexCompileError`
+ * on a failed build.
+ */
+export function compileLatexToPdf(latex: string): Promise<Uint8Array> {
+  const run = queue.then(() => runCompile(latex));
+  // Keep the chain alive regardless of this call's outcome.
+  queue = run.catch(() => undefined);
+  return run;
 }
