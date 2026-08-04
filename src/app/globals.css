@@ -16,10 +16,12 @@
   --color-surface-2: #f3f4f8;
   --color-fg: #0b0f1a;
   --color-muted: #566072;
-  --color-faint: #8a93a6;
+  --color-faint: #64748b;
   --color-border: #e7e9f0;
   --color-brand: #6d4ef0;
   --color-brand-2: #8b78ff;
+  /* Brand as small text — meets AA on the page background in both themes. */
+  --color-brand-text: #6d4ef0;
   --color-brand-contrast: #ffffff;
 }
 
@@ -29,10 +31,11 @@
   --color-surface-2: #1a2136;
   --color-fg: #eceff7;
   --color-muted: #98a1b8;
-  --color-faint: #667089;
+  --color-faint: #8b93a6;
   --color-border: #232d45;
   --color-brand: #7c5cfc;
   --color-brand-2: #a594ff;
+  --color-brand-text: #a08fff;
   --color-brand-contrast: #ffffff;
 }
 
@@ -51,6 +54,13 @@ body {
 
 ::selection {
   background: color-mix(in oklab, var(--color-brand) 28%, transparent);
+}
+
+/* Visible keyboard focus everywhere, in the brand color. */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 /* Motion: a restrained page-load reveal + the verdict gauge fill. */

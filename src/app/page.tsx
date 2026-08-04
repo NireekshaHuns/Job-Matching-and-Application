@@ -1,18 +1,13 @@
 import Link from 'next/link';
+import { TIER_MEANINGS, type SponsorTier } from '@/components/tier';
 
-const TIERS = [
-  {
-    name: 'High',
-    dot: 'bg-emerald-500',
-    note: 'JD states sponsorship, or a heavy filing history.',
-  },
-  { name: 'Medium', dot: 'bg-amber-500', note: 'Sponsored before; the JD is silent.' },
-  { name: 'Low', dot: 'bg-slate-400', note: 'Silent JD and little or no history.' },
-  {
-    name: 'Excluded',
-    dot: 'bg-rose-500',
-    note: '“No sponsorship” / citizens only — hidden but auditable.',
-  },
+// Tier copy comes from the shared domain module so it can't drift; the dot color
+// is the landing's own presentation.
+const TIERS: { name: SponsorTier; dot: string }[] = [
+  { name: 'High', dot: 'bg-emerald-500' },
+  { name: 'Medium', dot: 'bg-amber-500' },
+  { name: 'Low', dot: 'bg-slate-400' },
+  { name: 'Excluded', dot: 'bg-rose-500' },
 ];
 
 const PIPELINE = [
@@ -183,7 +178,7 @@ export default function LandingPage() {
                 <span className={`h-2.5 w-2.5 rounded-full ${t.dot}`} />
                 <span className="font-medium">{t.name}</span>
               </div>
-              <p className="text-muted mt-2 text-sm">{t.note}</p>
+              <p className="text-muted mt-2 text-sm">{TIER_MEANINGS[t.name]}</p>
             </div>
           ))}
         </div>
@@ -197,7 +192,9 @@ export default function LandingPage() {
         <ol className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {PIPELINE.map((p, i) => (
             <li key={p.step} className="border-border bg-surface rounded-xl border p-4">
-              <div className="text-brand font-mono text-xs">{String(i + 1).padStart(2, '0')}</div>
+              <div className="text-brand-text font-mono text-xs">
+                {String(i + 1).padStart(2, '0')}
+              </div>
               <div className="mt-2 font-medium">{p.step}</div>
               <p className="text-muted mt-1 text-sm">{p.detail}</p>
             </li>
@@ -216,7 +213,7 @@ export default function LandingPage() {
             >
               <div className="font-medium">
                 {f.title}
-                <span className="text-brand transition-transform group-hover:translate-x-0.5">
+                <span className="text-brand-text transition-transform group-hover:translate-x-0.5">
                   {' '}
                   →
                 </span>

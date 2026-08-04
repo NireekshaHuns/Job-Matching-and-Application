@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { isThemedRoute } from '@/lib/themed-routes';
 import { ThemeToggle } from './theme-toggle';
 import { navIsActive } from './nav-active';
 
@@ -42,9 +43,7 @@ export function Navbar() {
             );
           })}
         </div>
-        <div className="ml-auto">
-          <ThemeToggle />
-        </div>
+        <div className="ml-auto">{isThemedRoute(pathname) && <ThemeToggle />}</div>
       </div>
     </nav>
   );

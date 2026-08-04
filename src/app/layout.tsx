@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Fraunces, Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Navbar } from '@/components/navbar';
+import { ThemeGuard } from '@/components/theme-guard';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TRPCReactProvider } from '@/trpc/react';
 
@@ -10,6 +11,7 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 const fraunces = Fraunces({
   variable: '--font-fraunces',
   subsets: ['latin'],
+  style: ['normal', 'italic'],
   axes: ['opsz', 'SOFT', 'WONK'],
 });
 
@@ -32,6 +34,7 @@ export default function RootLayout({
     >
       <body className="bg-bg text-fg flex min-h-full flex-col">
         <ThemeProvider>
+          <ThemeGuard />
           <TRPCReactProvider>
             <Navbar />
             {children}
