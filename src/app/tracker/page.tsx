@@ -12,6 +12,15 @@ import { trpc } from '@/trpc/react';
 const STATUSES = ['saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn'] as const;
 type Status = (typeof STATUSES)[number];
 
+/** Kanban columns. Change a card's status (on the card) to move it between them. */
+const COLUMNS: { key: Status; label: string }[] = [
+  { key: 'applied', label: 'Applied' },
+  { key: 'interviewing', label: 'Interview' },
+  { key: 'offer', label: 'Offer' },
+  { key: 'rejected', label: 'Rejected' },
+];
+const COLUMN_KEYS = new Set<Status>(COLUMNS.map((c) => c.key));
+
 // Derived from the router so the row type can never drift from the query.
 type Application = inferRouterOutputs<AppRouter>['applications']['list'][number];
 type FilingType = Application['filingType'];
@@ -652,15 +661,45 @@ export default function Tracker() {
         </EmptyState>
       )}
 
-      <ul className="space-y-3">
-        {query.data?.map((app) => (
-          <ApplicationRow
-            key={`${app.id}:${app.resumeLabel ?? ''}:${app.resumeSnapshot ?? ''}`}
-            app={app}
-            onChanged={onChanged}
-          />
-        ))}
-      </ul>
+      {query.data && query.data.length > 0 && (
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {[
+            ...COLUMNS,
+            // Any saved/withdrawn apps go in a trailing "Other" column so nothing is hidden.
+            ...(query.data.some((a) => !COLUMN_KEYS.has(a.status))
+              ? [{ key: 'other' as const, label: 'Other' }]
+              : []),
+          ].map((col) => {
+            const apps = query.data.filter((a) =>
+              col.key === 'other' ? !COLUMN_KEYS.has(a.status) : a.status === col.key,
+            );
+            return (
+              <section key={col.key} className="w-80 shrink-0">
+                <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-700">
+                  {col.label}
+                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
+                    {apps.length}
+                  </span>
+                </h2>
+                <ul className="space-y-3">
+                  {apps.map((app) => (
+                    <ApplicationRow
+                      key={`${app.id}:${app.resumeLabel ?? ''}:${app.resumeSnapshot ?? ''}`}
+                      app={app}
+                      onChanged={onChanged}
+                    />
+                  ))}
+                </ul>
+                {apps.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-zinc-200 p-4 text-center text-xs text-zinc-400">
+                    Nothing here yet
+                  </p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
     </main>
   );
 }
