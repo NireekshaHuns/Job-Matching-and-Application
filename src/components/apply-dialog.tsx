@@ -76,7 +76,9 @@ export function ApplyDialog({
           <span className="font-medium">{company}</span> in a new tab. Once you’ve submitted it,
           confirm below and it moves to your tracker.
         </p>
-        {error && <p className="mt-2 text-xs text-red-600">Couldn’t save: {error}</p>}
+        {error && (
+          <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">Couldn’t save: {error}</p>
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <button
             ref={cancelRef}

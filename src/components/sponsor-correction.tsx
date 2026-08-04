@@ -36,7 +36,7 @@ export function SponsorCorrection({ company, onDone }: { company: string; onDone
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search USCIS employers…"
-        className="border-border w-full rounded border px-2 py-1"
+        className="border-border bg-surface w-full rounded border px-2 py-1"
       />
 
       <ul className="divide-border mt-1 max-h-40 divide-y overflow-auto">

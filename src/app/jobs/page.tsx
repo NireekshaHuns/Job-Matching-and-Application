@@ -290,7 +290,7 @@ export default function JobsPage() {
                   {tailoring === job.id ? 'Hide tailor' : 'Tailor'}
                 </button>
                 {applied.has(job.id) ? (
-                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
                     Applied ✓
                   </span>
                 ) : (
