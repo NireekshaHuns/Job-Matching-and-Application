@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Fraunces, Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import { AuthNav } from '@/components/auth-nav';
 import { Navbar } from '@/components/navbar';
 import { ThemeGuard } from '@/components/theme-guard';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -36,7 +37,7 @@ export default function RootLayout({
         <ThemeProvider>
           <ThemeGuard />
           <TRPCReactProvider>
-            <Navbar />
+            <Navbar authSlot={<AuthNav />} />
             {children}
           </TRPCReactProvider>
         </ThemeProvider>

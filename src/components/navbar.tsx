@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { isThemedRoute } from '@/lib/themed-routes';
 import { ThemeToggle } from './theme-toggle';
 import { navIsActive } from './nav-active';
@@ -14,7 +15,7 @@ const LINKS = [
   { href: '/settings', label: 'Settings' },
 ] as const;
 
-export function Navbar() {
+export function Navbar({ authSlot }: { authSlot?: ReactNode }) {
   const pathname = usePathname() ?? '/';
   return (
     <nav className="border-border bg-bg/80 sticky top-0 z-40 border-b backdrop-blur">
@@ -43,7 +44,10 @@ export function Navbar() {
             );
           })}
         </div>
-        <div className="ml-auto">{isThemedRoute(pathname) && <ThemeToggle />}</div>
+        <div className="ml-auto flex items-center gap-4">
+          {isThemedRoute(pathname) && <ThemeToggle />}
+          {authSlot}
+        </div>
       </div>
     </nav>
   );
