@@ -134,13 +134,55 @@ function normalizeProfile(input: SetResumeProfileInput) {
   };
 }
 
-/** Build a real OpenAI chat client, or null when no key is set. */
+/** Build a real OpenAI chat client (default OpenAI endpoint), or null without a key. */
 async function llmChat(opts: { jsonMode: boolean; model: string }): Promise<ChatClient | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
   const { default: OpenAI } = await import('openai');
   const { openaiChat } = await import('@/server/enrich/openai');
   return openaiChat(new OpenAI({ apiKey: key }), opts.model, { jsonMode: opts.jsonMode });
+}
+
+/**
+ * Decide which endpoint the tailoring calls use. Only routes to the alternate
+ * (OpenAI-compatible) endpoint when BOTH `baseUrl` and `tailorKey` are set — so
+ * the OpenAI key is never sent to a third-party base URL by accident. Falls back
+ * to plain OpenAI with `openaiKey`, or null when nothing usable is configured.
+ * Pure so the routing invariant is unit-tested.
+ */
+export function resolveTailorEndpoint(env: {
+  baseUrl?: string;
+  tailorKey?: string;
+  openaiKey?: string;
+}): { apiKey: string; baseURL?: string } | null {
+  const baseURL = env.baseUrl?.trim();
+  const tailorKey = env.tailorKey?.trim();
+  if (baseURL && tailorKey) return { apiKey: tailorKey, baseURL };
+  const openaiKey = env.openaiKey?.trim();
+  return openaiKey ? { apiKey: openaiKey } : null;
+}
+
+/**
+ * Chat client for the (expensive) tailoring calls. Routes to an OpenAI-compatible
+ * endpoint when `OPENAI_TAILOR_BASE_URL` + `OPENAI_TAILOR_API_KEY` are set — e.g.
+ * OpenRouter for a cheap GLM model (set `OPENAI_TAILOR_MODEL=z-ai/glm-4.6`) — and
+ * otherwise falls back to plain OpenAI. Tailoring returns raw LaTeX, json off.
+ */
+async function tailorChat(): Promise<ChatClient | null> {
+  const endpoint = resolveTailorEndpoint({
+    baseUrl: process.env.OPENAI_TAILOR_BASE_URL,
+    tailorKey: process.env.OPENAI_TAILOR_API_KEY,
+    openaiKey: process.env.OPENAI_API_KEY,
+  });
+  if (!endpoint) return null;
+  const { default: OpenAI } = await import('openai');
+  const { openaiChat } = await import('@/server/enrich/openai');
+  const client = new OpenAI(
+    endpoint.baseURL
+      ? { apiKey: endpoint.apiKey, baseURL: endpoint.baseURL }
+      : { apiKey: endpoint.apiKey },
+  );
+  return openaiChat(client, TAILOR_MODEL(), { jsonMode: false });
 }
 
 /** Build a real OpenAI embedder, or null when no key is set. */
@@ -303,13 +345,9 @@ export const resumesRouter = createTRPCRouter({
       missingGap: inputs.fit.missingGap,
     };
 
-    const key = process.env.OPENAI_API_KEY;
-    if (key) {
+    const chat = await tailorChat();
+    if (chat) {
       try {
-        const { default: OpenAI } = await import('openai');
-        const { openaiChat } = await import('@/server/enrich/openai');
-        // Text mode: tailoring returns a raw LaTeX document, not JSON.
-        const chat = openaiChat(new OpenAI({ apiKey: key }), TAILOR_MODEL(), { jsonMode: false });
         const result = await tailorResume(baseLatex, tailorJob, inputs, chat, {
           maxAttempts: input.maxAttempts,
         });
@@ -581,7 +619,7 @@ export const resumesRouter = createTRPCRouter({
         company: r.company,
       }));
 
-      const chat = await llmChat({ jsonMode: false, model: TAILOR_MODEL() });
+      const chat = await tailorChat();
       if (chat) {
         try {
           const result = await tailorFromCorpus(
