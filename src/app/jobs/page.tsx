@@ -46,8 +46,8 @@ export default function JobsPage() {
   const appliedQuery = trpc.applications.appliedJobIds.useQuery();
   const applied = new Set(appliedQuery.data ?? []);
   const markApplied = trpc.applications.create.useMutation({
-    // Optimistically mark applied so the button flips immediately and a fast
-    // double-click can't create duplicate rows; roll back on error.
+    // Optimistically flip the job to applied so it updates immediately; the
+    // apply dialog stays open until this settles and rolls back on error.
     onMutate: async (vars) => {
       await utils.applications.appliedJobIds.cancel();
       const prev = utils.applications.appliedJobIds.getData();
@@ -295,6 +295,7 @@ export default function JobsPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      markApplied.reset(); // clear any prior error before reopening
                       window.open(job.url, '_blank', 'noopener,noreferrer');
                       setApplyFor({ id: job.id, company: job.company, title: job.title });
                     }}
@@ -324,10 +325,14 @@ export default function JobsPage() {
           company={applyFor.company}
           title={applyFor.title}
           pending={markApplied.isPending}
-          onConfirm={() => {
-            markApplied.mutate({ jobId: applyFor.id, resumeId, resumeLabel: lensLabel });
-            setApplyFor(null);
-          }}
+          error={markApplied.error?.message}
+          onConfirm={() =>
+            // Attribute the résumé lens selected at confirm time; only close on success.
+            markApplied.mutate(
+              { jobId: applyFor.id, resumeId, resumeLabel: lensLabel },
+              { onSuccess: () => setApplyFor(null) },
+            )
+          }
           onClose={() => setApplyFor(null)}
         />
       )}

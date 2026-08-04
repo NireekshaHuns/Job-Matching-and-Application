@@ -13,9 +13,11 @@ test('apply on the board confirms, appears in the tracker, and status is editabl
   const card = page.getByRole('listitem').filter({ hasText: SEED.high });
 
   // Apply opens the posting in a new tab, then asks for confirmation.
-  const popupPromise = context.waitForEvent('page').catch(() => null);
+  const popupPromise = context.waitForEvent('page');
   await card.getByRole('button', { name: 'Apply', exact: true }).click();
-  await popupPromise;
+  const popup = await popupPromise;
+  expect(popup).not.toBeNull();
+  await popup.close();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
