@@ -8,17 +8,17 @@ import { trpc } from '@/trpc/react';
 type Summary = inferRouterOutputs<AppRouter>['dashboard']['summary'];
 
 const TIER_BAR: Record<string, string> = {
-  High: 'bg-green-500',
+  High: 'bg-emerald-500',
   Medium: 'bg-amber-500',
-  Low: 'bg-zinc-400',
-  Excluded: 'bg-red-500',
+  Low: 'bg-slate-400',
+  Excluded: 'bg-rose-500',
 };
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-zinc-200 p-4">
+    <div className="border-border bg-surface rounded-lg border p-4">
       <div className="text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
-      <div className="text-sm text-zinc-500">{label}</div>
+      <div className="text-muted text-sm">{label}</div>
     </div>
   );
 }
@@ -35,21 +35,21 @@ function Breakdown({
 }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
-    <div className="rounded-lg border border-zinc-200 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-zinc-700">{title}</h2>
+    <div className="border-border bg-surface rounded-lg border p-4">
+      <h2 className="text-muted mb-3 text-sm font-semibold">{title}</h2>
       <ul className="space-y-2">
         {rows.map((r) => (
           <li key={r.key} className="flex items-center gap-3 text-sm">
-            <span className="w-28 shrink-0 truncate text-zinc-600 capitalize">
+            <span className="text-muted w-28 shrink-0 truncate capitalize">
               {r.key.replace(/_/g, ' ')}
             </span>
-            <span className="h-2 flex-1 overflow-hidden rounded bg-zinc-100">
+            <span className="bg-surface-2 h-2 flex-1 overflow-hidden rounded">
               <span
                 className={`block h-full rounded ${barClass?.(r.key) ?? 'bg-blue-500'}`}
                 style={{ width: `${(r.count / max) * 100}%` }}
               />
             </span>
-            <span className="w-10 shrink-0 text-right text-zinc-700 tabular-nums">{r.count}</span>
+            <span className="text-muted w-10 shrink-0 text-right tabular-nums">{r.count}</span>
           </li>
         ))}
       </ul>
@@ -79,18 +79,16 @@ function DashboardBody({ data }: { data: Summary }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-lg border border-zinc-200 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700">
-            Top sponsors (by H1B history)
-          </h2>
+        <div className="border-border bg-surface rounded-lg border p-4">
+          <h2 className="text-muted mb-3 text-sm font-semibold">Top sponsors (by H1B history)</h2>
           {data.topSponsors.length === 0 ? (
-            <p className="text-sm text-zinc-500">No jobs yet.</p>
+            <p className="text-muted text-sm">No jobs yet.</p>
           ) : (
             <ul className="space-y-1 text-sm">
               {data.topSponsors.map((s) => (
                 <li key={s.company} className="flex items-center justify-between gap-3">
-                  <span className="truncate text-zinc-700">{s.company}</span>
-                  <span className="shrink-0 text-zinc-500 tabular-nums">
+                  <span className="text-muted truncate">{s.company}</span>
+                  <span className="text-muted shrink-0 tabular-nums">
                     {s.sponsorCount.toLocaleString()} approvals · {s.jobs} job
                     {s.jobs === 1 ? '' : 's'}
                   </span>
@@ -99,13 +97,13 @@ function DashboardBody({ data }: { data: Summary }) {
             </ul>
           )}
         </div>
-        <div className="rounded-lg border border-zinc-200 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700">Freshness</h2>
-          <p className="text-sm text-zinc-600">
-            <span className="font-medium text-zinc-900 tabular-nums">{data.recentJobs.last7}</span>{' '}
-            jobs added in the last 7 days ·{' '}
-            <span className="font-medium text-zinc-900 tabular-nums">{data.recentJobs.last30}</span>{' '}
-            in the last 30.
+        <div className="border-border bg-surface rounded-lg border p-4">
+          <h2 className="text-muted mb-3 text-sm font-semibold">Freshness</h2>
+          <p className="text-muted text-sm">
+            <span className="text-fg font-medium tabular-nums">{data.recentJobs.last7}</span> jobs
+            added in the last 7 days ·{' '}
+            <span className="text-fg font-medium tabular-nums">{data.recentJobs.last30}</span> in
+            the last 30.
           </p>
         </div>
       </div>
@@ -120,7 +118,7 @@ export default function DashboardPage() {
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-muted text-sm">
           A snapshot of the board: sponsor-tier mix, application funnel, and top sponsors.
         </p>
       </header>
