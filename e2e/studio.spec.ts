@@ -17,7 +17,7 @@ test('studio uploads a résumé to the corpus and generates one for a JD', async
     mimeType: 'text/plain',
     buffer: Buffer.from('Software Engineer. Built Node.js and PostgreSQL services with REST APIs.'),
   });
-  await expect(page.getByText(/1 résumé/)).toBeVisible();
+  await expect(page.getByText('resume-e2e')).toBeVisible();
 
   // Provide a job title and generate — without a key this returns the base template.
   await page.getByPlaceholder('Software Engineer').fill('Backend Engineer');

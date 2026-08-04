@@ -3,6 +3,7 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import Link from 'next/link';
 import { useState } from 'react';
+import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { categorizePerson, type ContactKind } from '@/lib/contacts';
 import { groupByColumn } from '@/lib/kanban';
@@ -651,17 +652,19 @@ export default function Tracker() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
-      <header className="mb-6 flex items-baseline justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Application Tracker</h1>
-          <p className="text-muted text-sm">
-            Every application, its status, and the resume version you used.
-          </p>
-        </div>
-        <span className="text-muted text-sm">
-          Outreach today: <span className="text-fg font-medium">{todayQuery.data ?? 0}</span>
-        </span>
-      </header>
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Application Tracker"
+        subtitle="Every application, its status, and the résumé version you used."
+        actions={
+          <span className="border-border bg-surface-2 text-muted rounded-full border px-3 py-1 text-sm">
+            Outreach today:{' '}
+            <span className="text-fg font-display font-semibold tabular-nums">
+              {todayQuery.data ?? 0}
+            </span>
+          </span>
+        }
+      />
 
       <VisaTimelinePanel />
 

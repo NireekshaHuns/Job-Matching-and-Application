@@ -173,7 +173,7 @@ export default function LandingPage() {
         </h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {TIERS.map((t) => (
-            <div key={t.name} className="border-border bg-surface rounded-xl border p-4">
+            <div key={t.name} className="border-border bg-surface lift rounded-xl border p-4">
               <div className="flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 rounded-full ${t.dot}`} />
                 <span className="font-medium">{t.name}</span>
@@ -191,7 +191,7 @@ export default function LandingPage() {
         </h2>
         <ol className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {PIPELINE.map((p, i) => (
-            <li key={p.step} className="border-border bg-surface rounded-xl border p-4">
+            <li key={p.step} className="border-border bg-surface lift rounded-xl border p-4">
               <div className="text-brand-text font-mono text-xs">
                 {String(i + 1).padStart(2, '0')}
               </div>
@@ -209,7 +209,7 @@ export default function LandingPage() {
             <Link
               key={f.href}
               href={f.href}
-              className="group border-border bg-surface hover:border-brand rounded-xl border p-5 transition-colors"
+              className="group border-border bg-surface lift hover:border-brand rounded-xl border p-5"
             >
               <div className="font-medium">
                 {f.title}

@@ -4,12 +4,15 @@
  * client parent), so the module stays usable from server components too.
  */
 
-/** Pulsing placeholder cards shown while a query is loading. */
+/** Shimmering placeholder cards shown while a query is loading. */
 export function LoadingSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div className="space-y-3" aria-busy="true" aria-live="polite">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="border-border bg-surface-2 h-20 animate-pulse rounded-lg border" />
+        <div
+          key={i}
+          className="border-border bg-surface-2 shimmer h-20 overflow-hidden rounded-lg border"
+        />
       ))}
     </div>
   );
@@ -33,12 +36,18 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   );
 }
 
-/** Friendly empty state with a title and optional supporting content. */
+/** Friendly, teaching empty state with a title and optional supporting content. */
 export function EmptyState({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <div className="border-border rounded-lg border border-dashed p-8 text-center">
+    <div className="border-border bg-surface-2/40 animate-rise rounded-xl border border-dashed p-8 text-center">
+      <span
+        aria-hidden
+        className="bg-brand/12 text-brand-text mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full text-lg"
+      >
+        ✳
+      </span>
       <p className="text-fg text-sm font-medium">{title}</p>
-      {children && <div className="text-muted mt-1 text-sm">{children}</div>}
+      {children && <div className="text-muted mx-auto mt-1 max-w-md text-sm">{children}</div>}
     </div>
   );
 }

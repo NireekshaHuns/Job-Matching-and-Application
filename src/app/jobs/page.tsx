@@ -3,6 +3,7 @@
 import { useDeferredValue, useState } from 'react';
 import { ApplyDialog } from '@/components/apply-dialog';
 import { Chip } from '@/components/chip';
+import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { SponsorCorrection } from '@/components/sponsor-correction';
 import { TailoringPanel } from '@/components/tailoring-panel';
@@ -75,12 +76,11 @@ export default function JobsPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Job Board</h1>
-        <p className="text-muted text-sm">
-          Two independent scores per job: H1B possibility tier and resume fit.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Sponsorship-scored"
+        title="Job Board"
+        subtitle="Two independent scores per job: H1B possibility tier and résumé fit."
+      />
 
       <div className="border-border bg-surface mb-6 flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm">
         <input

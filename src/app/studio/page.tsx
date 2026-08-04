@@ -10,7 +10,8 @@
  */
 import { useRef, useState } from 'react';
 import { KeywordPicker } from '@/components/keyword-picker';
-import { ErrorState } from '@/components/page-state';
+import { PageHeader } from '@/components/page-header';
+import { EmptyState, ErrorState } from '@/components/page-state';
 import { ResumeSplit } from '@/components/resume-split';
 import { ROLE_FAMILIES, type RoleFamily } from '@/lib/role-families';
 import { trpc } from '@/trpc/react';
@@ -18,8 +19,8 @@ import { trpc } from '@/trpc/react';
 const inputCls =
   'rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-brand focus:outline-none';
 const btnCls =
-  'rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-2 disabled:opacity-50';
-const primaryBtn = `${btnCls} border-brand bg-brand text-white hover:opacity-90`;
+  'press rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-2 disabled:opacity-50';
+const primaryBtn = `press rounded-md bg-brand px-4 py-1.5 text-sm font-semibold text-brand-contrast shadow-[0_8px_24px_-8px_var(--color-brand)] transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0`;
 
 interface UploadResponse {
   ingested?: Array<{ label: string; resumeId: number; skills: number; bullets: number }>;
@@ -31,20 +32,28 @@ interface UploadResponse {
 function Section({
   step,
   title,
+  hint,
   children,
 }: {
   step: number;
   title: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-border rounded-lg border p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <span className="bg-surface-2 text-muted inline-flex h-5 w-5 items-center justify-center rounded-full text-xs">
+    <section
+      className="border-border bg-surface animate-rise rounded-xl border p-5"
+      style={{ animationDelay: `${step * 70}ms` }}
+    >
+      <div className="mb-4 flex items-baseline gap-3">
+        <span className="bg-brand/12 text-brand-text font-display inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
           {step}
         </span>
-        {title}
-      </h2>
+        <div>
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+          {hint && <p className="text-faint mt-0.5 text-xs">{hint}</p>}
+        </div>
+      </div>
       {children}
     </section>
   );
@@ -162,17 +171,19 @@ export default function StudioPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Tailoring Studio</h1>
-        <p className="text-muted text-sm">
-          Upload your résumés once, paste a job description, and generate a strong, keyword-complete
-          one-page résumé — edit the LaTeX and preview the PDF side by side.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Résumé studio"
+        title="Tailoring Studio"
+        subtitle="Upload your résumés once, paste a job description, and generate a strong, keyword-complete one-page résumé — edit the LaTeX and watch the PDF update side by side."
+      />
 
       <div className="flex flex-col gap-5">
         {/* Step 1 — corpus */}
-        <Section step={1} title="Your résumé corpus">
+        <Section
+          step={1}
+          title="Your résumé corpus"
+          hint="The more real résumés you add, the sharper every tailor gets."
+        >
           <div className="flex flex-wrap items-center gap-3">
             <input
               ref={fileInput}
@@ -231,45 +242,76 @@ export default function StudioPage() {
             </button>
           </div>
 
-          <div className="text-muted mt-3 text-xs">
-            {corpus.data
-              ? `${corpus.data.resumes.length} résumé(s) · ${corpus.data.bulletCount} bullets · ${corpus.data.skillCount} skills`
-              : 'Loading corpus…'}
-          </div>
-          {corpus.data && corpus.data.resumes.length > 0 && (
-            <ul className="mt-2 flex flex-col gap-1">
-              {corpus.data.resumes.map((r) => (
-                <li
-                  key={r.id}
-                  className="border-border flex items-center justify-between rounded border px-2 py-1 text-sm"
+          {corpus.data && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {(
+                [
+                  ['résumés', corpus.data.resumes.length],
+                  ['bullets', corpus.data.bulletCount],
+                  ['skills', corpus.data.skillCount],
+                ] as const
+              ).map(([label, n]) => (
+                <span
+                  key={label}
+                  className="bg-surface-2 border-border inline-flex items-baseline gap-1.5 rounded-full border px-3 py-1 text-xs"
                 >
-                  <span>
-                    {r.label}{' '}
-                    <span className="text-faint text-xs">
-                      ({r.kind}
-                      {r.roleFamily ? `, ${r.roleFamily}` : ''})
-                    </span>
+                  <span className="text-fg font-display text-sm font-semibold tabular-nums">
+                    {n}
                   </span>
-                  <button
-                    type="button"
-                    className="text-faint hover:text-fg text-xs"
-                    onClick={() =>
-                      removeResume.mutate(
-                        { id: r.id },
-                        { onSuccess: () => void utils.resumes.listCorpus.invalidate() },
-                      )
-                    }
-                  >
-                    Remove
-                  </button>
-                </li>
+                  <span className="text-muted">{label}</span>
+                </span>
               ))}
-            </ul>
+            </div>
+          )}
+
+          {corpus.data && corpus.data.resumes.length === 0 ? (
+            <div className="mt-3">
+              <EmptyState title="Your corpus is empty — that's the only setup step.">
+                Drop in a few past résumés (PDF, .tex, or .txt) above. The AI mines them for real
+                bullets and skills, then rewrites them for each job. More résumés → sharper
+                tailoring.
+              </EmptyState>
+            </div>
+          ) : (
+            corpus.data && (
+              <ul className="mt-3 flex flex-col gap-1.5">
+                {corpus.data.resumes.map((r) => (
+                  <li
+                    key={r.id}
+                    className="border-border bg-surface lift flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                  >
+                    <span className="truncate">
+                      {r.label}{' '}
+                      <span className="text-faint text-xs">
+                        ({r.kind}
+                        {r.roleFamily ? `, ${r.roleFamily}` : ''})
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="text-faint text-xs transition-colors hover:text-rose-500"
+                      onClick={() =>
+                        removeResume.mutate(
+                          { id: r.id },
+                          { onSuccess: () => void utils.resumes.listCorpus.invalidate() },
+                        )
+                      }
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
           )}
         </Section>
 
         {/* Step 2 — JD + keywords */}
-        <Section step={2} title="Job description → keywords">
+        <Section
+          step={2}
+          title="Job description → keywords"
+          hint="Paste the JD, then tick the tech + soft keywords to weave in."
+        >
           <div className="flex flex-wrap gap-3">
             <label className="text-muted flex flex-col gap-1 text-xs">
               Job title
@@ -343,7 +385,7 @@ export default function StudioPage() {
         </Section>
 
         {/* Step 3 — generate */}
-        <Section step={3} title="Generate & preview">
+        <Section step={3} title="Generate & preview" hint="One page, ATS-ready, yours to edit.">
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
@@ -351,25 +393,38 @@ export default function StudioPage() {
               disabled={tailor.isPending || jobTitle.trim() === '' || !hasCorpus}
               onClick={onGenerate}
             >
-              {tailor.isPending ? 'Generating…' : 'Generate résumé'}
+              {tailor.isPending ? 'Tailoring your résumé…' : '✦ Generate résumé'}
             </button>
             {!hasCorpus && (
               <span className="text-muted text-xs">Upload at least one résumé first.</span>
             )}
-            {selected.size > 0 && (
+            {selected.size > 0 && !tailor.isPending && (
               <span className="text-muted text-xs">{selected.size} keyword(s) selected</span>
             )}
-            {tailor.data?.source === 'base' && (
-              <span className="text-sm text-amber-700 dark:text-amber-400">
-                Set OPENAI_API_KEY to auto-generate — showing the base template.
-              </span>
-            )}
-            {tailor.data && (
-              <span className="text-faint text-xs">
-                used {tailor.data.usedBullets} corpus bullet(s)
-              </span>
-            )}
           </div>
+
+          {/* Celebratory confirmation once a résumé comes back. */}
+          {tailor.data && latex != null && (
+            <div
+              className="animate-celebrate border-brand/30 bg-brand/8 mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-sm"
+              role="status"
+            >
+              <span className="text-brand-text font-medium">
+                {tailor.data.source === 'llm'
+                  ? '✦ Résumé ready — tailored to this JD.'
+                  : 'Draft ready from your base template.'}
+              </span>
+              <span className="text-muted text-xs">
+                {selected.size} keyword(s) woven in · {tailor.data.usedBullets} real bullet(s) drawn
+                on{tailor.data.report ? ` · ${tailor.data.report.lint.wordCount} words` : ''}
+              </span>
+              {tailor.data.source === 'base' && (
+                <span className="text-xs text-amber-700 dark:text-amber-400">
+                  (Set a tailoring key to auto-generate — showing the base template.)
+                </span>
+              )}
+            </div>
+          )}
 
           {tailor.isError && <ErrorState message={tailor.error.message} />}
 
