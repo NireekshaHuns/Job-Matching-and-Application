@@ -75,7 +75,9 @@ export function rankCorpusBullets(input: RetrieveInput): RankedBullet[] {
     .filter((b) => bulletMatchesRole(b.roleFamily, input.roleFamily))
     .map((b) => {
       const overlap = keywordOverlap(b, selected);
-      const sim = haveEmbeddings ? Math.max(0, cosineSimilarity(input.jdEmbedding, b.embedding)) : 0;
+      const sim = haveEmbeddings
+        ? Math.max(0, cosineSimilarity(input.jdEmbedding, b.embedding))
+        : 0;
       // Weight semantic similarity and keyword coverage together; when there are
       // no embeddings, ranking is pure keyword overlap.
       const score = haveEmbeddings ? 0.6 * sim + 0.4 * overlap : overlap;

@@ -38,7 +38,10 @@ type BatchStatements = Parameters<DB['batch']>[0];
 type BatchStatement = BatchStatements[number];
 
 /** Ingest one résumé; returns counts for the upload UI. */
-export async function ingestResume(input: IngestResumeInput, deps: IngestDeps): Promise<IngestResult> {
+export async function ingestResume(
+  input: IngestResumeInput,
+  deps: IngestDeps,
+): Promise<IngestResult> {
   const { db, chat, embedder } = deps;
 
   const inventory = chat

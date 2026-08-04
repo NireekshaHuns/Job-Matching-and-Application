@@ -10,7 +10,13 @@ import type { ResumeProfileFacts } from './profile';
 /** Escape the handful of LaTeX specials that turn up in header/contact fields. */
 export function latexEscape(s: string): string {
   return s.replace(/([\\{}$&#_%~^])/g, (m) =>
-    m === '\\' ? '\\textbackslash{}' : m === '~' ? '\\textasciitilde{}' : m === '^' ? '\\textasciicircum{}' : `\\${m}`,
+    m === '\\'
+      ? '\\textbackslash{}'
+      : m === '~'
+        ? '\\textasciitilde{}'
+        : m === '^'
+          ? '\\textasciicircum{}'
+          : `\\${m}`,
   );
 }
 

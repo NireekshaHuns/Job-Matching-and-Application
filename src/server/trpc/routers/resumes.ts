@@ -443,11 +443,7 @@ export const resumesRouter = createTRPCRouter({
 
   /** The candidate profile (stored row merged over the seed defaults). */
   getProfile: publicProcedure.query(async ({ ctx }) => {
-    const [row] = await ctx.db
-      .select()
-      .from(resumeProfile)
-      .orderBy(asc(resumeProfile.id))
-      .limit(1);
+    const [row] = await ctx.db.select().from(resumeProfile).orderBy(asc(resumeProfile.id)).limit(1);
     return withProfileDefaults(row ?? null);
   }),
 
@@ -604,7 +600,12 @@ export const resumesRouter = createTRPCRouter({
           console.warn('resumes.tailorFromCorpus: LLM generation failed, returning template', err);
         }
       }
-      return { source: 'base' as const, latex: baseTemplate, report: null, usedBullets: ranked.length };
+      return {
+        source: 'base' as const,
+        latex: baseTemplate,
+        report: null,
+        usedBullets: ranked.length,
+      };
     }),
 
   /**

@@ -245,9 +245,8 @@ export function buildCorpusTailorMessages(
   ].join('\n');
 
   const bulletLines =
-    inputs.bullets
-      .map((b) => `- ${b.text}${b.company ? ` [${b.company}]` : ''}`)
-      .join('\n') || '(no prior bullets — synthesize from the profile + stack notes)';
+    inputs.bullets.map((b) => `- ${b.text}${b.company ? ` [${b.company}]` : ''}`).join('\n') ||
+    '(no prior bullets — synthesize from the profile + stack notes)';
 
   const user = [
     formatProfileForPrompt(inputs.profile),
@@ -261,7 +260,11 @@ export function buildCorpusTailorMessages(
     'FORMAT TEMPLATE (LaTeX):',
     baseTemplate,
     ...(priorViolations.length > 0
-      ? ['', 'Fix these issues from your previous attempt:', ...priorViolations.map((v) => `- ${v}`)]
+      ? [
+          '',
+          'Fix these issues from your previous attempt:',
+          ...priorViolations.map((v) => `- ${v}`),
+        ]
       : []),
   ].join('\n');
 
