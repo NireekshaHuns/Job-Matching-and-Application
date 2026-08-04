@@ -77,19 +77,19 @@ export default function JobsPage() {
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Job Board</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-muted text-sm">
           Two independent scores per job: H1B possibility tier and resume fit.
         </p>
       </header>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200 p-3 text-sm">
+      <div className="border-border bg-surface mb-6 flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm">
         <input
           type="search"
           aria-label="Search company or title"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search company or title…"
-          className="min-w-48 flex-1 rounded border border-zinc-300 px-2 py-1"
+          className="border-border bg-surface min-w-48 flex-1 rounded border px-2 py-1"
         />
         <label className="flex items-center gap-1">
           Sort
@@ -97,7 +97,7 @@ export default function JobsPage() {
             aria-label="Sort"
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
-            className="rounded border border-zinc-300 px-1 py-1"
+            className="border-border bg-surface rounded border px-1 py-1"
           >
             <option value="combined">Recommended</option>
             <option value="fit">Most fit</option>
@@ -110,7 +110,7 @@ export default function JobsPage() {
             aria-label="Resume"
             value={resumeId ?? ''}
             onChange={(e) => setResumeId(e.target.value ? Number(e.target.value) : undefined)}
-            className="rounded border border-zinc-300 px-1 py-1"
+            className="border-border bg-surface rounded border px-1 py-1"
           >
             <option value="">None</option>
             {resumesQuery.data?.map((r) => (
@@ -126,7 +126,7 @@ export default function JobsPage() {
             aria-label="New hires"
             value={newHire}
             onChange={(e) => setNewHire(e.target.value as NewHireFilter)}
-            className="rounded border border-zinc-300 px-1 py-1"
+            className="border-border bg-surface rounded border px-1 py-1"
           >
             <option value="all">Any</option>
             <option value="sponsors_new_hires">Sponsors new hires</option>
@@ -200,23 +200,23 @@ export default function JobsPage() {
 
       <ul className="space-y-3">
         {jobsQuery.data?.map((job) => (
-          <li key={job.id} className="rounded-lg border border-zinc-200 p-4">
+          <li key={job.id} className="border-border bg-surface rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <a
                   href={job.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-zinc-900 hover:underline"
+                  className="text-fg font-medium hover:underline"
                 >
                   {job.title}
                 </a>
-                <div className="text-sm text-zinc-600">
+                <div className="text-muted text-sm">
                   {job.company}
                   {job.location ? ` · ${job.location}` : ''}
                   {job.isRemote ? ' · Remote' : ''}
                   {job.isUs === false && (
-                    <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-xs text-amber-800">
+                    <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-xs text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
                       Non-US
                     </span>
                   )}
@@ -239,7 +239,7 @@ export default function JobsPage() {
                 <button
                   type="button"
                   onClick={() => setCorrecting(correcting === job.id ? null : job.id)}
-                  className="text-[11px] text-zinc-400 hover:text-zinc-600 hover:underline"
+                  className="text-faint hover:text-muted text-[11px] hover:underline"
                   title="Correct the USCIS employer match"
                 >
                   {job.sponsorMatchConfidence != null
@@ -255,13 +255,13 @@ export default function JobsPage() {
 
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <span
-                className="rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-700"
+                className="bg-brand/10 text-brand-text rounded px-1.5 py-0.5 text-xs font-medium"
                 title={`Why recommended: sponsorship ${job.priorityTier} · fit ${job.priorityFit} · freshness ${job.priorityFreshness}`}
               >
                 Recommended {job.priorityScore}
               </span>
               {job.relevanceScore != null && (
-                <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
                   Fit {job.relevanceScore}%
                 </span>
               )}
@@ -270,13 +270,13 @@ export default function JobsPage() {
               {job.employmentType === 'contract' && <Chip muted>contract</Chip>}
               {job.status === 'closed' && (
                 <span
-                  className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-700"
+                  className="rounded bg-rose-500/10 px-1.5 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-300"
                   title="No longer seen in the source feed"
                 >
                   Closed
                 </span>
               )}
-              <span className="text-xs text-zinc-400">
+              <span className="text-faint text-xs">
                 {job.source}
                 {job.postedDate ? ` · ${job.postedDate}` : ''}
               </span>
@@ -284,13 +284,15 @@ export default function JobsPage() {
                 <button
                   type="button"
                   onClick={() => setTailoring(tailoring === job.id ? null : job.id)}
-                  className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50"
+                  className="border-border hover:bg-surface-2 rounded border px-2 py-0.5 text-xs"
                   title="Tailoring suggestions for the selected résumé lens"
                 >
                   {tailoring === job.id ? 'Hide tailor' : 'Tailor'}
                 </button>
                 {applied.has(job.id) ? (
-                  <span className="text-xs font-medium text-green-700">Applied ✓</span>
+                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    Applied ✓
+                  </span>
                 ) : (
                   <button
                     type="button"
@@ -299,7 +301,7 @@ export default function JobsPage() {
                       window.open(job.url, '_blank', 'noopener,noreferrer');
                       setApplyFor({ id: job.id, company: job.company, title: job.title });
                     }}
-                    className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-50"
+                    className="border-border hover:bg-surface-2 rounded border px-2 py-0.5 text-xs"
                   >
                     Apply
                   </button>
@@ -308,7 +310,7 @@ export default function JobsPage() {
             </div>
 
             {job.skillGaps != null && job.skillGaps.length > 0 && (
-              <div className="mt-2 text-xs text-zinc-500">
+              <div className="text-muted mt-2 text-xs">
                 Missing: {job.skillGaps.slice(0, 8).join(', ')}
               </div>
             )}

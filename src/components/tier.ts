@@ -3,10 +3,12 @@ export type SponsorTier = 'High' | 'Medium' | 'Low' | 'Excluded';
 
 /** Badge classes per tier — the app's canonical tier color language. */
 export const TIER_STYLES: Record<SponsorTier, string> = {
-  High: 'bg-green-100 text-green-800 border-green-200',
-  Medium: 'bg-amber-100 text-amber-800 border-amber-200',
-  Low: 'bg-zinc-100 text-zinc-700 border-zinc-200',
-  Excluded: 'bg-red-100 text-red-800 border-red-200',
+  High: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/25',
+  Medium:
+    'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/25',
+  Low: 'bg-surface-2 text-muted border-border',
+  Excluded:
+    'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/25',
 };
 
 /**
@@ -38,10 +40,12 @@ export const NEW_HIRE_LABELS: Record<NewHireStatus, string> = {
 
 /** Badge classes per new-hire status. */
 export const NEW_HIRE_STYLES: Record<NewHireStatus, string> = {
-  sponsors_new_hires: 'bg-green-100 text-green-800 border-green-200',
-  transfers_only: 'bg-amber-100 text-amber-800 border-amber-200',
-  no_record: 'bg-zinc-100 text-zinc-700 border-zinc-200',
-  unknown: 'bg-zinc-100 text-zinc-500 border-zinc-200',
+  sponsors_new_hires:
+    'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/25',
+  transfers_only:
+    'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/25',
+  no_record: 'bg-surface-2 text-muted border-border',
+  unknown: 'bg-surface-2 text-faint border-border',
 };
 
 /** Explainer copy per new-hire status. */

@@ -24,17 +24,17 @@ export function TailoringPanel({
 
   if (!enabled) {
     return (
-      <div className="mt-2 rounded border border-dashed border-zinc-200 p-2 text-xs text-zinc-500">
+      <div className="border-border text-muted mt-2 rounded border border-dashed p-2 text-xs">
         Select a résumé lens (top of the board) to see tailoring suggestions.
       </div>
     );
   }
   if (query.isLoading) {
-    return <div className="mt-2 text-xs text-zinc-400">Analyzing fit…</div>;
+    return <div className="text-faint mt-2 text-xs">Analyzing fit…</div>;
   }
   if (query.isError || !query.data) {
     return (
-      <div className="mt-2 text-xs text-red-600">
+      <div className="mt-2 text-xs text-rose-600 dark:text-rose-400">
         Couldn’t load suggestions{query.error ? `: ${query.error.message}` : ''}.
       </div>
     );
@@ -42,40 +42,39 @@ export function TailoringPanel({
 
   const s = query.data;
   return (
-    <div className="mt-2 space-y-2 rounded border border-zinc-200 bg-zinc-50 p-3 text-xs">
+    <div className="border-border bg-surface-2 mt-2 space-y-2 rounded border p-3 text-xs">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-medium text-zinc-700">
+        <span className="text-muted font-medium">
           Tailoring{lensLabel ? ` · ${lensLabel}` : ''}
         </span>
-        <span className="text-zinc-500">
-          Fit <span className="font-medium text-zinc-800">{s.relevanceScore}%</span> → achievable{' '}
-          <span className="font-medium text-zinc-800">{s.achievableScore}%</span> after truthful
-          tailoring
+        <span className="text-muted">
+          Fit <span className="text-fg font-medium">{s.relevanceScore}%</span> → achievable{' '}
+          <span className="text-fg font-medium">{s.achievableScore}%</span> after truthful tailoring
         </span>
       </div>
 
       {s.addable.length > 0 ? (
         <div>
-          <div className="mb-1 font-medium text-zinc-600">
+          <div className="text-muted mb-1 font-medium">
             Add these — you already have them (weave in your real bullets):
           </div>
           <ul className="space-y-1.5">
             {s.addable.map((a) => (
               <li key={a.keyword}>
-                <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">
+                <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
                   {a.keyword}
                 </span>
                 {a.bullets.length > 0 ? (
-                  <ul className="mt-1 ml-3 list-disc space-y-0.5 text-zinc-600">
+                  <ul className="text-muted mt-1 ml-3 list-disc space-y-0.5">
                     {a.bullets.map((b) => (
                       <li key={b.id}>
                         {b.text}
-                        {b.company ? <span className="text-zinc-400"> — {b.company}</span> : null}
+                        {b.company ? <span className="text-faint"> — {b.company}</span> : null}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <span className="ml-2 text-zinc-400">
+                  <span className="text-faint ml-2">
                     (in your inventory, but no bullet demonstrates it yet — add one)
                   </span>
                 )}
@@ -84,13 +83,13 @@ export function TailoringPanel({
           </ul>
         </div>
       ) : (
-        <div className="text-zinc-500">Nothing truthful left to add for this lens.</div>
+        <div className="text-muted">Nothing truthful left to add for this lens.</div>
       )}
 
       {s.gaps.length > 0 && (
-        <div className="text-zinc-500">
-          <span className="font-medium text-zinc-600">Honest gaps</span> (not in your inventory —
-          don’t fake): {s.gaps.join(', ')}
+        <div className="text-muted">
+          <span className="text-muted font-medium">Honest gaps</span> (not in your inventory — don’t
+          fake): {s.gaps.join(', ')}
         </div>
       )}
     </div>
