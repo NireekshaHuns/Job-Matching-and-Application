@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Settings — manage the truthful résumé inventory the tailoring engine draws
- * from: the master skills superset, the per-role bullet bank, and the base
- * résumé template(s). Plain Tailwind to match the current app; the Phase 3
- * redesign polishes this later.
+ * Settings — the fixed inputs the tailoring engine uses: the candidate profile
+ * (identity + real metrics/stack), the skills superset, and the base résumé
+ * LaTeX format. Résumés + bullets are uploaded in the Studio, not hand-entered
+ * here. Plain Tailwind to match the current app.
  */
 import { useState } from 'react';
 import { Chip } from '@/components/chip';
@@ -14,14 +14,6 @@ import { trpc } from '@/trpc/react';
 
 const SKILL_KINDS = ['technical', 'soft'] as const;
 type SkillKind = (typeof SKILL_KINDS)[number];
-
-/** Split a free-text "Go, Kafka, Redis" field into a clean list. */
-function parseSkills(raw: string): string[] {
-  return raw
-    .split(/[,\n]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 const inputCls =
   'rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-brand focus:outline-none';
@@ -42,23 +34,129 @@ export default function SettingsPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-muted text-sm">
-          Your truthful résumé inventory. Tailoring only ever surfaces skills and bullets you add
-          here — it never invents anything.
+          The fixed facts every generated résumé uses, your skills superset, and the LaTeX format.
+          Upload your résumés and skills in the{' '}
+          <a className="underline" href="/studio">
+            Studio
+          </a>
+          .
         </p>
       </header>
 
-      {inventory.isError ? (
-        <ErrorState message={inventory.error.message} onRetry={() => inventory.refetch()} />
-      ) : inventory.data ? (
-        <div className="flex flex-col gap-8">
-          <SkillsSection skills={inventory.data.skills} />
-          <BulletsSection bullets={inventory.data.bullets} />
-          <BaseResumesSection resumes={inventory.data.baseResumes} />
-        </div>
-      ) : (
-        <LoadingSkeleton />
-      )}
+      <div className="flex flex-col gap-8">
+        <ProfileSection />
+        {inventory.isError ? (
+          <ErrorState message={inventory.error.message} onRetry={() => inventory.refetch()} />
+        ) : inventory.data ? (
+          <>
+            <SkillsSection skills={inventory.data.skills} />
+            <BaseResumesSection resumes={inventory.data.baseResumes} />
+          </>
+        ) : (
+          <LoadingSkeleton />
+        )}
+      </div>
     </main>
+  );
+}
+
+// ------------------------------------------------------------- Candidate profile
+
+/** The profile fields, in render order — label, key, and whether it's multiline. */
+const PROFILE_FIELDS = [
+  ['Name', 'name', false],
+  ['Email', 'email', false],
+  ['Phone', 'phone', false],
+  ['LinkedIn URL', 'linkedinUrl', false],
+  ['GitHub URL', 'githubUrl', false],
+  ['Graduation', 'gradDate', false],
+  ['Certification text', 'certText', false],
+  ['Certification URL', 'certUrl', false],
+  ['Real / verified metrics (preferred before inventing)', 'knownMetrics', true],
+  ['Confirmed stack & domain notes', 'stackNotes', true],
+] as const;
+
+type ProfileKey = (typeof PROFILE_FIELDS)[number][1];
+type ProfileValues = Record<ProfileKey, string>;
+
+function ProfileSection() {
+  const utils = trpc.useUtils();
+  const profile = trpc.resumes.getProfile.useQuery();
+  const save = trpc.resumes.setProfile.useMutation({
+    onSuccess: () => utils.resumes.getProfile.invalidate(),
+  });
+
+  return (
+    <section className="border-border rounded-lg border p-4">
+      <h2 className="text-lg font-semibold">Candidate profile</h2>
+      <p className="text-muted mb-3 text-sm">
+        Identity (name, contacts, links, cert) is treated as fixed truth; the metrics/stack notes
+        are what the generator prefers before inventing anything. Pre-filled with sensible defaults
+        — add your phone and profile links.
+      </p>
+      {profile.isError ? (
+        <ErrorState message={profile.error.message} onRetry={() => profile.refetch()} />
+      ) : profile.data ? (
+        <ProfileForm
+          initial={profile.data}
+          saving={save.isPending}
+          error={save.error?.message}
+          onSave={(values) => save.mutate(values)}
+        />
+      ) : (
+        <LoadingSkeleton rows={3} />
+      )}
+    </section>
+  );
+}
+
+function ProfileForm({
+  initial,
+  onSave,
+  saving,
+  error,
+}: {
+  initial: Record<ProfileKey, string | null>;
+  onSave: (values: ProfileValues) => void;
+  saving: boolean;
+  error?: string;
+}) {
+  const seed = () =>
+    Object.fromEntries(PROFILE_FIELDS.map(([, key]) => [key, initial[key] ?? ''])) as ProfileValues;
+  const [values, setValues] = useState<ProfileValues>(seed);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {PROFILE_FIELDS.map(([label, key, multiline]) => (
+          <label
+            key={key}
+            className={`text-muted flex flex-col gap-1 text-xs ${multiline ? 'sm:col-span-2' : ''}`}
+          >
+            {label}
+            {multiline ? (
+              <textarea
+                className={`${inputCls} min-h-20`}
+                value={values[key]}
+                onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+              />
+            ) : (
+              <input
+                className={inputCls}
+                value={values[key]}
+                onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+              />
+            )}
+          </label>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <button type="button" className={btnCls} onClick={() => onSave(values)} disabled={saving}>
+          {saving ? 'Saving…' : 'Save profile'}
+        </button>
+        <MutationError message={error} />
+      </div>
+    </div>
   );
 }
 
@@ -147,197 +245,6 @@ function SkillsSection({ skills }: { skills: { skill: string; kind: SkillKind }[
   );
 }
 
-// ------------------------------------------------------------------ Bullet bank
-
-interface Bullet {
-  id: number;
-  text: string;
-  skills: string[];
-  roleFamily: RoleFamily | null;
-  company: string | null;
-}
-
-function BulletsSection({ bullets }: { bullets: Bullet[] }) {
-  const utils = trpc.useUtils();
-  const invalidate = () => utils.resumes.inventory.invalidate();
-  const add = trpc.resumes.addBullet.useMutation({ onSuccess: invalidate });
-
-  const [text, setText] = useState('');
-  const [skills, setSkills] = useState('');
-  const [roleFamily, setRoleFamily] = useState<RoleFamily | ''>('');
-  const [company, setCompany] = useState('');
-
-  const submit = () => {
-    const t = text.trim();
-    if (!t) return;
-    add.mutate({
-      text: t,
-      skills: parseSkills(skills),
-      roleFamily: roleFamily === '' ? null : roleFamily,
-      company: company.trim() || null,
-    });
-    setText('');
-    setSkills('');
-    setCompany('');
-  };
-
-  return (
-    <section className="border-border rounded-lg border p-4">
-      <h2 className="text-lg font-semibold">Bullet bank</h2>
-      <p className="text-muted mb-3 text-sm">
-        Real accomplishments, each tagged with the skills it truthfully demonstrates. Tailoring can
-        only surface a skill inside an experience bullet if it is tagged here.
-      </p>
-
-      {bullets.length === 0 ? (
-        <EmptyState title="No bullets yet. Add your real accomplishments below." />
-      ) : (
-        <ul className="mb-3 flex flex-col gap-2">
-          {bullets.map((b) => (
-            <BulletRow key={b.id} bullet={b} onChanged={invalidate} />
-          ))}
-        </ul>
-      )}
-
-      <div className="border-border flex flex-col gap-2 border-t pt-3">
-        <textarea
-          className={`${inputCls} min-h-16`}
-          aria-label="Bullet text"
-          placeholder="Accomplishment (Google XYZ: shipped X, measured by Y, by doing Z)"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <input
-          className={inputCls}
-          aria-label="Bullet skills (comma-separated)"
-          placeholder="Skills, comma-separated (e.g. java, spring boot, kafka)"
-          value={skills}
-          onChange={(e) => setSkills(e.target.value)}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            className={inputCls}
-            aria-label="Bullet role family"
-            value={roleFamily}
-            onChange={(e) => setRoleFamily(e.target.value as RoleFamily | '')}
-          >
-            <option value="">(no role family)</option>
-            {ROLE_FAMILIES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <input
-            className={inputCls}
-            aria-label="Bullet company"
-            placeholder="Company (optional)"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-          />
-          <button type="button" className={btnCls} onClick={submit} disabled={add.isPending}>
-            Add bullet
-          </button>
-        </div>
-        <MutationError message={add.error?.message} />
-      </div>
-    </section>
-  );
-}
-
-function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => void }) {
-  const update = trpc.resumes.updateBullet.useMutation({ onSuccess: onChanged });
-  const remove = trpc.resumes.removeBullet.useMutation({ onSuccess: onChanged });
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(bullet.text);
-  const [skills, setSkills] = useState(bullet.skills.join(', '));
-
-  /** Reset the draft to the current bullet (used on open + cancel). */
-  const resetDraft = () => {
-    setText(bullet.text);
-    setSkills(bullet.skills.join(', '));
-  };
-
-  if (editing) {
-    return (
-      <li className="border-border rounded-md border p-2">
-        <textarea
-          className={`${inputCls} mb-2 w-full`}
-          aria-label="Edit bullet text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <input
-          className={`${inputCls} mb-2 w-full`}
-          aria-label="Edit bullet skills"
-          value={skills}
-          onChange={(e) => setSkills(e.target.value)}
-        />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={btnCls}
-            disabled={update.isPending}
-            onClick={() => {
-              update.mutate({ id: bullet.id, text: text.trim(), skills: parseSkills(skills) });
-              setEditing(false);
-            }}
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            className={btnCls}
-            onClick={() => {
-              resetDraft();
-              setEditing(false);
-            }}
-          >
-            Cancel
-          </button>
-          <MutationError message={update.error?.message} />
-        </div>
-      </li>
-    );
-  }
-
-  return (
-    <li className="border-border rounded-md border p-2">
-      <p className="text-sm">{bullet.text}</p>
-      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-        {bullet.roleFamily && <Chip>{bullet.roleFamily}</Chip>}
-        {bullet.company && <Chip muted>{bullet.company}</Chip>}
-        {bullet.skills.map((s) => (
-          <span
-            key={s}
-            className="rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-700 dark:text-blue-300"
-          >
-            {s}
-          </span>
-        ))}
-        <button
-          type="button"
-          className="text-muted hover:text-fg ml-auto text-xs"
-          onClick={() => {
-            resetDraft();
-            setEditing(true);
-          }}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="text-muted text-xs hover:text-rose-600 dark:hover:text-rose-400"
-          onClick={() => remove.mutate({ id: bullet.id })}
-        >
-          Remove
-        </button>
-      </div>
-      <MutationError message={remove.error?.message} />
-    </li>
-  );
-}
-
 // --------------------------------------------------------------- Base résumés
 
 interface BaseResume {
@@ -353,10 +260,10 @@ function BaseResumesSection({ resumes }: { resumes: BaseResume[] }) {
     <section className="border-border rounded-lg border p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Base résumés</h2>
+          <h2 className="text-lg font-semibold">Base résumé format</h2>
           <p className="text-muted text-sm">
-            Your LaTeX template(s). Headings, the header, and the PROJECTS section are kept verbatim
-            when tailoring.
+            Optional LaTeX template. When set, the Studio uses it as the exact format to fill; leave
+            empty to use the built-in one-page template.
           </p>
         </div>
         <button type="button" className={btnCls} onClick={() => setAdding((v) => !v)}>

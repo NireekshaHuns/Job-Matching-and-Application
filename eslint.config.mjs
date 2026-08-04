@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     'next-env.d.ts',
     'drizzle/**',
     'coverage/**',
+    // Vendored third-party LaTeX engine (SwiftLaTeX) served as static assets.
+    'public/**',
   ]),
 ]);
 
