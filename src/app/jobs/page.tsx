@@ -23,6 +23,7 @@ type NewHireFilter = NewHireStatus | 'all';
 
 export default function JobsPage() {
   const [search, setSearch] = useState('');
+  const [location, setLocation] = useState('');
   const [sort, setSort] = useState<Sort>('combined');
   const [resumeId, setResumeId] = useState<number | undefined>(undefined);
   const [includeExcluded, setIncludeExcluded] = useState(false);
@@ -42,6 +43,7 @@ export default function JobsPage() {
   } | null>(null);
 
   const deferredSearch = useDeferredValue(search);
+  const deferredLocation = useDeferredValue(location);
   const utils = trpc.useUtils();
   const resumesQuery = trpc.resumes.listBase.useQuery();
   const appliedQuery = trpc.applications.appliedJobIds.useQuery();
@@ -63,6 +65,7 @@ export default function JobsPage() {
   const lensLabel = resumesQuery.data?.find((r) => r.id === resumeId)?.label;
   const jobsQuery = trpc.jobs.list.useQuery({
     search: deferredSearch || undefined,
+    location: deferredLocation || undefined,
     sort,
     resumeId,
     includeExcluded,
@@ -90,6 +93,14 @@ export default function JobsPage() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search company or title…"
           className="border-border bg-surface min-w-48 flex-1 rounded border px-2 py-1"
+        />
+        <input
+          type="search"
+          aria-label="Filter by location"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          placeholder="Location (e.g. MA, Boston)…"
+          className="border-border bg-surface min-w-40 rounded border px-2 py-1"
         />
         <label className="flex items-center gap-1">
           Sort
