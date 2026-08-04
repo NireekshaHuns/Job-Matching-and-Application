@@ -7,6 +7,7 @@ import { authConfig } from '@/server/auth/config';
 export const { auth: middleware } = NextAuth(authConfig);
 
 export const config = {
-  // Run on all routes except static assets and the auth API.
-  matcher: ['/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.png$).*)'],
+  // Run on all routes except static assets, the auth API, and the Inngest
+  // webhook (external, session-less — must not be redirected when auth is on).
+  matcher: ['/((?!api/auth|api/inngest|_next/static|_next/image|favicon.ico|.*\\.png$).*)'],
 };
