@@ -1,6 +1,6 @@
-# H1B Job Board
+# Job Board
 
-A personal, H1B-focused job board and application tracker. It aggregates software
+A persona job board and application tracker. It aggregates software
 engineering jobs from compliant sources, scores each employer's H1B sponsorship
 likelihood against real US government data, filters out contract/staffing roles,
 ranks jobs against my resume(s), and tracks applications and hiring-manager outreach.
