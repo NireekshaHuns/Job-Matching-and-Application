@@ -32,6 +32,8 @@ export interface OutreachRequest {
   role?: string;
   contactName?: string;
   contactTitle?: string;
+  /** The sender's truthful skills that match this role — used to show fit. */
+  fitSkills?: string[];
   profile?: OutreachProfile;
 }
 
@@ -49,6 +51,7 @@ export const OUTREACH_SYSTEM_PROMPT = [
   'Rules:',
   '- 110–160 words. Warm and specific, never generic or salesy. No buzzwords, no flattery filler.',
   '- Open by addressing the person by name if given; reference their company (and the role if given).',
+  '- If relevant strengths are provided, weave ONE brief, concrete sentence showing why the sender fits the role using ONLY those strengths — never invent skills or experience.',
   '- Naturally state the work-authorization facts provided (visa status, sponsorship timing, graduation) in ONE brief, matter-of-fact sentence — do not dwell on it or apologize.',
   '- End with a clear, low-pressure ask (a brief chat, advice, or being kept in mind for the role).',
   '- Plain text body, no markdown. Sign off with the sender name if given, else "[Your name]".',
@@ -58,6 +61,9 @@ export const OUTREACH_SYSTEM_PROMPT = [
 // Note: company/role/contact fields are the user's own trusted input (they add
 // their own contacts) and are interpolated into the prompt; the user reviews and
 // edits every draft before sending, so there's no third-party trust boundary here.
+// fitSkills likewise trace to the user's own resume/master-skill vocabulary — the
+// caller filters JD keywords down to what the user already has before passing them
+// (see loadFitSkills), so the "never invent skills" invariant holds at this boundary.
 export function buildOutreachMessages(req: OutreachRequest): { system: string; user: string } {
   const p = profileOf(req);
   const facts = [
@@ -65,6 +71,9 @@ export function buildOutreachMessages(req: OutreachRequest): { system: string; u
     req.role ? `Role of interest: ${req.role}` : 'Role of interest: (general SWE roles)',
     `Recipient: ${req.contactName ?? '(unknown — address generically, e.g. "Hi there")'}`,
     req.contactTitle ? `Recipient title: ${req.contactTitle}` : null,
+    req.fitSkills && req.fitSkills.length > 0
+      ? `Sender's relevant strengths for this role: ${req.fitSkills.join(', ')}`
+      : null,
     `Sender visa status: ${p.visa}`,
     `Sponsorship: ${p.sponsorshipNote}`,
     `Sender graduates: ${p.graduation}`,
@@ -105,10 +114,16 @@ export function templateOutreachEmail(req: OutreachRequest): OutreachEmail {
   const roleLine = req.role
     ? `I'm reaching out about ${req.role} opportunities at ${req.company}.`
     : `I'm reaching out about software engineering opportunities at ${req.company}.`;
+  // Cap at 4 here so the fixed template sentence stays readable; the LLM prompt
+  // gets the full (already ≤6) list and can weave them in more naturally.
+  const fitLine =
+    req.fitSkills && req.fitSkills.length > 0
+      ? ` I think I'd be a strong fit — my background covers ${req.fitSkills.slice(0, 4).join(', ')}.`
+      : '';
   const body = [
     greeting,
     '',
-    `I'm a soon-to-be software engineer graduating in ${p.graduation}, and ${roleLine} Your team's work stood out to me and I'd love to learn more about it.`,
+    `I'm a soon-to-be software engineer graduating in ${p.graduation}, and ${roleLine} Your team's work stood out to me and I'd love to learn more about it.${fitLine}`,
     '',
     `For transparency on work authorization: I'm on an ${p.visa} and ${p.sponsorshipNote}.`,
     '',

@@ -8,9 +8,63 @@
 import { TRPCError } from '@trpc/server';
 import { desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { contacts, outreachChannelEnum, outreachLog } from '@/server/db/schema';
+import type { DB } from '@/server/db';
+import {
+  contacts,
+  jobs,
+  masterSkills,
+  outreachChannelEnum,
+  outreachLog,
+  resumeBullets,
+  resumes,
+} from '@/server/db/schema';
 import { draftOutreachEmail, templateOutreachEmail } from '@/server/outreach/email';
+import { computeFit, resumeSkillsFromBullets } from '@/server/resume/fit';
 import { createTRPCRouter, publicProcedure } from '../trpc';
+
+/**
+ * The sender's truthful skills that match a job (job keywords ∩ what they can
+ * present), for a "why I'm a fit" line in outreach. Returns undefined when there
+ * is no job context or nothing matches — never invents skills.
+ */
+async function loadFitSkills(
+  db: DB,
+  jobId?: number,
+  resumeId?: number,
+): Promise<string[] | undefined> {
+  if (jobId == null) return undefined;
+  const [job] = await db
+    .select({ techKeywords: jobs.techKeywords, softKeywords: jobs.softKeywords })
+    .from(jobs)
+    .where(eq(jobs.id, jobId))
+    .limit(1);
+  if (!job) return undefined;
+
+  const [skills, bullets, resume] = await Promise.all([
+    db.select({ skill: masterSkills.skill }).from(masterSkills),
+    db
+      .select({ skills: resumeBullets.skills, roleFamily: resumeBullets.roleFamily })
+      .from(resumeBullets),
+    resumeId != null
+      ? db
+          .select({ roleFamily: resumes.roleFamily })
+          .from(resumes)
+          .where(eq(resumes.id, resumeId))
+          .limit(1)
+      : Promise.resolve([] as { roleFamily: (typeof resumes.$inferSelect)['roleFamily'] }[]),
+  ]);
+
+  // Best-effort: an absent or unresolved resumeId falls back to the generalist
+  // role family (sees all bullets) rather than throwing — this is a draft aid,
+  // not the stricter résumé lookup in the resumes router.
+  const fit = computeFit({
+    jobKeywords: [...job.techKeywords, ...job.softKeywords],
+    resumeSkills: resumeSkillsFromBullets(bullets, resume[0]?.roleFamily ?? null),
+    masterSkills: skills.map((s) => s.skill),
+  });
+  const coverable = [...fit.matched, ...fit.missingAddable];
+  return coverable.length > 0 ? coverable.slice(0, 6) : undefined;
+}
 
 export const addContactInput = z.object({
   jobId: z.number().int(),
@@ -36,6 +90,9 @@ export const draftEmailInput = z.object({
   role: z.string().max(200).optional(),
   contactName: z.string().max(200).optional(),
   contactTitle: z.string().max(200).optional(),
+  /** When set, the draft weaves in the sender's skills that match this job. */
+  jobId: z.number().int().optional(),
+  resumeId: z.number().int().optional(),
 });
 
 export const outreachRouter = createTRPCRouter({
@@ -109,7 +166,9 @@ export const outreachRouter = createTRPCRouter({
    * OPENAI_API_KEY is set (openai imported lazily so the app boots without it),
    * and falls back to the deterministic template otherwise or on any failure.
    */
-  draftEmail: publicProcedure.input(draftEmailInput).mutation(async ({ input }) => {
+  draftEmail: publicProcedure.input(draftEmailInput).mutation(async ({ ctx, input }) => {
+    const fitSkills = await loadFitSkills(ctx.db, input.jobId, input.resumeId);
+    const req = { ...input, fitSkills };
     const key = process.env.OPENAI_API_KEY;
     if (key) {
       try {
@@ -119,14 +178,14 @@ export const outreachRouter = createTRPCRouter({
           new OpenAI({ apiKey: key }),
           process.env.OPENAI_CLASSIFY_MODEL ?? 'gpt-4o-mini',
         );
-        return { ...(await draftOutreachEmail(input, chat)), source: 'llm' as const };
+        return { ...(await draftOutreachEmail(req, chat)), source: 'llm' as const };
       } catch (err) {
         // Fall through to the template on any LLM/parse failure, but log it so a
         // persistently broken LLM path is visible rather than silently templated.
         console.warn('draftEmail: LLM draft failed, using template', err);
       }
     }
-    return { ...templateOutreachEmail(input), source: 'template' as const };
+    return { ...templateOutreachEmail(req), source: 'template' as const };
   }),
 
   /**
