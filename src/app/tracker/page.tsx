@@ -101,7 +101,7 @@ function FindPeople({
       </div>
 
       {find.isError && (
-        <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+        <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
           Search failed: {find.error.message}
         </p>
       )}
@@ -296,7 +296,7 @@ function OutreachPanel({
       </ul>
 
       {draftEmail.isError && (
-        <p className="text-sm text-rose-600 dark:text-rose-400">
+        <p className="text-sm text-rose-700 dark:text-rose-400">
           Failed to draft email: {draftEmail.error.message}
         </p>
       )}
@@ -370,7 +370,7 @@ function OutreachPanel({
             )}
           </div>
           {sendEmail.isError && (
-            <p className="text-sm text-rose-600 dark:text-rose-400">
+            <p className="text-sm text-rose-700 dark:text-rose-400">
               Send failed: {sendEmail.error.message}
             </p>
           )}
