@@ -25,6 +25,9 @@ test('apply on the board confirms, appears in the tracker, and status is editabl
   await expect(card.getByText('Applied ✓')).toBeVisible();
 
   await page.goto('/tracker');
+  // Kanban columns render, and the new application sits under "Applied".
+  await expect(page.getByRole('heading', { name: 'Applied' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Interview' })).toBeVisible();
   const row = page.getByRole('listitem').filter({ hasText: SEED.high });
   await expect(row).toBeVisible();
 

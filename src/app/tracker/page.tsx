@@ -4,6 +4,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import Link from 'next/link';
 import { useState } from 'react';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
+import { groupByColumn } from '@/lib/kanban';
 import { outreachLinks } from '@/lib/outreach-links';
 import type { NudgeLevel } from '@/lib/visa/nudges';
 import type { AppRouter } from '@/server/trpc/root';
@@ -652,15 +653,40 @@ export default function Tracker() {
         </EmptyState>
       )}
 
-      <ul className="space-y-3">
-        {query.data?.map((app) => (
-          <ApplicationRow
-            key={`${app.id}:${app.resumeLabel ?? ''}:${app.resumeSnapshot ?? ''}`}
-            app={app}
-            onChanged={onChanged}
-          />
-        ))}
-      </ul>
+      {query.data && query.data.length > 0 && (
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {groupByColumn(query.data).map((col) => (
+            <section key={col.key} aria-labelledby={`col-${col.key}`} className="w-80 shrink-0">
+              <h2
+                id={`col-${col.key}`}
+                className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-700"
+              >
+                {col.label}
+                <span
+                  aria-hidden
+                  className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500"
+                >
+                  {col.apps.length}
+                </span>
+              </h2>
+              <ul className="space-y-3">
+                {col.apps.map((app) => (
+                  <ApplicationRow
+                    key={`${app.id}:${app.resumeLabel ?? ''}:${app.resumeSnapshot ?? ''}`}
+                    app={app}
+                    onChanged={onChanged}
+                  />
+                ))}
+              </ul>
+              {col.apps.length === 0 && (
+                <p className="rounded-lg border border-dashed border-zinc-200 p-4 text-center text-xs text-zinc-400">
+                  Nothing here yet
+                </p>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
