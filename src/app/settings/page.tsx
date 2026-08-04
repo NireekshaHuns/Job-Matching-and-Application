@@ -24,14 +24,14 @@ function parseSkills(raw: string): string[] {
 }
 
 const inputCls =
-  'rounded-md border border-zinc-300 px-2 py-1 text-sm focus:border-zinc-500 focus:outline-none';
+  'rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-brand focus:outline-none';
 const btnCls =
-  'rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50';
+  'rounded-md border border-border px-3 py-1 text-sm font-medium hover:bg-surface-2 disabled:opacity-50';
 
 /** Inline mutation error, matching the app's ErrorState tone. */
 function MutationError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-xs text-red-600">{message}</p>;
+  return <p className="text-xs text-rose-600 dark:text-rose-400">{message}</p>;
 }
 
 export default function SettingsPage() {
@@ -41,7 +41,7 @@ export default function SettingsPage() {
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-muted text-sm">
           Your truthful résumé inventory. Tailoring only ever surfaces skills and bullets you add
           here — it never invents anything.
         </p>
@@ -83,28 +83,28 @@ function SkillsSection({ skills }: { skills: { skill: string; kind: SkillKind }[
   const byKind = (k: SkillKind) => skills.filter((s) => s.kind === k);
 
   return (
-    <section className="rounded-lg border border-zinc-200 p-4">
+    <section className="border-border rounded-lg border p-4">
       <h2 className="text-lg font-semibold">Master skills</h2>
-      <p className="mb-3 text-sm text-zinc-500">
+      <p className="text-muted mb-3 text-sm">
         The superset of everything you can truthfully claim. The TECHNICAL SKILLS section is
         selected from this per job.
       </p>
 
       {SKILL_KINDS.map((k) => (
         <div key={k} className="mb-3">
-          <div className="mb-1 text-xs font-medium tracking-wide text-zinc-500 uppercase">{k}</div>
+          <div className="text-muted mb-1 text-xs font-medium tracking-wide uppercase">{k}</div>
           {byKind(k).length === 0 ? (
-            <span className="text-sm text-zinc-400">None yet.</span>
+            <span className="text-faint text-sm">None yet.</span>
           ) : (
             <ul className="flex flex-wrap gap-1.5">
               {byKind(k).map((s) => (
                 <li key={s.skill}>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs">
+                  <span className="bg-surface-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs">
                     {s.skill}
                     <button
                       type="button"
                       aria-label={`Remove ${s.skill}`}
-                      className="text-zinc-400 hover:text-red-600"
+                      className="text-faint hover:text-rose-600 dark:hover:text-rose-400"
                       onClick={() => remove.mutate({ skill: s.skill })}
                     >
                       ×
@@ -182,9 +182,9 @@ function BulletsSection({ bullets }: { bullets: Bullet[] }) {
   };
 
   return (
-    <section className="rounded-lg border border-zinc-200 p-4">
+    <section className="border-border rounded-lg border p-4">
       <h2 className="text-lg font-semibold">Bullet bank</h2>
-      <p className="mb-3 text-sm text-zinc-500">
+      <p className="text-muted mb-3 text-sm">
         Real accomplishments, each tagged with the skills it truthfully demonstrates. Tailoring can
         only surface a skill inside an experience bullet if it is tagged here.
       </p>
@@ -199,7 +199,7 @@ function BulletsSection({ bullets }: { bullets: Bullet[] }) {
         </ul>
       )}
 
-      <div className="flex flex-col gap-2 border-t border-zinc-100 pt-3">
+      <div className="border-border flex flex-col gap-2 border-t pt-3">
         <textarea
           className={`${inputCls} min-h-16`}
           aria-label="Bullet text"
@@ -260,7 +260,7 @@ function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => voi
 
   if (editing) {
     return (
-      <li className="rounded-md border border-zinc-200 p-2">
+      <li className="border-border rounded-md border p-2">
         <textarea
           className={`${inputCls} mb-2 w-full`}
           aria-label="Edit bullet text"
@@ -302,19 +302,22 @@ function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => voi
   }
 
   return (
-    <li className="rounded-md border border-zinc-200 p-2">
+    <li className="border-border rounded-md border p-2">
       <p className="text-sm">{bullet.text}</p>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {bullet.roleFamily && <Chip>{bullet.roleFamily}</Chip>}
         {bullet.company && <Chip muted>{bullet.company}</Chip>}
         {bullet.skills.map((s) => (
-          <span key={s} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+          <span
+            key={s}
+            className="rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-700 dark:text-blue-300"
+          >
             {s}
           </span>
         ))}
         <button
           type="button"
-          className="ml-auto text-xs text-zinc-500 hover:text-zinc-900"
+          className="text-muted hover:text-fg ml-auto text-xs"
           onClick={() => {
             resetDraft();
             setEditing(true);
@@ -324,7 +327,7 @@ function BulletRow({ bullet, onChanged }: { bullet: Bullet; onChanged: () => voi
         </button>
         <button
           type="button"
-          className="text-xs text-zinc-500 hover:text-red-600"
+          className="text-muted text-xs hover:text-rose-600 dark:hover:text-rose-400"
           onClick={() => remove.mutate({ id: bullet.id })}
         >
           Remove
@@ -347,11 +350,11 @@ interface BaseResume {
 function BaseResumesSection({ resumes }: { resumes: BaseResume[] }) {
   const [adding, setAdding] = useState(false);
   return (
-    <section className="rounded-lg border border-zinc-200 p-4">
+    <section className="border-border rounded-lg border p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Base résumés</h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-muted text-sm">
             Your LaTeX template(s). Headings, the header, and the PROJECTS section are kept verbatim
             when tailoring.
           </p>
@@ -391,21 +394,21 @@ function BaseResumeRow({ resume }: { resume: BaseResume }) {
   };
 
   return (
-    <li className="rounded-md border border-zinc-200 p-2">
+    <li className="border-border rounded-md border p-2">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{resume.label}</span>
         {resume.roleFamily && <Chip>{resume.roleFamily}</Chip>}
-        <span className="text-xs text-zinc-400">{resume.content?.length ?? 0} chars</span>
+        <span className="text-faint text-xs">{resume.content?.length ?? 0} chars</span>
         <button
           type="button"
-          className="ml-auto text-xs text-zinc-500 hover:text-zinc-900"
+          className="text-muted hover:text-fg ml-auto text-xs"
           onClick={() => setEditing((v) => !v)}
         >
           {editing ? 'Close' : 'Edit'}
         </button>
         <button
           type="button"
-          className="text-xs text-zinc-500 hover:text-red-600"
+          className="text-muted text-xs hover:text-rose-600 dark:hover:text-rose-400"
           onClick={confirmRemove}
         >
           Remove
@@ -430,7 +433,7 @@ function BaseResumeEditor({ resume, onDone }: { resume?: BaseResume; onDone: () 
   const [content, setContent] = useState(resume?.content ?? '');
 
   return (
-    <div className="mt-2 flex flex-col gap-2 rounded-md border border-zinc-200 p-2">
+    <div className="border-border mt-2 flex flex-col gap-2 rounded-md border p-2">
       <div className="flex flex-wrap items-center gap-2">
         <input
           className={inputCls}

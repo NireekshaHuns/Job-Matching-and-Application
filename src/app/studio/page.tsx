@@ -16,9 +16,9 @@ import { trpc } from '@/trpc/react';
 type TailorResult = inferRouterOutputs<AppRouter>['resumes']['tailor'];
 
 const selectCls =
-  'rounded-md border border-zinc-300 px-2 py-1 text-sm focus:border-zinc-500 focus:outline-none';
+  'rounded-md border border-border bg-surface px-2 py-1 text-sm focus:border-brand focus:outline-none';
 const btnCls =
-  'rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50';
+  'rounded-md border border-border px-3 py-1 text-sm font-medium hover:bg-surface-2 disabled:opacity-50';
 
 /** Parse a <select> value to an id, or undefined if it isn't a real number. */
 function toId(value: string): number | undefined {
@@ -51,7 +51,7 @@ export default function StudioPage() {
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Tailoring Studio</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-muted text-sm">
           Generate a one-page résumé tailored to a job from your truthful inventory. It only
           surfaces skills you have — honest gaps are shown, never faked.
         </p>
@@ -65,8 +65,8 @@ export default function StudioPage() {
         <LoadingSkeleton rows={2} />
       ) : (
         <>
-          <div className="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 p-4">
-            <label className="flex flex-col gap-1 text-xs text-zinc-500">
+          <div className="border-border mb-6 flex flex-wrap items-end gap-3 rounded-lg border p-4">
+            <label className="text-muted flex flex-col gap-1 text-xs">
               Job
               <select
                 className={`${selectCls} min-w-64`}
@@ -81,7 +81,7 @@ export default function StudioPage() {
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-xs text-zinc-500">
+            <label className="text-muted flex flex-col gap-1 text-xs">
               Base résumé
               <select
                 className={selectCls}
@@ -111,7 +111,7 @@ export default function StudioPage() {
           </div>
 
           {resumes.data.length === 0 && (
-            <p className="mb-4 text-sm text-amber-700">
+            <p className="mb-4 text-sm text-amber-700 dark:text-amber-400">
               No base résumé yet. Add one in{' '}
               <a className="underline" href="/settings">
                 Settings
@@ -147,18 +147,18 @@ function Result({ data }: { data: TailorResult }) {
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
             data.source === 'llm'
-              ? 'bg-emerald-100 text-emerald-800'
-              : 'bg-amber-100 text-amber-800'
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+              : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
           }`}
         >
           {data.source === 'llm' ? 'AI-tailored' : 'Base résumé (no OpenAI key)'}
         </span>
-        <span className="text-sm text-zinc-600">
-          Fit <span className="font-medium text-zinc-900">{data.fit.before}%</span> → achievable{' '}
-          <span className="font-medium text-zinc-900">{data.fit.achievable}%</span>
+        <span className="text-muted text-sm">
+          Fit <span className="text-fg font-medium">{data.fit.before}%</span> → achievable{' '}
+          <span className="text-fg font-medium">{data.fit.achievable}%</span>
         </span>
         {data.report && (
-          <span className="text-xs text-zinc-500">
+          <span className="text-muted text-xs">
             {data.report.lint.wordCount} words · {data.report.attempts} attempt
             {data.report.attempts === 1 ? '' : 's'} ·{' '}
             {data.report.lint.ok
@@ -169,7 +169,7 @@ function Result({ data }: { data: TailorResult }) {
       </div>
 
       {data.source === 'base' && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+        <p className="rounded-md border border-amber-300/50 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">
           Set OPENAI_API_KEY to auto-tailor. Meanwhile, weave these truthful keywords into your base
           résumé yourself.
         </p>
@@ -201,14 +201,12 @@ function Result({ data }: { data: TailorResult }) {
           >
             Download .tex
           </button>
-          <span className="text-xs text-zinc-400">
-            Compile in Overleaf or via `pnpm resume:pdf`.
-          </span>
+          <span className="text-faint text-xs">Compile in Overleaf or via `pnpm resume:pdf`.</span>
         </div>
         <textarea
           readOnly
           aria-label="Tailored résumé LaTeX"
-          className="min-h-80 w-full rounded-md border border-zinc-300 p-2 font-mono text-xs"
+          className="border-border min-h-80 w-full rounded-md border p-2 font-mono text-xs"
           value={data.latex}
         />
       </div>
@@ -227,12 +225,15 @@ function ChipRow({
   tone: 'emerald' | 'zinc';
   empty: string;
 }) {
-  const cls = tone === 'emerald' ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600';
+  const cls =
+    tone === 'emerald'
+      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+      : 'bg-surface-2 text-muted';
   return (
     <div className="text-sm">
-      <span className="font-medium text-zinc-700">{label}:</span>{' '}
+      <span className="text-muted font-medium">{label}:</span>{' '}
       {items.length === 0 ? (
-        <span className="text-zinc-400">{empty}</span>
+        <span className="text-faint">{empty}</span>
       ) : (
         <span className="inline-flex flex-wrap gap-1.5 align-middle">
           {items.map((k) => (
