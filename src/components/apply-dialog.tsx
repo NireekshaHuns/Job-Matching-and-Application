@@ -66,23 +66,25 @@ export function ApplyDialog({
     >
       <div
         ref={panelRef}
-        className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-5 shadow-lg"
+        className="border-border bg-surface w-full max-w-md rounded-lg border p-5 shadow-lg"
       >
         <h2 id="apply-dialog-title" className="text-lg font-semibold">
           Did you apply?
         </h2>
-        <p className="mt-1 text-sm text-zinc-600">
+        <p className="text-muted mt-1 text-sm">
           We opened the application for <span className="font-medium">{title}</span> at{' '}
           <span className="font-medium">{company}</span> in a new tab. Once you’ve submitted it,
           confirm below and it moves to your tracker.
         </p>
-        {error && <p className="mt-2 text-xs text-red-600">Couldn’t save: {error}</p>}
+        {error && (
+          <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">Couldn’t save: {error}</p>
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <button
             ref={cancelRef}
             type="button"
             onClick={onClose}
-            className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium hover:bg-zinc-50"
+            className="border-border hover:bg-surface-2 rounded-md border px-3 py-1 text-sm font-medium"
           >
             Not yet
           </button>
