@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { compileLatexToPdf, LatexCompileError } from '@/lib/latex/wasm-compile';
 
 const btnCls =
-  'rounded-md border border-border px-3 py-1 text-sm font-medium hover:bg-surface-2 disabled:opacity-50';
+  'press rounded-md border border-border px-3 py-1 text-sm font-medium hover:bg-surface-2 disabled:opacity-50';
 
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -147,7 +147,7 @@ export function ResumeSplit({
         {onSave && (
           <button
             type="button"
-            className={`${btnCls} border-brand text-brand`}
+            className={`${btnCls} border-brand text-brand ${saved ? 'animate-pop' : ''}`}
             onClick={onSave}
             disabled={saving}
           >
@@ -182,8 +182,15 @@ export function ResumeSplit({
           ) : pdfUrl ? (
             <iframe title="Compiled résumé PDF" src={pdfUrl} className="h-full w-full" />
           ) : (
-            <div className="text-muted flex h-full items-center justify-center text-sm">
-              {compiling ? 'Compiling PDF…' : 'No preview yet.'}
+            <div className="text-muted flex h-full flex-col items-center justify-center gap-2 text-sm">
+              {compiling ? (
+                <>
+                  <span className="border-border border-t-brand h-5 w-5 animate-spin rounded-full border-2" />
+                  Typesetting your résumé…
+                </>
+              ) : (
+                'No preview yet.'
+              )}
             </div>
           )}
         </div>

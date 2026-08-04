@@ -48,7 +48,7 @@ export function KeywordPicker({
               {group.items.map((item) => {
                 const on = selected.has(item.keyword);
                 const gap = !item.inCorpus;
-                const base = 'rounded-full border px-2.5 py-1 text-xs transition-colors';
+                const base = 'press rounded-full border px-2.5 py-1 text-xs transition-colors';
                 const cls = on
                   ? 'border-brand bg-brand text-white'
                   : gap

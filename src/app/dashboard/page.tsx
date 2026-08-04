@@ -1,6 +1,7 @@
 'use client';
 
 import type { inferRouterOutputs } from '@trpc/server';
+import { PageHeader } from '@/components/page-header';
 import { ErrorState, LoadingSkeleton } from '@/components/page-state';
 import type { AppRouter } from '@/server/trpc/root';
 import { trpc } from '@/trpc/react';
@@ -116,12 +117,11 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-muted text-sm">
-          A snapshot of the board: sponsor-tier mix, application funnel, and top sponsors.
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Overview"
+        title="Dashboard"
+        subtitle="A snapshot of the board: sponsor-tier mix, application funnel, and top sponsors."
+      />
 
       {summary.isLoading && <LoadingSkeleton rows={3} />}
       {summary.isError && (

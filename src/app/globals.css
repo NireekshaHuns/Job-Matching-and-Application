@@ -94,6 +94,93 @@ body {
   animation: gauge 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.25s both;
 }
 
+/* Staggered-entrance helpers — pair with .animate-rise for choreographed loads. */
+.rise-2 {
+  animation-delay: 60ms;
+}
+.rise-3 {
+  animation-delay: 120ms;
+}
+.rise-4 {
+  animation-delay: 180ms;
+}
+.rise-5 {
+  animation-delay: 240ms;
+}
+
+/* Satisfying press feedback for buttons, chips, and toggles. */
+.press {
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 0.15s;
+}
+.press:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+/* Hover lift for cards/links — a soft brand-tinted shadow, not a generic drop. */
+.lift {
+  transition:
+    transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 0.2s;
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px -16px color-mix(in oklab, var(--color-brand) 55%, transparent);
+}
+
+/* A quick pop for state changes (chip selected, keyword added). */
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: pop 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Celebratory scale-in for success moments (generated / saved). */
+@keyframes celebrate {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(6px);
+  }
+  55% {
+    transform: scale(1.02) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-celebrate {
+  animation: celebrate 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Shimmer for loading skeletons — livelier than a flat pulse. */
+@keyframes shimmer {
+  100% {
+    background-position: -200% 0;
+  }
+}
+.shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-fg) 7%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

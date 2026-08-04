@@ -8,6 +8,7 @@
  */
 import { useState } from 'react';
 import { Chip } from '@/components/chip';
+import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
 import { ROLE_FAMILIES, type RoleFamily } from '@/lib/role-families';
 import { trpc } from '@/trpc/react';
@@ -31,17 +32,20 @@ export default function SettingsPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-muted text-sm">
-          The fixed facts every generated résumé uses, your skills superset, and the LaTeX format.
-          Upload your résumés and skills in the{' '}
-          <a className="underline" href="/studio">
-            Studio
-          </a>
-          .
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Configuration"
+        title="Settings"
+        subtitle={
+          <>
+            The fixed facts every generated résumé uses, your skills superset, and the LaTeX format.
+            Upload your résumés and skills in the{' '}
+            <a className="text-brand-text underline" href="/studio">
+              Studio
+            </a>
+            .
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-8">
         <ProfileSection />
