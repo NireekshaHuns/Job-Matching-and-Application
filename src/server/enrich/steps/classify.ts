@@ -16,6 +16,7 @@ const classificationSchema = z.object({
   seniority: z.enum(seniorityEnum.enumValues),
   skills: z.array(z.string()).default([]),
   softKeywords: z.array(z.string()).default([]),
+  salary: z.string().nullish(),
 });
 
 export const CLASSIFY_SYSTEM_PROMPT = [
@@ -26,6 +27,7 @@ export const CLASSIFY_SYSTEM_PROMPT = [
   `- seniority: one of ${seniorityEnum.enumValues.join(', ')} ("entry" = new-grad/junior, "mid" = a few years, everything senior/staff/lead/manager => "other").`,
   '- skills: array of concrete technical keywords — technologies/tools/languages named (e.g. ["go", "kafka", "react"]). Exclude generic basics. Empty array if none.',
   '- softKeywords: array of soft skills/competencies the posting emphasizes (e.g. ["ownership", "cross-functional collaboration", "mentorship"]). Exclude basic expectations. Empty array if none.',
+  '- salary: the pay range EXACTLY as stated in the posting, normalized for display (e.g. "$150k–$180k", "$70–$90/hr"). Use null if the posting does not state pay. NEVER guess or invent a number.',
 ].join('\n');
 
 export function buildClassifyMessages(posting: RawPosting): {
@@ -63,10 +65,12 @@ export function parseClassification(raw: string): Classification {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('No JSON object found in classifier output');
   const parsed = classificationSchema.parse(JSON.parse(match[0]));
+  const salary = parsed.salary?.trim();
   return {
     ...parsed,
     skills: normalizeKeywords(parsed.skills),
     softKeywords: normalizeKeywords(parsed.softKeywords),
+    salary: salary ? salary : null,
   };
 }
 

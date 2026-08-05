@@ -47,6 +47,7 @@ export function buildJobRow(
     seniority: classification.seniority,
     techKeywords: classification.skills,
     softKeywords: classification.softKeywords,
+    salaryText: classification.salary ?? null,
     sponsorTier: sponsor.tier,
     sponsorReason: sponsor.reason,
     sponsorCount: sponsor.sponsorCount,

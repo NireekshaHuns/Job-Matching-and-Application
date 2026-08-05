@@ -55,6 +55,13 @@ describe('resolveJobQueryPlan', () => {
     expect(plan({ includeClosed: true }).hideClosed).toBe(false);
   });
 
+  it('hides dismissed jobs by default; carries the posted-age filter', () => {
+    expect(plan().hideDismissed).toBe(true);
+    expect(plan({ includeDismissed: true }).hideDismissed).toBe(false);
+    expect(plan().postedWithinDays).toBeNull();
+    expect(plan({ postedWithinDays: 7 }).postedWithinDays).toBe(7);
+  });
+
   it('hides non-US jobs by default, shows them only when the toggle is on', () => {
     expect(plan().hideNonUs).toBe(true);
     expect(plan({ includeNonUs: true }).hideNonUs).toBe(false);

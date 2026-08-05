@@ -309,6 +309,10 @@ export const jobs = pgTable(
     newHireStatus: newHireStatusEnum('new_hire_status').notNull().default('unknown'),
     /** Confidence 0–1 of the company→USCIS employer match behind the sponsor data (null when unmatched). */
     sponsorMatchConfidence: real('sponsor_match_confidence'),
+    /** Best-effort pay range extracted from the JD (e.g. "$150k–$180k"); null when unstated. */
+    salaryText: text('salary_text'),
+    /** Set when the user removes a job from the board; hidden and never re-shown. */
+    dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

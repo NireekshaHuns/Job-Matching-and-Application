@@ -6,7 +6,7 @@
  * tier + fit + freshness — computed at read time; the two scores are never
  * merged into one stored value.
  */
-import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   employmentTypeEnum,
@@ -31,6 +31,10 @@ export const jobListInput = z.object({
   includeExcluded: z.boolean().default(false),
   /** Off by default: closed/stale postings are hidden but retained. */
   includeClosed: z.boolean().default(false),
+  /** Only jobs posted within the last N days (null/absent = any age). */
+  postedWithinDays: z.number().int().min(1).max(365).optional(),
+  /** Off by default: jobs the user removed from the board stay hidden forever. */
+  includeDismissed: z.boolean().default(false),
   roleFamilies: z.array(z.enum(roleFamilyEnum.enumValues)).optional(),
   seniorities: z.array(z.enum(seniorityEnum.enumValues)).optional(),
   /** Off by default: the board is scoped to entry/new-grad + mid roles. */
@@ -76,6 +80,10 @@ export interface JobQueryPlan {
   search: string | null;
   /** Free-text location filter (state code or city), or null. */
   location: string | null;
+  /** Max posting age in days (null = any). */
+  postedWithinDays: number | null;
+  /** Hide jobs the user removed from the board. */
+  hideDismissed: boolean;
   sort: JobListInput['sort'];
 }
 
@@ -96,6 +104,8 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
     hideNonUs: !input.includeNonUs,
     search: input.search ? input.search : null,
     location: input.location ? input.location : null,
+    postedWithinDays: input.postedWithinDays ?? null,
+    hideDismissed: !input.includeDismissed,
     sort: input.sort,
   };
 }
@@ -214,6 +224,14 @@ export const jobsRouter = createTRPCRouter({
     if (plan.location) {
       where.push(sql`${jobs.location} ~* ${locationMatchRegex(plan.location)}`);
     }
+    // Age filter: keep only recent postings (undated jobs stay — date unknown).
+    if (plan.postedWithinDays != null) {
+      where.push(
+        sql`(${jobs.postedDate} is null or ${jobs.postedDate} >= current_date - ${plan.postedWithinDays} * interval '1 day')`,
+      );
+    }
+    // Removed-from-board jobs stay hidden forever (survives re-enrichment).
+    if (plan.hideDismissed) where.push(isNull(jobs.dismissedAt));
 
     const weights = resolveWeights(input.weights);
     const priority = prioritySql(weights);
@@ -246,6 +264,7 @@ export const jobsRouter = createTRPCRouter({
         url: jobs.url,
         source: jobs.source,
         postedDate: jobs.postedDate,
+        salaryText: jobs.salaryText,
         status: jobs.status,
         roleFamily: jobs.roleFamily,
         seniority: jobs.seniority,
@@ -274,5 +293,25 @@ export const jobsRouter = createTRPCRouter({
       .orderBy(...orderBy)
       .limit(input.limit)
       .offset(input.offset);
+  }),
+
+  /** Remove a job from the board. Sets dismissed_at so it never re-appears. */
+  dismiss: publicProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.update(jobs).set({ dismissedAt: new Date() }).where(eq(jobs.id, input.id));
+      return { id: input.id };
+    }),
+
+  /**
+   * Kick off the enrichment pipeline on demand ("Find new jobs"). Fires an
+   * Inngest event; the durable `enrich-jobs` function fetches + scores new
+   * postings in the background. Needs Inngest running (prod, or `pnpm inngest:dev`
+   * locally). Returns immediately — the board refetches when the user reloads.
+   */
+  refresh: publicProcedure.mutation(async () => {
+    const { inngest } = await import('@/inngest/client');
+    await inngest.send({ name: 'jobs/refresh.requested', data: {} });
+    return { started: true };
   }),
 });

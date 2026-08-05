@@ -26,6 +26,12 @@ export interface Classification {
    * as `jobs.soft_keywords`.
    */
   softKeywords: string[];
+  /**
+   * Best-effort pay range stated in the JD, normalized for display (e.g.
+   * "$150k–$180k", "$60/hr"), or null when the JD doesn't state one. Persisted
+   * as `jobs.salary_text`. Never invented — only surfaced when the JD says it.
+   */
+  salary?: string | null;
 }
 
 /** Minimal chat interface — returns the model's raw text (expected JSON). */
