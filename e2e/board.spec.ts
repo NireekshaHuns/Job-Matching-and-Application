@@ -12,7 +12,7 @@ test.describe('Job board', () => {
 
     const highCard = page.getByRole('listitem').filter({ hasText: SEED.high });
     await expect(highCard).toBeVisible();
-    await expect(highCard.getByText(/H1B: High/)).toBeVisible();
+    await expect(highCard.getByText(/H-1B High/)).toBeVisible();
 
     // Default filters: full-time only, exclude Excluded.
     await expect(page.getByText(SEED.excluded)).toHaveCount(0);
@@ -30,20 +30,5 @@ test.describe('Job board', () => {
     await expect(page.getByText(SEED.excluded)).toHaveCount(0);
     await page.getByLabel('Show excluded').check();
     await expect(page.getByText(SEED.excluded)).toBeVisible();
-  });
-
-  test('"Include contract" reveals the contract role', async ({ page }) => {
-    await page.goto('/jobs');
-    await expect(page.getByText(SEED.contract)).toHaveCount(0);
-    await page.getByLabel('Include contract').check();
-    await expect(page.getByText(SEED.contract)).toBeVisible();
-  });
-
-  test('selecting a résumé lens surfaces the fit score', async ({ page }) => {
-    await page.goto('/jobs');
-    const highCard = page.getByRole('listitem').filter({ hasText: SEED.high });
-    await expect(highCard.getByText(/Fit \d+%/)).toHaveCount(0);
-    await page.getByLabel('Resume', { exact: true }).selectOption({ label: SEED.resumeLabel });
-    await expect(highCard.getByText(`Fit ${SEED.fitScore}%`)).toBeVisible();
   });
 });

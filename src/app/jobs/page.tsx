@@ -1,56 +1,61 @@
 'use client';
 
+/**
+ * Job Board — a left filter rail + a card grid. Two independent scores per card
+ * (H1B sponsor tier + the recommended priority), best-effort salary, and per-card
+ * Apply / Remove. "Find new jobs" fires the enrichment pipeline; Remove hides a
+ * job for good; the board defaults to US, full-time, non-excluded, posted within
+ * the last week.
+ */
 import { useDeferredValue, useState } from 'react';
 import { ApplyDialog } from '@/components/apply-dialog';
 import { Chip } from '@/components/chip';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/page-state';
-import { SponsorCorrection } from '@/components/sponsor-correction';
-import { TailoringPanel } from '@/components/tailoring-panel';
 import {
   NEW_HIRE_DISCLAIMER,
   NEW_HIRE_LABELS,
   NEW_HIRE_MEANINGS,
   NEW_HIRE_STYLES,
   TIER_STYLES,
-  type NewHireStatus,
 } from '@/components/tier';
 import { trpc } from '@/trpc/react';
 
-// Recommended = the default sponsorship×fit×freshness blend (server-side).
 type Sort = 'combined' | 'fit' | 'recent';
-type NewHireFilter = NewHireStatus | 'all';
+/** Posted-age window in days; 0 means "any age". */
+type Within = 1 | 3 | 7 | 0;
+
+const WITHIN_OPTIONS: { value: Within; label: string }[] = [
+  { value: 1, label: 'Past 24 hours' },
+  { value: 3, label: 'Past 3 days' },
+  { value: 7, label: 'Past week' },
+  { value: 0, label: 'Any time' },
+];
+
+const inputCls =
+  'rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:border-brand focus:outline-none';
 
 export default function JobsPage() {
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState('');
   const [sort, setSort] = useState<Sort>('combined');
-  const [resumeId, setResumeId] = useState<number | undefined>(undefined);
-  const [includeExcluded, setIncludeExcluded] = useState(false);
-  const [includeSenior, setIncludeSenior] = useState(false);
+  const [within, setWithin] = useState<Within>(7);
   const [remoteOnly, setRemoteOnly] = useState(false);
-  const [includeNonUs, setIncludeNonUs] = useState(false);
-  const [allEmployment, setAllEmployment] = useState(false);
+  const [includeSenior, setIncludeSenior] = useState(false);
+  const [includeExcluded, setIncludeExcluded] = useState(false);
   const [includeClosed, setIncludeClosed] = useState(false);
-  const [newHire, setNewHire] = useState<NewHireFilter>('all');
-  const [correcting, setCorrecting] = useState<number | null>(null);
-  const [tailoring, setTailoring] = useState<number | null>(null);
-  // The job whose apply-confirmation dialog is open (set after opening its posting).
-  const [applyFor, setApplyFor] = useState<{
-    id: number;
-    company: string;
-    title: string;
-  } | null>(null);
+  const [applyFor, setApplyFor] = useState<{ id: number; company: string; title: string } | null>(
+    null,
+  );
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
 
   const deferredSearch = useDeferredValue(search);
   const deferredLocation = useDeferredValue(location);
   const utils = trpc.useUtils();
-  const resumesQuery = trpc.resumes.listBase.useQuery();
   const appliedQuery = trpc.applications.appliedJobIds.useQuery();
   const applied = new Set(appliedQuery.data ?? []);
+
   const markApplied = trpc.applications.create.useMutation({
-    // Optimistically flip the job to applied so it updates immediately; the
-    // apply dialog stays open until this settles and rolls back on error.
     onMutate: async (vars) => {
       await utils.applications.appliedJobIds.cancel();
       const prev = utils.applications.appliedJobIds.getData();
@@ -62,37 +67,61 @@ export default function JobsPage() {
     },
     onSettled: () => utils.applications.appliedJobIds.invalidate(),
   });
-  const lensLabel = resumesQuery.data?.find((r) => r.id === resumeId)?.label;
+
+  const dismiss = trpc.jobs.dismiss.useMutation({
+    onSuccess: () => utils.jobs.list.invalidate(),
+  });
+  const refresh = trpc.jobs.refresh.useMutation({
+    onSuccess: () => setRefreshMsg('Finding new jobs… they’ll appear here in a few minutes.'),
+    onError: (e) => setRefreshMsg(`Couldn’t start a refresh: ${e.message}`),
+  });
+
   const jobsQuery = trpc.jobs.list.useQuery({
     search: deferredSearch || undefined,
     location: deferredLocation || undefined,
     sort,
-    resumeId,
-    includeExcluded,
-    includeSenior,
+    postedWithinDays: within || undefined,
     remoteOnly,
-    includeNonUs,
-    employmentType: allEmployment ? 'all' : 'full_time',
+    includeSenior,
+    includeExcluded,
     includeClosed,
-    newHireStatuses: newHire === 'all' ? undefined : [newHire],
   });
 
+  const jobs = jobsQuery.data ?? [];
+
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-10">
+    <main className="mx-auto w-full max-w-6xl px-6 py-10">
       <PageHeader
         eyebrow="Sponsorship-scored"
         title="Job Board"
-        subtitle="Two independent scores per job: H1B possibility tier and résumé fit."
+        subtitle="Every card carries an H-1B possibility tier and a recommended priority — US, full-time, fresh."
+        actions={
+          <button
+            type="button"
+            className="press bg-brand text-brand-contrast rounded-lg px-4 py-2 text-sm font-semibold shadow-[0_8px_24px_-8px_var(--color-brand)] transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+            onClick={() => refresh.mutate()}
+            disabled={refresh.isPending}
+          >
+            {refresh.isPending ? 'Starting…' : '⟳ Find new jobs'}
+          </button>
+        }
       />
 
-      <div className="border-border bg-surface mb-6 flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm">
+      {refreshMsg && (
+        <div className="border-brand/30 bg-brand/8 text-brand-text animate-rise mb-4 rounded-lg border px-3 py-2 text-sm">
+          {refreshMsg}
+        </div>
+      )}
+
+      {/* Top toolbar: search + location + sort */}
+      <div className="border-border bg-surface mb-6 flex flex-wrap items-center gap-3 rounded-xl border p-3">
         <input
           type="search"
           aria-label="Search company or title"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search company or title…"
-          className="border-border bg-surface min-w-48 flex-1 rounded border px-2 py-1"
+          className={`${inputCls} min-w-56 flex-1`}
         />
         <input
           type="search"
@@ -100,238 +129,184 @@ export default function JobsPage() {
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           placeholder="Location (e.g. MA, Boston)…"
-          className="border-border bg-surface min-w-40 rounded border px-2 py-1"
+          className={`${inputCls} min-w-44`}
         />
-        <label className="flex items-center gap-1">
+        <label className="text-muted flex items-center gap-1.5 text-sm">
           Sort
           <select
             aria-label="Sort"
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
-            className="border-border bg-surface rounded border px-1 py-1"
+            className={inputCls}
           >
             <option value="combined">Recommended</option>
             <option value="fit">Most fit</option>
             <option value="recent">Most recent</option>
           </select>
         </label>
-        <label className="flex items-center gap-1">
-          Resume
-          <select
-            aria-label="Resume"
-            value={resumeId ?? ''}
-            onChange={(e) => setResumeId(e.target.value ? Number(e.target.value) : undefined)}
-            className="border-border bg-surface rounded border px-1 py-1"
-          >
-            <option value="">None</option>
-            {resumesQuery.data?.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1">
-          New hires
-          <select
-            aria-label="New hires"
-            value={newHire}
-            onChange={(e) => setNewHire(e.target.value as NewHireFilter)}
-            className="border-border bg-surface rounded border px-1 py-1"
-          >
-            <option value="all">Any</option>
-            <option value="sponsors_new_hires">Sponsors new hires</option>
-            <option value="transfers_only">Transfers only</option>
-            <option value="no_record">No record</option>
-            <option value="unknown">Unknown</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={remoteOnly}
-            onChange={(e) => setRemoteOnly(e.target.checked)}
-          />
-          Remote only
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={includeNonUs}
-            onChange={(e) => setIncludeNonUs(e.target.checked)}
-          />
-          Include non-US
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={allEmployment}
-            onChange={(e) => setAllEmployment(e.target.checked)}
-          />
-          Include contract
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={includeSenior}
-            onChange={(e) => setIncludeSenior(e.target.checked)}
-          />
-          Include senior
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={includeExcluded}
-            onChange={(e) => setIncludeExcluded(e.target.checked)}
-          />
-          Show excluded
-        </label>
-        <label className="flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={includeClosed}
-            onChange={(e) => setIncludeClosed(e.target.checked)}
-          />
-          Show closed
-        </label>
       </div>
 
-      {jobsQuery.isLoading && <LoadingSkeleton />}
-      {jobsQuery.isError && (
-        <ErrorState
-          message={`Failed to load jobs: ${jobsQuery.error.message}`}
-          onRetry={() => jobsQuery.refetch()}
-        />
-      )}
-      {jobsQuery.data?.length === 0 && (
-        <EmptyState title="No jobs match your filters yet.">
-          Try clearing filters, or ingest postings to populate the board.
-        </EmptyState>
-      )}
-
-      <ul className="space-y-3">
-        {jobsQuery.data?.map((job) => (
-          <li key={job.id} className="border-border bg-surface rounded-xl border p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <a
-                  href={job.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-fg font-medium hover:underline"
-                >
-                  {job.title}
-                </a>
-                <div className="text-muted text-sm">
-                  {job.company}
-                  {job.location ? ` · ${job.location}` : ''}
-                  {job.isRemote ? ' · Remote' : ''}
-                  {job.isUs === false && (
-                    <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-xs text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-                      Non-US
-                    </span>
-                  )}
-                </div>
+      <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+        {/* Left filter rail */}
+        <aside className="lg:sticky lg:top-20 lg:self-start">
+          <div className="border-border bg-surface flex flex-col gap-5 rounded-xl border p-4">
+            <div>
+              <div className="text-faint mb-2 text-xs font-medium tracking-wide uppercase">
+                Date posted
               </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${TIER_STYLES[job.sponsorTier]}`}
-                  title={job.sponsorReason ?? undefined}
-                >
-                  H1B: {job.sponsorTier}
-                  {job.sponsorCount != null ? ` (${job.sponsorCount})` : ''}
-                </span>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${NEW_HIRE_STYLES[job.newHireStatus]}`}
-                  title={`${NEW_HIRE_MEANINGS[job.newHireStatus]} ${NEW_HIRE_DISCLAIMER}`}
-                >
-                  {NEW_HIRE_LABELS[job.newHireStatus]}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCorrecting(correcting === job.id ? null : job.id)}
-                  className="text-faint hover:text-muted text-[11px] hover:underline"
-                  title="Correct the USCIS employer match"
-                >
-                  {job.sponsorMatchConfidence != null
-                    ? `match ${Math.round(job.sponsorMatchConfidence * 100)}% · correct`
-                    : 'no match · correct'}
-                </button>
+              <div className="flex flex-col gap-1.5">
+                {WITHIN_OPTIONS.map((o) => (
+                  <label key={o.value} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="within"
+                      checked={within === o.value}
+                      onChange={() => setWithin(o.value)}
+                      className="accent-brand"
+                    />
+                    {o.label}
+                  </label>
+                ))}
               </div>
             </div>
 
-            {correcting === job.id && (
-              <SponsorCorrection company={job.company} onDone={() => setCorrecting(null)} />
-            )}
+            <div className="border-border border-t pt-4">
+              <div className="text-faint mb-2 text-xs font-medium tracking-wide uppercase">
+                Show
+              </div>
+              <div className="flex flex-col gap-2 text-sm">
+                <Toggle label="Remote only" checked={remoteOnly} onChange={setRemoteOnly} />
+                <Toggle
+                  label="Include senior"
+                  checked={includeSenior}
+                  onChange={setIncludeSenior}
+                />
+                <Toggle
+                  label="Show excluded"
+                  checked={includeExcluded}
+                  onChange={setIncludeExcluded}
+                />
+                <Toggle label="Show closed" checked={includeClosed} onChange={setIncludeClosed} />
+              </div>
+            </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span
-                className="bg-brand/10 text-brand-text rounded px-1.5 py-0.5 text-xs font-medium"
-                title={`Why recommended: sponsorship ${job.priorityTier} · fit ${job.priorityFit} · freshness ${job.priorityFreshness}`}
-              >
-                Recommended {job.priorityScore}
-              </span>
-              {job.relevanceScore != null && (
-                <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
-                  Fit {job.relevanceScore}%
-                </span>
-              )}
-              {job.roleFamily && <Chip>{job.roleFamily}</Chip>}
-              {job.seniority && <Chip>{job.seniority}</Chip>}
-              {job.employmentType === 'contract' && <Chip muted>contract</Chip>}
-              {job.status === 'closed' && (
-                <span
-                  className="rounded bg-rose-500/10 px-1.5 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-300"
-                  title="No longer seen in the source feed"
+            {!jobsQuery.isLoading && (
+              <div className="text-faint border-border border-t pt-4 text-xs">
+                {jobs.length} job{jobs.length === 1 ? '' : 's'} shown
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* Card grid */}
+        <section>
+          {jobsQuery.isLoading && <LoadingSkeleton rows={6} />}
+          {jobsQuery.isError && (
+            <ErrorState
+              message={`Failed to load jobs: ${jobsQuery.error.message}`}
+              onRetry={() => jobsQuery.refetch()}
+            />
+          )}
+          {!jobsQuery.isLoading && jobs.length === 0 && (
+            <EmptyState title="No jobs match your filters yet.">
+              Widen the date range or clear a filter — or hit <strong>Find new jobs</strong> to
+              fetch fresh postings.
+            </EmptyState>
+          )}
+
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {jobs.map((job) => {
+              const openApply = () => {
+                markApplied.reset();
+                window.open(job.url, '_blank', 'noopener,noreferrer');
+                setApplyFor({ id: job.id, company: job.company, title: job.title });
+              };
+              return (
+                <li
+                  key={job.id}
+                  className="group border-border bg-surface lift relative flex flex-col gap-3 rounded-xl border p-4"
                 >
-                  Closed
-                </span>
-              )}
-              <span className="text-faint text-xs">
-                {job.source}
-                {job.postedDate ? ` · ${job.postedDate}` : ''}
-              </span>
-              <span className="ml-auto flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setTailoring(tailoring === job.id ? null : job.id)}
-                  className="border-border hover:bg-surface-2 rounded border px-2 py-0.5 text-xs"
-                  title="Tailoring suggestions for the selected résumé lens"
-                >
-                  {tailoring === job.id ? 'Hide tailor' : 'Tailor'}
-                </button>
-                {applied.has(job.id) ? (
-                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                    Applied ✓
-                  </span>
-                ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      markApplied.reset(); // clear any prior error before reopening
-                      window.open(job.url, '_blank', 'noopener,noreferrer');
-                      setApplyFor({ id: job.id, company: job.company, title: job.title });
-                    }}
-                    className="border-border hover:bg-surface-2 rounded border px-2 py-0.5 text-xs"
+                    aria-label="Remove from board"
+                    title="Remove from board — it won’t come back"
+                    className="text-faint hover:bg-surface-2 absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 hover:text-rose-500"
+                    onClick={() => dismiss.mutate({ id: job.id })}
                   >
-                    Apply
+                    ✕
                   </button>
-                )}
-              </span>
-            </div>
 
-            {job.skillGaps != null && job.skillGaps.length > 0 && (
-              <div className="text-muted mt-2 text-xs">
-                Missing: {job.skillGaps.slice(0, 8).join(', ')}
-              </div>
-            )}
+                  {/* Clickable body → opens the posting + the did-you-apply prompt */}
+                  <button type="button" onClick={openApply} className="min-w-0 text-left">
+                    <div className="mb-2 flex items-center justify-between gap-2 pr-6">
+                      <span className="text-faint font-mono text-[11px]">
+                        {job.postedDate ?? 'date n/a'}
+                      </span>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${TIER_STYLES[job.sponsorTier]}`}
+                        title={job.sponsorReason ?? undefined}
+                      >
+                        H-1B {job.sponsorTier}
+                      </span>
+                    </div>
+                    <div className="text-muted truncate text-xs">{job.company}</div>
+                    <h3 className="text-fg font-display mt-0.5 line-clamp-2 text-base font-semibold tracking-tight group-hover:underline">
+                      {job.title}
+                    </h3>
+                  </button>
 
-            {tailoring === job.id && (
-              <TailoringPanel jobId={job.id} resumeId={resumeId} lensLabel={lensLabel} />
-            )}
-          </li>
-        ))}
-      </ul>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className="bg-brand/10 text-brand-text rounded px-1.5 py-0.5 text-[11px] font-medium"
+                      title={`Sponsorship ${job.priorityTier} · fit ${job.priorityFit} · freshness ${job.priorityFreshness}`}
+                    >
+                      ★ {job.priorityScore}
+                    </span>
+                    {job.roleFamily && <Chip>{job.roleFamily}</Chip>}
+                    {job.seniority && <Chip>{job.seniority}</Chip>}
+                    {job.isRemote && <Chip muted>remote</Chip>}
+                    {job.status === 'closed' && (
+                      <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 dark:text-rose-300">
+                        closed
+                      </span>
+                    )}
+                  </div>
+
+                  <span
+                    className={`w-fit rounded-full border px-2 py-0.5 text-[11px] font-medium ${NEW_HIRE_STYLES[job.newHireStatus]}`}
+                    title={`${NEW_HIRE_MEANINGS[job.newHireStatus]} ${NEW_HIRE_DISCLAIMER}`}
+                  >
+                    {NEW_HIRE_LABELS[job.newHireStatus]}
+                  </span>
+
+                  <div className="border-border mt-auto flex items-center justify-between gap-2 border-t pt-3">
+                    <span className="text-muted min-w-0 truncate text-xs">
+                      {job.salaryText ? (
+                        <span className="text-fg font-medium">{job.salaryText}</span>
+                      ) : (
+                        (job.location ?? 'Location n/a')
+                      )}
+                    </span>
+                    {applied.has(job.id) ? (
+                      <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        Applied ✓
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={openApply}
+                        className="press bg-brand text-brand-contrast rounded-md px-3 py-1 text-xs font-semibold"
+                      >
+                        Apply
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
 
       {applyFor && (
         <ApplyDialog
@@ -340,15 +315,33 @@ export default function JobsPage() {
           pending={markApplied.isPending}
           error={markApplied.error?.message}
           onConfirm={() =>
-            // Attribute the résumé lens selected at confirm time; only close on success.
-            markApplied.mutate(
-              { jobId: applyFor.id, resumeId, resumeLabel: lensLabel },
-              { onSuccess: () => setApplyFor(null) },
-            )
+            markApplied.mutate({ jobId: applyFor.id }, { onSuccess: () => setApplyFor(null) })
           }
           onClose={() => setApplyFor(null)}
         />
       )}
     </main>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-brand"
+      />
+      {label}
+    </label>
   );
 }
