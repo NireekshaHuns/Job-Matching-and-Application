@@ -22,9 +22,9 @@ test('apply on the board confirms, appears in the tracker, and status is editabl
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Yes, I applied' }).click();
-  await expect(card.getByText('Applied ✓')).toBeVisible();
 
-  await page.goto('/tracker');
+  // Confirming applies the job and hands off to the Tracker automatically.
+  await expect(page).toHaveURL(/\/tracker/);
   // Kanban columns render, and the new application sits under "Applied".
   await expect(page.getByRole('heading', { name: 'Applied' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Interview' })).toBeVisible();
