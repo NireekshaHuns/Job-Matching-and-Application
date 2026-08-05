@@ -67,6 +67,7 @@ export default function StudioPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const [skillsText, setSkillsText] = useState('');
   const [skillsKind, setSkillsKind] = useState<'technical' | 'soft'>('technical');
   const addSkills = trpc.resumes.addSkills.useMutation();
@@ -87,7 +88,9 @@ export default function StudioPage() {
   const save = trpc.resumes.saveTailored.useMutation();
   const [saved, setSaved] = useState(false);
 
-  async function handleUpload(files: FileList | null) {
+  const ACCEPTED = ['.pdf', '.tex', '.txt'];
+
+  async function handleUpload(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
     setUploadMsg(null);
@@ -110,6 +113,21 @@ export default function StudioPage() {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = '';
     }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    if (uploading) return;
+    const dropped = Array.from(e.dataTransfer.files);
+    const accepted = dropped.filter((f) =>
+      ACCEPTED.some((ext) => f.name.toLowerCase().endsWith(ext)),
+    );
+    if (accepted.length === 0) {
+      setUploadMsg('Only PDF, .tex, or .txt files are accepted.');
+      return;
+    }
+    void handleUpload(accepted);
   }
 
   function toggleKeyword(kw: string) {
@@ -184,18 +202,42 @@ export default function StudioPage() {
           title="Your résumé corpus"
           hint="The more real résumés you add, the sharper every tailor gets."
         >
-          <div className="flex flex-wrap items-center gap-3">
+          <label
+            onDragEnter={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragActive(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragActive(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+            }}
+            onDrop={handleDrop}
+            className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors ${
+              dragActive
+                ? 'border-brand bg-brand/5'
+                : 'border-border bg-surface-2 hover:bg-surface-2/70'
+            } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+          >
             <input
               ref={fileInput}
               type="file"
               multiple
               accept=".pdf,.tex,.txt"
-              className="text-sm"
+              className="sr-only"
               onChange={(e) => void handleUpload(e.target.files)}
               disabled={uploading}
             />
-            {uploading && <span className="text-muted text-sm">Uploading &amp; extracting…</span>}
-          </div>
+            <span className="text-fg text-sm font-medium">
+              {uploading ? 'Uploading & extracting…' : 'Drag & drop résumés here'}
+            </span>
+            <span className="text-faint text-xs">
+              or click to browse — PDF, .tex, or .txt (up to 10 files)
+            </span>
+          </label>
           {uploadMsg && <p className="text-muted mt-2 text-xs">{uploadMsg}</p>}
 
           <div className="mt-3 flex flex-wrap items-end gap-2">
