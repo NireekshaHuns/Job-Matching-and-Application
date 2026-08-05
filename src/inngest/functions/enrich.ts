@@ -23,7 +23,9 @@ export const enrichJobs = inngest.createFunction(
     // postings (spending before the insert-conflict catches the dupes). Manual
     // `pnpm enrich` runs should likewise not overlap a scheduled run.
     concurrency: { limit: 1 },
-    triggers: [{ cron: '0 */6 * * *' }],
+    // Scheduled every 6h, plus an on-demand trigger from the board's
+    // "Find new jobs" button (jobs.refresh → inngest.send).
+    triggers: [{ cron: '0 */6 * * *' }, { event: 'jobs/refresh.requested' }],
   },
   async ({ step }) => {
     return step.run('fetch-and-enrich', async () => {

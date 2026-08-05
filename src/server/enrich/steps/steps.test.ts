@@ -108,6 +108,20 @@ describe('parseClassification / classifyPosting', () => {
     expect(c.softKeywords).toEqual(['ownership']);
   });
 
+  it('extracts a stated salary and defaults it to null when absent', () => {
+    const withSalary = parseClassification(
+      JSON.stringify({
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: [],
+        salary: '  $150k–$180k  ',
+      }),
+    );
+    expect(withSalary.salary).toBe('$150k–$180k');
+    expect(parseClassification(validJson).salary).toBeNull();
+  });
+
   it('defaults soft keywords to [] when omitted', () => {
     const c = parseClassification(
       JSON.stringify({
