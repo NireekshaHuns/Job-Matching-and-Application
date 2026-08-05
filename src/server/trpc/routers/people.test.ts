@@ -4,11 +4,21 @@ import type { Context } from '@/server/trpc/context';
 import { createCaller } from '@/server/trpc/root';
 import {
   CACHE_TTL_DAYS,
+  companyDomainGuess,
   findPeopleInput,
   importPersonInput,
   isCacheFresh,
   peopleCacheKey,
 } from './people';
+
+describe('companyDomainGuess', () => {
+  it('slugifies a company name into a .com domain, dropping suffixes/punctuation', () => {
+    expect(companyDomainGuess('Stripe')).toBe('stripe.com');
+    expect(companyDomainGuess('Pure Storage')).toBe('purestorage.com');
+    expect(companyDomainGuess('Acme, Inc.')).toBe('acme.com');
+    expect(companyDomainGuess('')).toBe('');
+  });
+});
 
 describe('peopleCacheKey', () => {
   it('normalizes company + domain (case/space-insensitive) and stays stable', () => {

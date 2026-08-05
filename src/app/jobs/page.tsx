@@ -7,6 +7,7 @@
  * job for good; the board defaults to US, full-time, non-excluded, posted within
  * the last week.
  */
+import { useRouter } from 'next/navigation';
 import { useDeferredValue, useState } from 'react';
 import { ApplyDialog } from '@/components/apply-dialog';
 import { Chip } from '@/components/chip';
@@ -49,9 +50,11 @@ export default function JobsPage() {
   );
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
 
+  const router = useRouter();
   const deferredSearch = useDeferredValue(search);
   const deferredLocation = useDeferredValue(location);
   const utils = trpc.useUtils();
+  const kickoff = trpc.people.kickoffForJob.useMutation();
   const appliedQuery = trpc.applications.appliedJobIds.useQuery();
   const applied = new Set(appliedQuery.data ?? []);
 
@@ -315,7 +318,18 @@ export default function JobsPage() {
           pending={markApplied.isPending}
           error={markApplied.error?.message}
           onConfirm={() =>
-            markApplied.mutate({ jobId: applyFor.id }, { onSuccess: () => setApplyFor(null) })
+            markApplied.mutate(
+              { jobId: applyFor.id },
+              {
+                onSuccess: () => {
+                  // Best-effort: auto-find + import a contact, then hand off to the
+                  // Tracker where the outreach panel + draft live.
+                  kickoff.mutate({ jobId: applyFor.id });
+                  setApplyFor(null);
+                  router.push('/tracker');
+                },
+              },
+            )
           }
           onClose={() => setApplyFor(null)}
         />
