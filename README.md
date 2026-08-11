@@ -27,7 +27,7 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full architecture, data model, and domain
 ## Getting started
 
 ```bash
-nvm use                 # Node 20 LTS (.nvmrc)
+nvm use                 # Node 22 LTS (.nvmrc)
 pnpm install
 cp .env.example .env     # fill in DATABASE_URL, OPENAI_API_KEY, etc.
 pnpm dev
