@@ -78,7 +78,7 @@ The Stack/Architecture sections above describe the original intent; these pieces
 
 ## Commands
 
-Runtime: Node 20 LTS (`.nvmrc`) + pnpm 10. Run `nvm use` on entry if needed.
+Runtime: Node 22 LTS (`.nvmrc`) + pnpm 10. Run `nvm use` on entry if needed.
 
 - Dev: `pnpm dev`
 - Test: `pnpm test` · single file: `pnpm test <path>` · watch: `pnpm test:watch`

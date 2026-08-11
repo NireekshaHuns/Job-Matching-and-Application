@@ -15,7 +15,7 @@ other integration is feature-gated and optional.
 ## 1. One-time local build check
 
 ```bash
-nvm use                       # Node 20 (.nvmrc)
+nvm use                       # Node 22 (.nvmrc)
 pnpm install --frozen-lockfile
 pnpm build                    # needs DATABASE_URL in .env — imports validate env at load
 ```
@@ -24,14 +24,13 @@ pnpm build                    # needs DATABASE_URL in .env — imports validate 
 
 1. **Add New → Project** and import this repo.
 2. Framework preset auto-detects **Next.js** — leave build/output settings at their defaults
-   (`pnpm build`). `packageManager` + `engines` in `package.json` pin pnpm 10 / Node 20.
+   (`pnpm build`). `packageManager` + `engines` in `package.json` pin pnpm 10 / Node 22.
 3. **Set the environment variables (step 3) before the first deploy** — the build fails
    without `DATABASE_URL`.
 
-> **Node 20 deadline:** Vercel deprecates Node 20 for new builds/functions on
-> **2026-10-01** (Node 20 went EOL 2026-04-30). Before then, bump `.nvmrc` + the
-> `engines.node` pin in `package.json` to `22.x` and re-run the gates; already-deployed
-> functions keep working, but new deployments on 20 will error after that date.
+> **Node version:** `engines.node` in `package.json` wins over the Vercel project's
+> Node.js setting, so the pin here is what builds actually run on. Node 20 stopped being
+> accepted for new Vercel builds on 2026-10-01, hence the 22.x pin.
 
 ## 3. Environment variables
 
