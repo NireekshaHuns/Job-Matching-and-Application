@@ -9,6 +9,8 @@ other integration is feature-gated and optional.
 - A Vercel account connected to this GitHub repo.
 - The existing Neon database (already migrated and seeded) or a new Neon branch.
 - The AI keys you use locally (see `.env`), if you want résumé tailoring / keyword extraction.
+- An Inngest Cloud app, if you want the in-app **"Find new jobs"** button to work (see
+  [Background jobs](#background-jobs)).
 
 ## 1. One-time local build check
 
@@ -26,26 +28,37 @@ pnpm build                    # needs DATABASE_URL in .env — imports validate 
 3. **Set the environment variables (step 3) before the first deploy** — the build fails
    without `DATABASE_URL`.
 
+> **Node 20 deadline:** Vercel deprecates Node 20 for new builds/functions on
+> **2026-10-01** (Node 20 went EOL 2026-04-30). Before then, bump `.nvmrc` + the
+> `engines.node` pin in `package.json` to `22.x` and re-run the gates; already-deployed
+> functions keep working, but new deployments on 20 will error after that date.
+
 ## 3. Environment variables
 
 Set for **Production** (and Preview if you use preview deploys). Vercel injects them at
 build and runtime.
 
-| Variable                               | Required?                           | Notes                                   |
-| -------------------------------------- | ----------------------------------- | --------------------------------------- |
-| `DATABASE_URL`                         | **Yes — app won't boot without it** | Pooled Neon connection string.          |
-| `AUTH_SECRET`                          | Yes (to lock the app)               | `openssl rand -base64 32`.              |
-| `OWNER_EMAIL`                          | Yes (to lock the app)               | Your login email.                       |
-| `OWNER_PASSWORD`                       | Yes (to lock the app)               | Your login password.                    |
-| `OPENAI_API_KEY`                       | Recommended                         | Classify/embed + JD keyword extraction. |
-| `OPENAI_TAILOR_BASE_URL`               | Recommended                         | e.g. OpenRouter, for GLM tailoring.     |
-| `OPENAI_TAILOR_API_KEY`                | Recommended                         | Tailoring endpoint key.                 |
-| `OPENAI_TAILOR_MODEL`                  | Recommended                         | e.g. `z-ai/glm-4.6`.                    |
-| `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Optional                            | Error monitoring.                       |
+| Variable                                   | Required?                           | Notes                                    |
+| ------------------------------------------ | ----------------------------------- | ---------------------------------------- |
+| `DATABASE_URL`                             | **Yes — app won't boot without it** | Pooled Neon connection string.           |
+| `AUTH_SECRET`                              | Yes (to lock the app)               | `openssl rand -base64 32`.               |
+| `OWNER_EMAIL`                              | Yes (to lock the app)               | Your login email.                        |
+| `OWNER_PASSWORD`                           | Yes (to lock the app)               | Your login password.                     |
+| `OPENAI_API_KEY`                           | Recommended                         | Classify/embed + JD keyword extraction.  |
+| `OPENAI_TAILOR_BASE_URL`                   | Recommended                         | e.g. OpenRouter, for GLM tailoring.      |
+| `OPENAI_TAILOR_API_KEY`                    | Recommended                         | Tailoring endpoint key.                  |
+| `OPENAI_TAILOR_MODEL`                      | Recommended                         | e.g. `z-ai/glm-4.6`.                     |
+| `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | Only for "Find new jobs"            | See [Background jobs](#background-jobs). |
+| `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`     | Optional                            | Error monitoring.                        |
 
 **Auth is all-or-nothing:** all three of `AUTH_SECRET`, `OWNER_EMAIL`, `OWNER_PASSWORD`
-must be set, or the app stays fully public (`src/server/auth/config.ts`). Leave
-Inngest / MS Graph / Hunter / Apollo / AWS / GitHub vars unset — they're feature-gated.
+must be set, or the app stays fully public — `authorized()` in `src/server/auth/config.ts`
+returns `true` for every route when the trio is absent. Since the tracker holds real
+applications, contacts, and résumé content, treat these as required for a public URL.
+Leave MS Graph / Hunter / Apollo / AWS / GitHub vars unset — they're feature-gated.
+
+Do **not** set `E2E_DATABASE_URL` in Vercel: the Playwright seed truncates whatever it
+points at.
 
 ## 4. Database
 
@@ -58,6 +71,11 @@ Inngest / MS Graph / Hunter / Apollo / AWS / GitHub vars unset — they're featu
 Migrations are **not** applied at build/deploy time — run `pnpm db:migrate` manually whenever
 new migrations land.
 
+**Discovered ATS boards don't ship.** `ats-boards.json` (written by `pnpm ats:discover`) is
+git-ignored, so production ingestion only fans out to the code-seeded boards in
+`src/server/ingest/registry.ts`. Locally discovered boards are local-only until they're
+promoted into those seed lists.
+
 ## 5. Deploy & verify
 
 Push to `main` (or hit Deploy). After it's live:
@@ -67,11 +85,24 @@ Push to `main` (or hit Deploy). After it's live:
 3. `/studio`: paste a JD → **Extract keywords** and **Generate résumé**; confirm the
    in-browser **WASM PDF preview** renders.
 4. Drag-and-drop a PDF/.tex/.txt onto the Studio dropzone → it ingests into the corpus.
-5. Check Vercel **Function logs** for 500s on first navigation.
+5. `/jobs` → **Find new jobs**: only meaningful once Inngest is wired up; confirm a run
+   appears in the Inngest dashboard, then reload the board.
+6. Check Vercel **Function logs** for 500s on first navigation.
 
-## Background jobs (deferred)
+## Background jobs
 
-Scheduled ingestion/enrichment runs on **Inngest** and is **off by default** in production.
-To enable it later: register `/api/inngest` with Inngest Cloud and add the `INNGEST_EVENT_KEY`
-and `INNGEST_SIGNING_KEY` vars in Vercel. Until then, refresh jobs via **"Find new jobs"** in
-the UI or the CLI scripts against the same Neon DB.
+Ingestion + enrichment run on **Inngest**, and so does the in-app **"Find new jobs"**
+button: `jobs.refresh` (`src/server/trpc/routers/jobs.ts`) only publishes a
+`jobs/refresh.requested` event — the durable `enrich-jobs` function does the work. With no
+Inngest keys set, that button has nothing to deliver to and the board won't pick up new
+postings. Pick one:
+
+- **Wire up Inngest (needed for the UI button + the cron).** In Inngest Cloud, add an app
+  pointing at `https://<your-app>.vercel.app/api/inngest`, then set `INNGEST_EVENT_KEY` +
+  `INNGEST_SIGNING_KEY` in Vercel and redeploy. The webhook is intentionally excluded from
+  the auth middleware (`src/middleware.ts`), so it works with auth on.
+- **Skip it and refresh from your machine**, pointing the CLI at the same Neon DB:
+  ```bash
+  pnpm enrich          # fetch + classify + score new postings
+  pnpm score:fits      # re-score jobs × résumés
+  ```
