@@ -7,6 +7,7 @@ import {
   buildDefaultTemplate,
   buildHeader,
   latexEscape,
+  normalizeDashes,
   sanitizeUrl,
 } from './template';
 
@@ -14,6 +15,19 @@ describe('latexEscape', () => {
   it('escapes LaTeX specials', () => {
     expect(latexEscape('A & B_% #C')).toBe('A \\& B\\_\\% \\#C');
     expect(latexEscape('100%')).toBe('100\\%');
+  });
+});
+
+describe('normalizeDashes', () => {
+  it('converts typographic dashes to LaTeX ligatures', () => {
+    // The 8-bit WASM pdfTeX renders a literal U+2014 as "â€”".
+    expect(normalizeDashes('Boston — MA')).toBe('Boston --- MA');
+    expect(normalizeDashes('2026–2029')).toBe('2026--2029');
+    expect(normalizeDashes('plain - hyphen')).toBe('plain - hyphen');
+  });
+
+  it('is applied to any escaped text, so profile fields are covered too', () => {
+    expect(latexEscape('AWS Architect – Associate')).toBe('AWS Architect -- Associate');
   });
 });
 

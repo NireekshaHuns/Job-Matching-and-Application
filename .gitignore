@@ -62,3 +62,6 @@ next-env.d.ts
 
 # Local editor/agent tooling — kept out of the repo
 .claude/
+
+# scratch scripts used while debugging (never committed)
+*.tmp.ts

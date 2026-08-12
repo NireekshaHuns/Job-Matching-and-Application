@@ -84,6 +84,13 @@ jobs:
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
+      # Offline: compiles the résumé template in a real browser against the
+      # committed TeX subset. Unit tests can only check the LaTeX as text —
+      # this is the only thing that catches a template that does not build, or
+      # one that has quietly grown to two pages.
+      - name: Verify the résumé template compiles
+        run: pnpm verify:latex
+
       - name: Run e2e
         run: pnpm e2e
 

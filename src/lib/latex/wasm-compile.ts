@@ -1,14 +1,22 @@
 /**
  * In-browser LaTeX → PDF compile via the self-hosted SwiftLaTeX pdfTeX WASM
  * engine (assets in `public/swiftlatex/`). Runs entirely client-side (no server
- * LaTeX engine needed on Vercel). Missing TeX packages are fetched from
- * SwiftLaTeX's TeXLive CDN at compile time, so a template using an uncommon
- * package can fail — callers must handle `LatexCompileError` and fall back to
- * download / Open in Overleaf.
+ * LaTeX engine needed on Vercel).
+ *
+ * The TeX tree is self-hosted too, under `public/texlive/`. The engine ships no
+ * TeX files at all and by default pulls every `.cls`, `.sty` and font from
+ * `texlive2.swiftlatex.com`, which is dead — so nothing compiled. We now serve
+ * a pinned TeX Live 2019 subset ourselves; see `scripts/texlive-ondemand.ts`
+ * for how it is built.
+ *
+ * A document that reaches for a package outside that subset will still fail, so
+ * callers must handle `LatexCompileError` and fall back to download / Open in
+ * Overleaf.
  */
 
 interface PdfTeXEngineInstance {
   loadEngine(): Promise<void>;
+  setTexliveEndpoint(url: string): void;
   isReady(): boolean;
   writeMemFSFile(filename: string, srccode: string): void;
   setEngineMainFile(filename: string): void;
@@ -34,6 +42,11 @@ export class LatexCompileError extends Error {
 }
 
 const ENGINE_SCRIPT = '/swiftlatex/PdfTeXEngine.js';
+/**
+ * Our own TeX Live subset. Trailing slash matters — the engine appends
+ * `pdftex/{format}/{name}` directly to it.
+ */
+const TEXLIVE_ENDPOINT = '/texlive/';
 
 let scriptPromise: Promise<void> | null = null;
 function loadScriptOnce(): Promise<void> {
@@ -70,6 +83,8 @@ async function getEngine(): Promise<PdfTeXEngineInstance> {
     if (!Ctor) throw new Error('LaTeX engine is unavailable.');
     const engine = new Ctor();
     await engine.loadEngine();
+    // Must come after loadEngine (it needs the worker) and before any compile.
+    engine.setTexliveEndpoint(TEXLIVE_ENDPOINT);
     return engine;
   })();
   try {

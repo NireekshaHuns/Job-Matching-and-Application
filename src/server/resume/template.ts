@@ -13,9 +13,21 @@
  */
 import type { ResumeProfileFacts } from './profile';
 
+/**
+ * Rewrite typographic dashes as their LaTeX ligatures.
+ *
+ * The WASM engine is 8-bit pdfTeX and renders a literal U+2014 as "â€”". `---`
+ * and `--` produce the same glyphs with no encoding assumptions, so any dash
+ * that reaches the document — from this file or from profile fields the owner
+ * typed — is normalized first.
+ */
+export function normalizeDashes(s: string): string {
+  return s.replace(/—/g, '---').replace(/–/g, '--');
+}
+
 /** Escape the handful of LaTeX specials that turn up in header/contact fields. */
 export function latexEscape(s: string): string {
-  return s.replace(/([\\{}$&#_%~^])/g, (m) =>
+  return normalizeDashes(s).replace(/([\\{}$&#_%~^])/g, (m) =>
     m === '\\'
       ? '\\textbackslash{}'
       : m === '~'
@@ -172,7 +184,7 @@ function experienceBlock(): string[] {
   for (const [i, role] of EXPERIENCE.entries()) {
     out.push(
       `\\textbf{${role.title}} \\hfill ${role.dates} \\\\`,
-      `\\textit{${role.employer}} — ${role.location}`,
+      `\\textit{${role.employer}} --- ${role.location}`,
       '\\begin{itemize}',
       ...placeholderItems(role.bullets),
       '\\end{itemize}',
@@ -188,7 +200,7 @@ function educationBlock(p: ResumeProfileFacts): string[] {
     '\\section*{EDUCATION}',
     '',
     `\\textbf{Master of Science in Computer Software Engineering Systems} \\hfill ${grad} \\\\`,
-    'Northeastern University — Boston, MA\\\\',
+    'Northeastern University --- Boston, MA\\\\',
     '\\textbf{Coursework:} Data Structures \\& Algorithms, Web Development and Design, Distributed Systems, Database Design',
   ];
   if (p.certText?.trim()) {

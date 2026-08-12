@@ -234,7 +234,12 @@ var PdfTeXEngine = /** @class */ (function () {
     PdfTeXEngine.prototype.setTexliveEndpoint = function (url) {
         if (this.latexWorker !== undefined) {
             this.latexWorker.postMessage({ 'cmd': 'settexliveurl', 'url': url });
-            this.latexWorker = undefined;
+            // PATCHED (upstream bug): the next line here was
+            //     this.latexWorker = undefined;
+            // copy-pasted from closeWorker(). It dropped the worker reference
+            // right after configuring it, so the following compileLaTeX() threw
+            // "Cannot set properties of undefined (setting 'onmessage')".
+            // Setting the endpoint must not tear the engine down.
         }
     };
     PdfTeXEngine.prototype.closeWorker = function () {
