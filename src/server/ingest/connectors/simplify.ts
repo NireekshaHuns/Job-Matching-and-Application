@@ -29,22 +29,31 @@ interface SimplifyListing {
 
 /**
  * `listings.json` backs every section of the repo's README, not just the
- * software one — a full fetch is ~2,800 active listings split across Hardware,
- * Quant, Product and AI/ML/Data as well. The board is for SWE roles, and every
- * extra posting costs an LLM classify + embed on ingest, so filter here.
+ * software one — a full fetch is ~2,800 active listings, and Hardware, Quant
+ * and Product are not roles this board is for. Filtering here keeps them out
+ * before they cost an LLM classify on ingest.
  *
- * Two labels are in play: `Software` is what the repo writes today, and
- * `Software Engineering` is an older label still attached to ~16 live rows.
- * Both map to the README's "Software Engineering New Grad Roles" section.
+ * Several labels are in play. `Software` is what the repo writes today and
+ * `Software Engineering` is an older label still on ~16 live rows; both map to
+ * the README's software-engineering section.
  *
- * Deliberately NOT included: `AI/ML/Data`. Those are largely research and data
- * science roles; the ones that are really SWE come through the ATS connectors,
- * and enrichment's `role_family` classification is the right place to make that
- * call from the JD rather than guessing from a coarse category label here.
+ * `AI/ML/Data` (~880 active) IS included. It was excluded at first on the
+ * grounds that it is mostly research, but the owner's strongest differentiator
+ * is applied AI — LLMs, RAG, vector search — and the section carries plenty of
+ * genuine ML-platform and AI-infrastructure engineering. Deciding from a coarse
+ * category label was the wrong place to draw the line: enrichment's
+ * `role_family` classification reads the actual JD, and the board can filter on
+ * it, so a research-only posting is separable downstream.
  */
-const SWE_CATEGORIES = new Set(['software', 'software engineering']);
+const SWE_CATEGORIES = new Set([
+  'software',
+  'software engineering',
+  'ai/ml/data',
+  // Older spelling of the same section, still attached to a couple of rows.
+  'data science, ai & machine learning',
+]);
 
-/** Does this listing belong to the README's software-engineering section? */
+/** Does this listing belong to a section the board covers? */
 export function isSoftwareCategory(category: string | undefined): boolean {
   if (!category) return false;
   return SWE_CATEGORIES.has(category.trim().toLowerCase());

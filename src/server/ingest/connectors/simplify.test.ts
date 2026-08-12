@@ -8,20 +8,22 @@ function fetcherReturning(body: unknown, status = 200): Fetcher {
 }
 
 describe('isSoftwareCategory', () => {
-  it('accepts both upstream labels, case- and space-insensitively', () => {
+  it('accepts every covered label, case- and space-insensitively', () => {
     expect(isSoftwareCategory('Software')).toBe(true);
     expect(isSoftwareCategory('Software Engineering')).toBe(true);
+    expect(isSoftwareCategory('AI/ML/Data')).toBe(true);
+    expect(isSoftwareCategory('Data Science, AI & Machine Learning')).toBe(true);
     expect(isSoftwareCategory('  software  ')).toBe(true);
     expect(isSoftwareCategory('SOFTWARE ENGINEERING')).toBe(true);
+    expect(isSoftwareCategory('ai/ml/data')).toBe(true);
   });
 
-  it('rejects the other README sections and a missing label', () => {
+  it('rejects the sections the board does not cover, and a missing label', () => {
     expect(isSoftwareCategory('Hardware')).toBe(false);
     expect(isSoftwareCategory('Quant')).toBe(false);
+    expect(isSoftwareCategory('Quantitative Finance')).toBe(false);
     expect(isSoftwareCategory('Product')).toBe(false);
-    // Excluded on purpose: role_family classification from the JD is the right
-    // place to decide whether an ML role is really SWE.
-    expect(isSoftwareCategory('AI/ML/Data')).toBe(false);
+    expect(isSoftwareCategory('Product Management')).toBe(false);
     expect(isSoftwareCategory(undefined)).toBe(false);
     expect(isSoftwareCategory('')).toBe(false);
   });
@@ -32,8 +34,8 @@ describe('simplifyNewGradConnector', () => {
     const connector = simplifyNewGradConnector({}, fetcherReturning(listingsFixture));
     const postings = await connector.fetch();
 
-    // 8 listings in: 1 hidden, 1 inactive, 3 non-software, 1 uncategorized.
-    expect(postings.map((p) => p.company)).toEqual(['Stripe', 'Databricks']);
+    // 8 listings in: 1 hidden, 1 inactive, 2 out-of-scope, 1 uncategorized.
+    expect(postings.map((p) => p.company)).toEqual(['Stripe', 'Databricks', 'Model Co']);
     const [stripe] = postings;
     expect(stripe.source).toBe('github:simplify-newgrad');
     expect(stripe.company).toBe('Stripe');
