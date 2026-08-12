@@ -31,6 +31,7 @@
     "eval:classify": "tsx scripts/eval-classify.ts",
     "score:fits": "tsx scripts/score-fits.ts",
     "backfill:is-us": "tsx scripts/backfill-is-us.ts",
+    "backfill:posted-at": "tsx scripts/backfill-posted-at.ts",
     "prune:simplify": "tsx scripts/prune-simplify-non-swe.ts",
     "texlive:serve": "tsx scripts/texlive-ondemand.ts",
     "verify:latex": "tsx scripts/verify-latex-compile.ts",
