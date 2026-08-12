@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DB } from '@/server/db';
 import type { NewJob } from '@/server/db/schema';
+import type { RawPosting } from '@/server/ingest/types';
 import type { DiscoveredAlias } from './steps/resolver';
 import {
   insertJobs,
   loadSponsorState,
+  planEnrichmentBatch,
   reconcileFreshness,
   staleThreshold,
   upsertDiscoveredAliases,
@@ -245,5 +247,43 @@ describe('loadSponsorState', () => {
     expect(historyByKey.has('UNKNOWN')).toBe(false);
     expect(idByKey.get('GOOGLE')).toBe(1);
     expect(idByKey.get('FOO')).toBe(2);
+  });
+});
+
+describe('planEnrichmentBatch', () => {
+  const posting = (fingerprint: string) => ({ fingerprint }) as RawPosting;
+  const all = ['a', 'b', 'c', 'd'].map(posting);
+
+  it('passes everything through when there is no cap', () => {
+    const { toEnrich, deferred } = planEnrichmentBatch(all, new Set());
+    expect(toEnrich).toBe(all);
+    expect(deferred).toBe(0);
+  });
+
+  it('does not count postings we already hold against the cap', () => {
+    // 4 fetched, 3 already known: only 'd' is new, so a cap of 2 defers nothing
+    // and the full list still goes through (enrichPostings skips the dupes).
+    const existing = new Set(['a', 'b', 'c']);
+    const { toEnrich, deferred } = planEnrichmentBatch(all, existing, 2);
+    expect(deferred).toBe(0);
+    expect(toEnrich).toBe(all);
+  });
+
+  it('enriches up to the cap and defers the rest', () => {
+    const { toEnrich, deferred } = planEnrichmentBatch(all, new Set(), 2);
+    expect(toEnrich.map((p) => p.fingerprint)).toEqual(['a', 'b']);
+    expect(deferred).toBe(2);
+  });
+
+  it('drops the already-known postings once it has to cap', () => {
+    // Capping means only new postings are handed on — the known ones would be
+    // skipped anyway, and their fingerprints are still reconciled by the caller.
+    const { toEnrich, deferred } = planEnrichmentBatch(all, new Set(['a']), 1);
+    expect(toEnrich.map((p) => p.fingerprint)).toEqual(['b']);
+    expect(deferred).toBe(2);
+  });
+
+  it('handles an empty fetch', () => {
+    expect(planEnrichmentBatch([], new Set(), 10)).toEqual({ toEnrich: [], deferred: 0 });
   });
 });

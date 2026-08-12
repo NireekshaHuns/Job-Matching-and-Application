@@ -6,6 +6,7 @@
  * tier + fit + freshness — computed at read time; the two scores are never
  * merged into one stored value.
  */
+import { TRPCError } from '@trpc/server';
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
@@ -108,6 +109,16 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
     hideDismissed: !input.includeDismissed,
     sort: input.sort,
   };
+}
+
+/**
+ * Is there an Inngest to send to? Locally `pnpm inngest:dev` runs a dev server
+ * that needs no key, so development is treated as configured; in production an
+ * event key is required or the send is a no-op with no consumer.
+ */
+export function isInngestConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.NODE_ENV !== 'production') return true;
+  return Boolean(env.INNGEST_EVENT_KEY && env.INNGEST_EVENT_KEY.trim());
 }
 
 /** Escape LIKE metacharacters so a search term is treated literally. */
@@ -310,12 +321,43 @@ export const jobsRouter = createTRPCRouter({
   /**
    * Kick off the enrichment pipeline on demand ("Find new jobs"). Fires an
    * Inngest event; the durable `enrich-jobs` function fetches + scores new
-   * postings in the background. Needs Inngest running (prod, or `pnpm inngest:dev`
-   * locally). Returns immediately — the board refetches when the user reloads.
+   * postings in the background. Returns immediately — the caller polls
+   * `pipelineStatus` to find out whether anything actually ran.
+   *
+   * Refuses up front when Inngest is not configured. `inngest.send` happily
+   * resolves in that case, which is how the board came to show "they'll appear
+   * in a few minutes" for a request nothing was listening to.
    */
   refresh: publicProcedure.mutation(async () => {
+    if (!isInngestConfigured()) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message:
+          'Ingestion is not configured: INNGEST_EVENT_KEY is unset, so nothing would pick this up. Run `pnpm inngest:dev` locally, or add the app in Inngest Cloud.',
+      });
+    }
     const { inngest } = await import('@/inngest/client');
     await inngest.send({ name: 'jobs/refresh.requested', data: {} });
-    return { started: true };
+    return { started: true, requestedAt: new Date() };
+  }),
+
+  /**
+   * Whether ingestion is wired up, and when it last saw a posting. The board
+   * polls this after a refresh: `lastSeenAt` advancing is the only honest
+   * evidence that a run happened, since firing the event proves only that
+   * Inngest accepted it, not that any app is subscribed.
+   */
+  pipelineStatus: publicProcedure.query(async ({ ctx }) => {
+    const [row] = await ctx.db
+      .select({
+        lastSeenAt: sql<Date | null>`max(${jobs.lastSeenAt})`,
+        activeCount: sql<number>`count(*) filter (where ${jobs.status} = 'active')`,
+      })
+      .from(jobs);
+    return {
+      configured: isInngestConfigured(),
+      lastSeenAt: row?.lastSeenAt ?? null,
+      activeCount: Number(row?.activeCount ?? 0),
+    };
   }),
 });
