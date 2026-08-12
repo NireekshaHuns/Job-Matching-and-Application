@@ -4,9 +4,25 @@
  * (`quality.ts`), so what we ask for and what we check stay in sync.
  */
 
-/** Target resume length in words. */
-export const WORD_MIN = 475;
-export const WORD_MAX = 600;
+/**
+ * Target resume length in words.
+ *
+ * Calibrated against the owner's actual one-page résumé in this template, which
+ * is **442 words across 11 bullets**. The previous 475–600 range was measured on
+ * a different layout and pushed generation onto a second page: the linter was
+ * reporting a 640-word, 16-bullet draft as too SHORT of the minimum. The band is
+ * centred on the real document with room to breathe either side.
+ */
+export const WORD_MIN = 380;
+export const WORD_MAX = 500;
+
+/**
+ * Hard bullet ceiling for one page. Word count alone does not control page
+ * count — bullets do, because each one costs a `\item` plus its own leading and
+ * almost always wraps to 2–3 lines. 13 leaves a little slack over the owner's
+ * 11 without spilling over.
+ */
+export const MAX_BULLETS = 13;
 
 /** Fraction of bullets that should contain a concrete metric. */
 export const MIN_METRIC_RATIO = 0.5;
@@ -106,11 +122,13 @@ export const RESUME_RUBRIC_PROMPT = [
   '- Drop skills, sections, and detail the job does not need — this is a resume built FOR this job, not a generic one.',
   '',
   'Formatting (make it easy to find, read, and trust):',
-  '- One page. Full, even bullets — no stray half-line bullets, no wasted whitespace.',
+  `- ONE PAGE, without exception. Keep the bullet count at or below ${MAX_BULLETS} across the whole document — that is what decides whether it fits. Cut the weakest bullets rather than shrinking any of them into a fragment.`,
+  '- Keep the exact section order, headings, employers, titles, dates and education of the template you are given; rewrite only the bullet text, the project line and the skills values.',
+  '- Full, even bullets — no stray half-line bullets, no wasted whitespace.',
   '- Bold the important anchors (organization names). Work entries: job title first, then employer.',
   '- Consistent end punctuation across every bullet (all end with a period, or none do).',
   '- Clean, tight layout with no distracting clutter.',
   '',
   `Banned (fluff / cliches — never use): ${BUZZWORDS.join(', ')}. No buzzwords, no cliches, no incorrect pronouns.`,
-  `Length: ${WORD_MIN}–${WORD_MAX} words on a single page. Return the complete LaTeX document.`,
+  `Length: ${WORD_MIN}–${WORD_MAX} words and at most ${MAX_BULLETS} bullets, on a single page. Return the complete LaTeX document.`,
 ].join('\n');
