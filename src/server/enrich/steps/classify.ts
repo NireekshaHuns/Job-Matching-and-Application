@@ -89,7 +89,18 @@ function normalizeKeywords(keywords: string[]): string[] {
 export function parseClassification(raw: string): Classification {
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('No JSON object found in classifier output');
-  const parsed = classificationSchema.parse(JSON.parse(match[0]));
+  const result = classificationSchema.safeParse(JSON.parse(match[0]));
+  if (!result.success) {
+    // Report the offending field AND what the model actually said. A raw
+    // ZodError just lists the allowed values, which does not tell you whether
+    // the model invented "ai" or returned prose.
+    const issue = result.error.issues[0];
+    const field = issue?.path.join('.') || 'output';
+    throw new Error(
+      `Classifier returned an unusable ${field}: ${JSON.stringify(match[0]).slice(0, 200)}`,
+    );
+  }
+  const parsed = result.data;
   const salary = parsed.salary?.trim();
   return {
     ...parsed,

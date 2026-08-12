@@ -222,7 +222,17 @@ export interface RunEnrichmentArgs {
    * call has to fit inside one function invocation.
    */
   maxNew?: number;
+  /** Insert completed rows every N postings; 0 disables progressive flushing. */
+  flushEvery?: number;
+  /** Called after each flush with the running insert total (for CLI progress). */
+  onProgress?: (inserted: number) => void;
 }
+
+/**
+ * Rows to accumulate before writing. Small enough that a crash loses little,
+ * large enough that inserts stay batched.
+ */
+const DEFAULT_FLUSH_EVERY = 100;
 
 /**
  * Split a fetch into "enrich now" and "leave for next run".
@@ -268,12 +278,23 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
 
   const { toEnrich, deferred } = planEnrichmentBatch(args.postings, existing, args.maxNew);
 
-  const result = await enrichPostings(toEnrich, existing, {
-    chat: args.chat,
-    embedder: args.embedder,
-    resolve,
-  });
-  const inserted = await insertJobs(args.db, result.rows);
+  // Persist as we go. A long backfill that only writes at the very end loses
+  // everything to one rate-limit or network blip; flushing keeps completed
+  // (already paid for) work safe and lets a re-run skip it via the dedup.
+  let inserted = 0;
+  const result = await enrichPostings(
+    toEnrich,
+    existing,
+    { chat: args.chat, embedder: args.embedder, resolve },
+    {
+      batchSize: args.flushEvery ?? DEFAULT_FLUSH_EVERY,
+      onBatch: async (rows) => {
+        inserted += await insertJobs(args.db, rows);
+        args.onProgress?.(inserted);
+      },
+    },
+  );
+  inserted += await insertJobs(args.db, result.rows);
   const aliasesWritten = await upsertDiscoveredAliases(
     args.db,
     discovered.values(),
