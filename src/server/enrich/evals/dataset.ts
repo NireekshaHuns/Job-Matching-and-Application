@@ -77,4 +77,26 @@ export const CLASSIFY_DATASET: ClassifyExample[] = [
     // No declared specialty -> the general "software" bucket, not "other".
     { employmentType: 'full_time', roleFamily: 'software', seniority: 'entry' },
   ),
+  // --- Unlevelled titles -------------------------------------------------
+  // These are the shape that used to be graded "other" and hidden by default:
+  // a plain title with no level word. 1,324 of 2,540 production rows sat in
+  // `other` because of it. See steps/seniority.ts.
+  example(
+    'unlevelled-software-engineer',
+    'Software Engineer',
+    'Design, build and ship features across our platform. Work with product and design. Java, Python, AWS.',
+    { employmentType: 'full_time', roleFamily: 'software', seniority: 'mid' },
+  ),
+  example(
+    'unlevelled-fullstack',
+    'Full Stack Engineer',
+    'Own features end to end across a React frontend and a Node.js API. Ship to production weekly.',
+    { employmentType: 'full_time', roleFamily: 'fullstack', seniority: 'mid' },
+  ),
+  example(
+    'explicit-staff-stays-other',
+    'Staff Software Engineer - Identity',
+    'Set technical direction for the identity platform. 10+ years of experience. Mentor senior engineers.',
+    { employmentType: 'full_time', roleFamily: 'software', seniority: 'other' },
+  ),
 ];
