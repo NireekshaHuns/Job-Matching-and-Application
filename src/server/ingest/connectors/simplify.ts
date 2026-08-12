@@ -21,12 +21,38 @@ interface SimplifyListing {
   date_updated?: number;
   active?: boolean;
   is_visible?: boolean;
+  /** Section of the README this listing belongs to — see SWE_CATEGORIES. */
+  category?: string;
   /** Carried through in `raw`; the connector never acts on it (enrichment does). */
   sponsorship?: string;
 }
 
+/**
+ * `listings.json` backs every section of the repo's README, not just the
+ * software one — a full fetch is ~2,800 active listings split across Hardware,
+ * Quant, Product and AI/ML/Data as well. The board is for SWE roles, and every
+ * extra posting costs an LLM classify + embed on ingest, so filter here.
+ *
+ * Two labels are in play: `Software` is what the repo writes today, and
+ * `Software Engineering` is an older label still attached to ~16 live rows.
+ * Both map to the README's "Software Engineering New Grad Roles" section.
+ *
+ * Deliberately NOT included: `AI/ML/Data`. Those are largely research and data
+ * science roles; the ones that are really SWE come through the ATS connectors,
+ * and enrichment's `role_family` classification is the right place to make that
+ * call from the JD rather than guessing from a coarse category label here.
+ */
+const SWE_CATEGORIES = new Set(['software', 'software engineering']);
+
+/** Does this listing belong to the README's software-engineering section? */
+export function isSoftwareCategory(category: string | undefined): boolean {
+  if (!category) return false;
+  return SWE_CATEGORIES.has(category.trim().toLowerCase());
+}
+
 const DEFAULT_SOURCE = 'github:simplify-newgrad';
-const DEFAULT_URL =
+/** Exported so the one-off prune script reads the same feed as the connector. */
+export const SIMPLIFY_LISTINGS_URL =
   'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json';
 
 function toPostedAt(unix?: number): Date | null {
@@ -49,7 +75,7 @@ export function simplifyNewGradConnector(
   fetcher: Fetcher = globalThis.fetch,
 ): JobConnector {
   const source = opts.source ?? DEFAULT_SOURCE;
-  const url = opts.url ?? DEFAULT_URL;
+  const url = opts.url ?? SIMPLIFY_LISTINGS_URL;
 
   return {
     source,
@@ -62,9 +88,13 @@ export function simplifyNewGradConnector(
       const listings = (await res.json()) as SimplifyListing[];
 
       const postings: RawPosting[] = [];
+      let live = 0;
       for (const listing of listings) {
         // Skip inactive / hidden listings (defaults treat missing as active).
         if (listing.active === false || listing.is_visible === false) continue;
+        live++;
+        // Software-engineering roles only; the file covers every README section.
+        if (!isSoftwareCategory(listing.category)) continue;
 
         const company = listing.company_name?.trim() ?? '';
         const title = listing.title?.trim() ?? '';
@@ -85,6 +115,14 @@ export function simplifyNewGradConnector(
           fingerprint: postingFingerprint(company, title, location),
           raw: listing,
         });
+      }
+      // Live listings but nothing matched: the upstream `category` labels have
+      // almost certainly changed. Say so loudly — the failure mode of a silent
+      // category filter is ingesting zero jobs and looking like an empty feed.
+      if (live > 0 && postings.length === 0) {
+        console.warn(
+          `[${source}] ${live} active listings but none matched ${[...SWE_CATEGORIES].join('/')} — has the upstream category label changed?`,
+        );
       }
       return postings;
     },
