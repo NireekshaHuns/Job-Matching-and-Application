@@ -61,11 +61,19 @@ export interface EnrichBatchOptions {
    */
   onBatch?: (rows: NewJob[]) => Promise<void>;
   batchSize?: number;
+  /** Postings classified in parallel. Keep modest — these are paid API calls. */
+  concurrency?: number;
 }
 
 /**
+ * Parallel classify calls. Well inside OpenAI's per-minute limits for the small
+ * models used here, while cutting a multi-hour backfill to well under one.
+ */
+const DEFAULT_CONCURRENCY = 8;
+
+/**
  * Dedup a batch, drop postings already in `jobs` and non-software titles, then
- * enrich the rest. Runs sequentially to stay gentle on LLM rate limits.
+ * enrich the rest.
  *
  * ONE BAD POSTING MUST NOT SINK THE RUN. A model that answers with a role
  * family outside the enum used to throw straight out of here, and because rows
@@ -73,6 +81,10 @@ export interface EnrichBatchOptions {
  * away every posting classified before it — on a 9,000-posting backfill that is
  * hours of paid work. Failures are now counted and skipped, and `onBatch` lets
  * the caller persist progressively.
+ *
+ * Postings are classified `concurrency` at a time. Strictly sequential was
+ * measured at 0.56 postings/sec, which is 4.6 hours for a 9,200-posting
+ * backfill — almost all of it waiting on the network.
  */
 export async function enrichPostings(
   postings: RawPosting[],
@@ -87,20 +99,28 @@ export async function enrichPostings(
   const swe = fresh.filter((p) => looksLikeSwe(p.title));
 
   const batchSize = opts.batchSize ?? 0;
+  const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_CONCURRENCY);
   let rows: NewJob[] = [];
   let failed = 0;
   const failures: string[] = [];
 
-  for (const posting of swe) {
-    try {
-      rows.push(await enrichPosting(posting, deps));
-    } catch (e) {
+  for (let i = 0; i < swe.length; i += concurrency) {
+    const slice = swe.slice(i, i + concurrency);
+    // Settled, not all: one rejection must not discard its siblings' results.
+    const settled = await Promise.allSettled(slice.map((p) => enrichPosting(p, deps)));
+
+    for (const [j, outcome] of settled.entries()) {
+      if (outcome.status === 'fulfilled') {
+        rows.push(outcome.value);
+        continue;
+      }
       failed++;
       if (failures.length < MAX_REPORTED_FAILURES) {
-        failures.push(`${posting.company} — ${posting.title}: ${(e as Error).message}`);
+        const p = slice[j];
+        failures.push(`${p.company} — ${p.title}: ${(outcome.reason as Error).message}`);
       }
-      continue;
     }
+
     if (opts.onBatch && batchSize > 0 && rows.length >= batchSize) {
       await opts.onBatch(rows);
       rows = [];
