@@ -237,12 +237,17 @@ export const jobsRouter = createTRPCRouter({
     if (plan.location) {
       where.push(sql`${jobs.location} ~* ${locationMatchRegex(plan.location)}`);
     }
-    // Age filter: keep only recent postings (undated jobs stay — date unknown).
-    // Measured from `now()`, not from midnight, so "Past 24h" means a real 24
-    // hours rather than "today or yesterday" as it did on the old date column.
+    // Age filter, measured from `now()` so "Past 24h" is a real 24 hours.
+    //
+    // Undated postings fall back to `first_seen_at` rather than being exempted.
+    // Exempting them made "Past 24 hours" useless: a source that stops giving
+    // us dates leaves rows that match EVERY window forever, and on 2026-08-12
+    // that window held 33 undated Ashby rows last seen a week earlier against
+    // just 3 genuinely-recent jobs. When a feed never told us the post date,
+    // the day we first saw it is the best evidence of the posting's age.
     if (plan.postedWithinDays != null) {
       where.push(
-        sql`(${jobs.postedAt} is null or ${jobs.postedAt} >= now() - ${plan.postedWithinDays} * interval '1 day')`,
+        sql`coalesce(${jobs.postedAt}, ${jobs.firstSeenAt}) >= now() - ${plan.postedWithinDays} * interval '1 day'`,
       );
     }
     // Removed-from-board jobs stay hidden forever (survives re-enrichment).
@@ -279,6 +284,8 @@ export const jobsRouter = createTRPCRouter({
         url: jobs.url,
         source: jobs.source,
         postedAt: jobs.postedAt,
+        /** Fallback for the card's age label when the feed gave us no post date. */
+        firstSeenAt: jobs.firstSeenAt,
         salaryText: jobs.salaryText,
         status: jobs.status,
         roleFamily: jobs.roleFamily,
