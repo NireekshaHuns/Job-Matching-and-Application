@@ -39,11 +39,18 @@ async function main() {
     postings,
     chat: clients.chat,
     embedder: clients.embedder,
+    // A backfill runs for hours; show it is alive and persisting.
+    onProgress: (inserted) => console.log(`  …inserted ${inserted} so far`),
   });
 
   console.log(
-    `fetched ${result.stats.fetched}, unique ${result.stats.deduped}, non-SWE filtered ${result.stats.filtered}, enriched ${result.stats.enriched}, inserted ${result.inserted}.`,
+    `fetched ${result.stats.fetched}, unique ${result.stats.deduped}, non-SWE filtered ${result.stats.filtered}, ` +
+      `enriched ${result.stats.enriched}, failed ${result.stats.failed}, inserted ${result.inserted}.`,
   );
+  if (result.failures.length > 0) {
+    console.log('sample failures (skipped, not fatal):');
+    for (const f of result.failures) console.log(`  ${f}`);
+  }
   console.log(
     `freshness: refreshed ${result.reconcile.refreshed}, closed ${result.reconcile.closed} stale; aliases upserted ${result.aliasesWritten}.`,
   );

@@ -36,19 +36,49 @@ export async function enrichPosting(posting: RawPosting, deps: EnrichDeps): Prom
 }
 
 export interface EnrichResult {
+  /** Rows not yet handed to `onBatch` (or all of them when no flush is used). */
   rows: NewJob[];
-  /** `filtered` = non-software titles dropped before the (paid) classify step. */
-  stats: { fetched: number; deduped: number; filtered: number; enriched: number };
+  stats: {
+    fetched: number;
+    deduped: number;
+    /** Non-software titles dropped before the (paid) classify step. */
+    filtered: number;
+    enriched: number;
+    /** Postings skipped because enrichment threw (bad model output, API error). */
+    failed: number;
+  };
+  /** First few failures, for the operator to eyeball. */
+  failures: string[];
+}
+
+/** How many failure messages to keep — enough to spot a pattern, not a flood. */
+const MAX_REPORTED_FAILURES = 5;
+
+export interface EnrichBatchOptions {
+  /**
+   * Called with completed rows every `batchSize` postings, so a long run
+   * persists as it goes. Rows handed over are cleared from the result.
+   */
+  onBatch?: (rows: NewJob[]) => Promise<void>;
+  batchSize?: number;
 }
 
 /**
  * Dedup a batch, drop postings already in `jobs` and non-software titles, then
  * enrich the rest. Runs sequentially to stay gentle on LLM rate limits.
+ *
+ * ONE BAD POSTING MUST NOT SINK THE RUN. A model that answers with a role
+ * family outside the enum used to throw straight out of here, and because rows
+ * were only inserted after the whole loop, a single malformed response threw
+ * away every posting classified before it — on a 9,000-posting backfill that is
+ * hours of paid work. Failures are now counted and skipped, and `onBatch` lets
+ * the caller persist progressively.
  */
 export async function enrichPostings(
   postings: RawPosting[],
   existingFingerprints: ReadonlySet<string>,
   deps: EnrichDeps,
+  opts: EnrichBatchOptions = {},
 ): Promise<EnrichResult> {
   const deduped = dedupPostings(postings);
   const fresh = deduped.filter((p) => !existingFingerprints.has(p.fingerprint));
@@ -56,9 +86,25 @@ export async function enrichPostings(
   // sales/technician/ops posting never costs an LLM call.
   const swe = fresh.filter((p) => looksLikeSwe(p.title));
 
-  const rows: NewJob[] = [];
+  const batchSize = opts.batchSize ?? 0;
+  let rows: NewJob[] = [];
+  let failed = 0;
+  const failures: string[] = [];
+
   for (const posting of swe) {
-    rows.push(await enrichPosting(posting, deps));
+    try {
+      rows.push(await enrichPosting(posting, deps));
+    } catch (e) {
+      failed++;
+      if (failures.length < MAX_REPORTED_FAILURES) {
+        failures.push(`${posting.company} — ${posting.title}: ${(e as Error).message}`);
+      }
+      continue;
+    }
+    if (opts.onBatch && batchSize > 0 && rows.length >= batchSize) {
+      await opts.onBatch(rows);
+      rows = [];
+    }
   }
 
   return {
@@ -67,7 +113,9 @@ export async function enrichPostings(
       fetched: postings.length,
       deduped: deduped.length,
       filtered: fresh.length - swe.length,
-      enriched: swe.length,
+      enriched: swe.length - failed,
+      failed,
     },
+    failures,
   };
 }
