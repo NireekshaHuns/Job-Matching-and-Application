@@ -42,4 +42,11 @@ export interface ChatClient {
 /** Minimal embedding interface — text in, vector out. */
 export interface Embedder {
   embed(text: string): Promise<number[]>;
+  /**
+   * Embed several texts in one round trip. Optional: implementations that
+   * cannot batch simply omit it and callers fall back to `embed` in a loop.
+   * Returns one entry per input, in order, with `null` where a vector could not
+   * be produced — a missing embedding degrades retrieval, it is not an error.
+   */
+  embedMany?(texts: string[]): Promise<(number[] | null)[]>;
 }

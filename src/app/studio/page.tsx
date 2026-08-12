@@ -90,29 +90,77 @@ export default function StudioPage() {
 
   const ACCEPTED = ['.pdf', '.tex', '.txt'];
 
+  /** POST a single résumé; resolves to a per-file outcome, never throws. */
+  async function uploadOne(
+    file: File,
+  ): Promise<{ ok: boolean; error?: string; textOnly?: boolean }> {
+    const fd = new FormData();
+    fd.append('files', file);
+    if (roleFamily) fd.append('roleFamily', roleFamily);
+    try {
+      const res = await fetch('/api/resumes/upload', { method: 'POST', body: fd });
+      // A killed serverless function returns no body at all, so parsing is
+      // allowed to fail without turning into an unhelpful "fetch failed".
+      const json = (await res.json().catch(() => ({}))) as UploadResponse;
+      if (!res.ok) return { ok: false, error: json.error ?? `Upload failed (HTTP ${res.status}).` };
+      const failure = json.errors?.[0];
+      if (failure) return { ok: false, error: failure.error };
+      if (!json.ingested?.length) return { ok: false, error: 'Nothing was ingested.' };
+      return { ok: true, textOnly: json.extracted === false };
+    } catch {
+      return {
+        ok: false,
+        error: 'The server closed the connection — the résumé may be too long to process.',
+      };
+    }
+  }
+
+  /**
+   * Upload sequentially, one request per file. Batching them into a single
+   * request meant one slow résumé could time the whole invocation out and lose
+   * the files that had already succeeded; now each file stands alone and a
+   * failure part-way through keeps everything before it.
+   */
   async function handleUpload(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
+    const list = Array.from(files);
     setUploading(true);
     setUploadMsg(null);
-    try {
-      const fd = new FormData();
-      for (const f of Array.from(files)) fd.append('files', f);
-      if (roleFamily) fd.append('roleFamily', roleFamily);
-      const res = await fetch('/api/resumes/upload', { method: 'POST', body: fd });
-      const json = (await res.json()) as UploadResponse;
-      if (!res.ok) throw new Error(json.error ?? 'Upload failed.');
-      const added = json.ingested?.length ?? 0;
-      const failed = json.errors?.length ?? 0;
+
+    const failures: string[] = [];
+    let added = 0;
+    let textOnly = false;
+
+    for (const [i, file] of list.entries()) {
       setUploadMsg(
-        `Added ${added} résumé(s)${json.extracted ? '' : ' (text only — set OPENAI_API_KEY to extract skills/bullets)'}${failed ? `; ${failed} failed.` : '.'}`,
+        list.length > 1
+          ? `Uploading ${i + 1} of ${list.length}: ${file.name}…`
+          : `Uploading ${file.name}…`,
       );
-      await utils.resumes.listCorpus.invalidate();
-    } catch (e) {
-      setUploadMsg((e as Error).message);
-    } finally {
-      setUploading(false);
-      if (fileInput.current) fileInput.current.value = '';
+      const result = await uploadOne(file);
+      if (result.ok) {
+        added++;
+        textOnly ||= result.textOnly ?? false;
+        // Refresh as we go so completed résumés appear even if a later one fails.
+        await utils.resumes.listCorpus.invalidate();
+      } else {
+        failures.push(`${file.name}: ${result.error}`);
+      }
     }
+
+    const parts: string[] = [];
+    if (added > 0) {
+      parts.push(
+        `Added ${added} résumé${added === 1 ? '' : 's'}${
+          textOnly ? ' (text only — set OPENAI_API_KEY to extract skills/bullets)' : ''
+        }.`,
+      );
+    }
+    if (failures.length > 0) parts.push(`Failed — ${failures.join('; ')}`);
+    setUploadMsg(parts.join(' ') || 'Nothing was uploaded.');
+
+    setUploading(false);
+    if (fileInput.current) fileInput.current.value = '';
   }
 
   function handleDrop(e: React.DragEvent) {

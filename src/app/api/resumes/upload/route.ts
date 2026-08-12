@@ -3,6 +3,14 @@
  * extracts text, and ingests each into the corpus (LLM skills/bullets + bullet
  * embeddings when OPENAI_API_KEY is set; raw text only otherwise). Node runtime
  * so unpdf + the OpenAI SDK work. Returns per-file counts and errors.
+ *
+ * The Studio client posts ONE file per request. Ingesting a résumé costs an LLM
+ * extraction call plus an embedding call, and batching several into a single
+ * invocation used to blow `maxDuration`: the function was killed before it could
+ * respond, so the browser reported a bare "fetch failed" and every file in that
+ * batch was lost, including the ones that had already succeeded. Multi-file
+ * requests are still accepted (the API stays usable by hand) but MAX_FILES is
+ * deliberately small.
  */
 import { NextResponse } from 'next/server';
 import { db } from '@/server/db';
@@ -14,8 +22,13 @@ import { pdfToText } from '@/server/resume/pdf';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-/** Upload limits — résumés are small; keep cost/latency bounded. */
-const MAX_FILES = 10;
+/**
+ * Upload limits — résumés are small; keep cost/latency bounded. MAX_FILES is 3,
+ * not 10: one résumé takes most of a minute to extract and embed, so a request
+ * for ten could never finish inside `maxDuration`. The Studio sends one at a
+ * time regardless.
+ */
+const MAX_FILES = 3;
 const MAX_FILE_BYTES = 4_000_000; // 4MB per file
 
 /** Wire real OpenAI deps when a key is present; otherwise text-only ingest. */
