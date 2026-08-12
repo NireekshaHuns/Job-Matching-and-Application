@@ -43,6 +43,40 @@ export interface IngestResult {
 type BatchStatements = Parameters<DB['batch']>[0];
 type BatchStatement = BatchStatements[number];
 
+/**
+ * Vectors for every bullet, in order, with `null` wherever one is unavailable.
+ * Prefers the embedder's batch call; falls back to one call per bullet for
+ * embedders that don't implement it. Never throws — embeddings are an
+ * optimization for retrieval, so a failure must not lose the bullets.
+ */
+export async function embedBullets(
+  texts: string[],
+  embedder?: Embedder,
+): Promise<(number[] | null)[]> {
+  if (!embedder || texts.length === 0) return texts.map(() => null);
+
+  if (embedder.embedMany) {
+    try {
+      const vectors = await embedder.embedMany(texts);
+      // Defend against a short/long result rather than silently misaligning
+      // vectors with bullets.
+      if (vectors.length === texts.length) return vectors;
+    } catch {
+      // fall through to the per-bullet path
+    }
+  }
+
+  const out: (number[] | null)[] = [];
+  for (const text of texts) {
+    try {
+      out.push(await embedder.embed(text));
+    } catch {
+      out.push(null);
+    }
+  }
+  return out;
+}
+
 /** Ingest one résumé; returns counts for the upload UI. */
 export async function ingestResume(
   input: IngestResumeInput,
@@ -66,27 +100,22 @@ export async function ingestResume(
     .returning({ id: resumes.id });
   const resumeId = resumeRow.id;
 
-  // Embed bullets (sequential — corpora are small; keeps the Embedder interface
-  // single-text). A failed embed leaves that bullet without a vector, not lost.
-  const bulletRows: NewResumeBullet[] = [];
-  for (const b of inventory.bullets) {
-    let embedding: number[] | null = null;
-    if (embedder) {
-      try {
-        embedding = await embedder.embed(b.text);
-      } catch {
-        embedding = null;
-      }
-    }
-    bulletRows.push({
-      text: b.text,
-      skills: b.skills,
-      roleFamily: b.roleFamily,
-      company: b.company,
-      sourceResumeId: resumeId,
-      embedding,
-    });
-  }
+  // Embed bullets in ONE round trip when the embedder can batch. Doing this per
+  // bullet cost a request each and was enough, across a couple of résumés, to
+  // run an upload past its serverless time limit. A failed embed leaves that
+  // bullet without a vector, not lost — keyword-overlap retrieval still works.
+  const embeddings = await embedBullets(
+    inventory.bullets.map((b) => b.text),
+    embedder,
+  );
+  const bulletRows: NewResumeBullet[] = inventory.bullets.map((b, i) => ({
+    text: b.text,
+    skills: b.skills,
+    roleFamily: b.roleFamily,
+    company: b.company,
+    sourceResumeId: resumeId,
+    embedding: embeddings[i] ?? null,
+  }));
 
   const statements: BatchStatement[] = [];
   if (bulletRows.length > 0) statements.push(db.insert(resumeBullets).values(bulletRows));
