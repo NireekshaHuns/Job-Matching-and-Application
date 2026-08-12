@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatClient } from '@/server/enrich/types';
 import { DEFAULT_PROFILE_FACTS } from './profile';
+import { WORD_MIN } from './rubric';
 import {
   buildCorpusTailorMessages,
   CORPUS_INVENTION_STANCE,
@@ -61,9 +62,10 @@ describe('tailorFromCorpus', () => {
   });
 });
 
-// A résumé that satisfies the linter: 475–600 words, strong-verb bullets, a
-// metric in most, consistent (no) end punctuation, varied lead verbs.
-const filler = Array.from({ length: 470 }, (_, i) => `word${i}`).join(' ');
+// A résumé that satisfies the linter: inside the word band, at or under the
+// one-page bullet ceiling, strong-verb bullets, a metric in most, consistent
+// (no) end punctuation, varied lead verbs.
+const filler = Array.from({ length: WORD_MIN }, (_, i) => `word${i}`).join(' ');
 const GOOD_RESUME = `\\documentclass{article}
 \\begin{document}
 ${filler}
