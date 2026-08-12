@@ -48,9 +48,13 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
-/** Normalize a date-ish value (ISO string or epoch ms) to YYYY-MM-DD, or null. */
-export function toIsoDate(value: string | number | null | undefined): string | null {
+/**
+ * Normalize a date-ish value (ISO string or epoch ms) to a `Date`, or null.
+ * Full precision is kept on purpose — the board renders "20m ago" / "5h ago",
+ * so truncating to a calendar day here would throw that away irrecoverably.
+ */
+export function toPostedAt(value: string | number | null | undefined): Date | null {
   if (value == null || value === '') return null;
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return Number.isNaN(d.getTime()) ? null : d;
 }

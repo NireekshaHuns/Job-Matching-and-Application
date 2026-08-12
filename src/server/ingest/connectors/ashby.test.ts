@@ -22,7 +22,7 @@ describe('ashbyConnector', () => {
     expect(first.location).toBe('San Francisco, CA');
     expect(first.url).toBe('https://jobs.ashbyhq.com/acme/1');
     expect(first.jdText).toContain('Kafka');
-    expect(first.postedDate).toBe('2026-07-18');
+    expect(first.postedAt?.toISOString().slice(0, 10)).toBe('2026-07-18');
     expect(first.fingerprint.startsWith('ACME|')).toBe(true);
   });
 

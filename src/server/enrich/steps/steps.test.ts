@@ -17,7 +17,7 @@ function posting(overrides: Partial<RawPosting> = {}): RawPosting {
     location: 'Remote - US',
     url: 'https://example.com/1',
     jdText: 'Build APIs in Go.',
-    postedDate: '2026-07-01',
+    postedAt: new Date('2026-07-01T00:00:00Z'),
     fingerprint: 'STRIPE|software engineer|remote us',
     raw: {},
     ...overrides,

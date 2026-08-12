@@ -179,12 +179,14 @@ export function computePriority(
 const TIER_RANK = sql<number>`case ${jobs.sponsorTier}
   when 'High' then 3 when 'Medium' then 2 when 'Low' then 1 else 0 end`;
 const FIT = sql`${jobScores.relevanceScore} desc nulls last`;
-const POSTED = sql`${jobs.postedDate} desc nulls last`;
+const POSTED = sql`${jobs.postedAt} desc nulls last`;
 // Whole-day age from the posted calendar date (falling back to the ingest date),
-// anchored to UTC so it never depends on the DB session timezone. `date - date`
-// yields an integer, so AGE_DAYS matches the `ageDays` the pure helpers take —
-// which lets the SQL below mirror them EXACTLY for every value (integer days).
-const AGE_DAYS = sql`((now() at time zone 'UTC')::date - coalesce(${jobs.postedDate}, (${jobs.createdAt} at time zone 'UTC')::date))`;
+// anchored to UTC so it never depends on the DB session timezone. `posted_at` is
+// a timestamp, so it is cast down to a UTC date first: `date - date` yields an
+// integer, so AGE_DAYS matches the `ageDays` the pure helpers take — which lets
+// the SQL below mirror them EXACTLY for every value (integer days). Freshness
+// stays day-granular on purpose; only the card's "posted" label is finer.
+const AGE_DAYS = sql`((now() at time zone 'UTC')::date - coalesce((${jobs.postedAt} at time zone 'UTC')::date, (${jobs.createdAt} at time zone 'UTC')::date))`;
 const CLAMPED_AGE = sql`least(greatest(${AGE_DAYS}, 0), ${FRESHNESS_WINDOW_DAYS})`;
 
 // The three 0..100 component expressions, mirroring the pure helpers above.
@@ -225,9 +227,11 @@ export const jobsRouter = createTRPCRouter({
       where.push(sql`${jobs.location} ~* ${locationMatchRegex(plan.location)}`);
     }
     // Age filter: keep only recent postings (undated jobs stay — date unknown).
+    // Measured from `now()`, not from midnight, so "Past 24h" means a real 24
+    // hours rather than "today or yesterday" as it did on the old date column.
     if (plan.postedWithinDays != null) {
       where.push(
-        sql`(${jobs.postedDate} is null or ${jobs.postedDate} >= current_date - ${plan.postedWithinDays} * interval '1 day')`,
+        sql`(${jobs.postedAt} is null or ${jobs.postedAt} >= now() - ${plan.postedWithinDays} * interval '1 day')`,
       );
     }
     // Removed-from-board jobs stay hidden forever (survives re-enrichment).
@@ -263,7 +267,7 @@ export const jobsRouter = createTRPCRouter({
         isUs: jobs.isUs,
         url: jobs.url,
         source: jobs.source,
-        postedDate: jobs.postedDate,
+        postedAt: jobs.postedAt,
         salaryText: jobs.salaryText,
         status: jobs.status,
         roleFamily: jobs.roleFamily,

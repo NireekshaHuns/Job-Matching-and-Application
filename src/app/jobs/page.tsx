@@ -20,6 +20,7 @@ import {
   NEW_HIRE_STYLES,
   TIER_STYLES,
 } from '@/components/tier';
+import { formatAbsoluteTime, formatRelativeTime } from '@/lib/relative-time';
 import { trpc } from '@/trpc/react';
 
 type Sort = 'combined' | 'fit' | 'recent';
@@ -242,8 +243,11 @@ export default function JobsPage() {
                   {/* Clickable body → opens the posting + the did-you-apply prompt */}
                   <button type="button" onClick={openApply} className="min-w-0 text-left">
                     <div className="mb-2 flex items-center justify-between gap-2 pr-6">
-                      <span className="text-faint font-mono text-[11px]">
-                        {job.postedDate ?? 'date n/a'}
+                      <span
+                        className="text-faint font-mono text-[11px]"
+                        title={formatAbsoluteTime(job.postedAt) ?? undefined}
+                      >
+                        {formatRelativeTime(job.postedAt) ?? 'date n/a'}
                       </span>
                       <span
                         className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${TIER_STYLES[job.sponsorTier]}`}

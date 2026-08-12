@@ -5,7 +5,7 @@
  * HTML, which we flatten to plain text.
  */
 import { postingFingerprint } from '../fingerprint';
-import { htmlToText, toIsoDate } from '../html';
+import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
 export interface GreenhouseBoard {
@@ -73,7 +73,7 @@ export function greenhouseConnector(
             location,
             url: job.absolute_url,
             jdText: job.content ? htmlToText(job.content) : '',
-            postedDate: toIsoDate(job.updated_at),
+            postedAt: toPostedAt(job.updated_at),
             fingerprint: postingFingerprint(board.company, title, location),
             raw: job,
           });

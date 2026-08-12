@@ -32,7 +32,7 @@ function example(
       location: 'Remote - US',
       url: 'https://example.com',
       jdText,
-      postedDate: null,
+      postedAt: null,
       fingerprint: `eval|${name}`,
       raw: {},
     },

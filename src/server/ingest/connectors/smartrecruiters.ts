@@ -6,7 +6,7 @@
  * to text. Detail fetches are best-effort — a failure just yields an empty JD.
  */
 import { postingFingerprint } from '../fingerprint';
-import { htmlToText, toIsoDate } from '../html';
+import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
 export interface SmartRecruitersBoard {
@@ -118,7 +118,7 @@ export function smartRecruitersConnector(
               location,
               url: `${PUBLIC_BASE}/${board.identifier}/${p.id}`,
               jdText: await fetchJd(board.identifier, p.id),
-              postedDate: toIsoDate(p.releasedDate),
+              postedAt: toPostedAt(p.releasedDate),
               fingerprint: postingFingerprint(board.company, title, location),
               raw: p,
             });

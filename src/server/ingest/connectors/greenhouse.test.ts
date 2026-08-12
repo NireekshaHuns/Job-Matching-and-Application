@@ -23,7 +23,7 @@ describe('greenhouseConnector', () => {
     expect(first.title).toBe('Senior Software Engineer, Backend');
     expect(first.location).toBe('New York, NY');
     expect(first.url).toBe('https://boards.greenhouse.io/acme/jobs/1001');
-    expect(first.postedDate).toBe('2026-07-20');
+    expect(first.postedAt?.toISOString().slice(0, 10)).toBe('2026-07-20');
     expect(first.jdText).toContain('scale APIs');
     // fingerprint uses the normalized company ("ACME"), not the raw string.
     expect(first.fingerprint.startsWith('ACME|')).toBe(true);

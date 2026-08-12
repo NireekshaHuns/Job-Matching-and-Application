@@ -4,7 +4,7 @@
  * (`descriptionPlain`), so it's a high-signal, direct-from-employer source.
  */
 import { postingFingerprint } from '../fingerprint';
-import { htmlToText, toIsoDate } from '../html';
+import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
 export interface LeverBoard {
@@ -59,7 +59,7 @@ export function leverConnector(
             location,
             url,
             jdText,
-            postedDate: toIsoDate(p.createdAt),
+            postedAt: toPostedAt(p.createdAt),
             fingerprint: postingFingerprint(board.company, title, location),
             raw: p,
           });
