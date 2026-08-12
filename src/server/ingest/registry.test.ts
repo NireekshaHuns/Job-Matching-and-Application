@@ -51,38 +51,46 @@ describe('mergeBoards', () => {
 });
 
 describe('loadDiscoveredBoards', () => {
-  it('returns {} when the file is absent', () => {
-    expect(loadDiscoveredBoards(join(tmpdir(), 'does-not-exist-ats.json'))).toEqual({});
+  const absent = () => loadDiscoveredBoards(join(tmpdir(), 'does-not-exist-ats.json'));
+
+  it('returns the committed board list when there is no local override', () => {
+    // The committed file is the whole point: a git-ignored root file never
+    // reached production, so the deployed board ran on the hand seeds alone.
+    const boards = absent();
+    expect(boards.greenhouse?.length).toBeGreaterThan(50);
+    expect(boards.ashby?.length).toBeGreaterThan(50);
+    expect(boards.lever?.length).toBeGreaterThan(10);
   });
 
-  it('returns {} when the file is malformed JSON', () => {
+  it('still returns the committed list when a local override is malformed', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ats-'));
     const file = join(dir, 'ats-boards.json');
     try {
       writeFileSync(file, '{ not json');
-      expect(loadDiscoveredBoards(file)).toEqual({});
+      expect(loadDiscoveredBoards(file).greenhouse?.length).toBe(absent().greenhouse?.length);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('parses a well-formed discovered file', () => {
+  it('adds boards from a local override on top of the committed list', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ats-'));
     const file = join(dir, 'ats-boards.json');
     try {
       writeFileSync(
         file,
         JSON.stringify({
-          greenhouse: [{ token: 'figure', company: 'Figure' }],
+          greenhouse: [{ token: 'a-local-only-board', company: 'Local Only' }],
           lever: [],
-          ashby: [{ board: 'oklo', company: 'Oklo' }],
+          ashby: [],
         }),
       );
-      expect(loadDiscoveredBoards(file)).toEqual({
-        greenhouse: [{ token: 'figure', company: 'Figure' }],
-        lever: [],
-        ashby: [{ board: 'oklo', company: 'Oklo' }],
+      const boards = loadDiscoveredBoards(file);
+      expect(boards.greenhouse).toContainEqual({
+        token: 'a-local-only-board',
+        company: 'Local Only',
       });
+      expect(boards.greenhouse?.length).toBe((absent().greenhouse?.length ?? 0) + 1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

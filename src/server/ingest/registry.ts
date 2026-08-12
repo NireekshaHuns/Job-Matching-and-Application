@@ -12,17 +12,37 @@ import { smartRecruitersConnector, type SmartRecruitersBoard } from './connector
 import type { DiscoveredBoards } from './discover';
 import type { Fetcher, JobConnector } from './types';
 
-/** File written by `pnpm ats:discover` (git-ignored); merged with the seeds. */
-const DISCOVERED_FILE = 'ats-boards.json';
+/**
+ * The committed output of `pnpm ats:discover`. Imported rather than read from
+ * disk so it is actually present in production: the old `ats-boards.json` sat
+ * at the repo root, was git-ignored, and therefore never existed on Vercel —
+ * the deployed board ran on the ~16 hand seeds alone while ~350 discovered
+ * boards went unused.
+ */
+import DISCOVERED_BOARDS from './discovered-boards.json';
 
-/** Read the discovered-boards file (cwd-relative); degrade to `{}` if absent/malformed. */
-export function loadDiscoveredBoards(file: string = DISCOVERED_FILE): Partial<DiscoveredBoards> {
+/** Local, uncommitted override for experimenting without a commit. */
+const LOCAL_FILE = 'ats-boards.json';
+
+/**
+ * Boards discovered from Simplify apply-links. Starts from the committed set
+ * and lets an uncommitted local `ats-boards.json` add to it, so a local
+ * `pnpm ats:discover` can be tried out before it is committed.
+ */
+export function loadDiscoveredBoards(file: string = LOCAL_FILE): Partial<DiscoveredBoards> {
+  const committed = DISCOVERED_BOARDS as Partial<DiscoveredBoards>;
+  let local: Partial<DiscoveredBoards> = {};
   try {
-    if (!existsSync(file)) return {};
-    return JSON.parse(readFileSync(file, 'utf8')) as Partial<DiscoveredBoards>;
+    if (existsSync(file))
+      local = JSON.parse(readFileSync(file, 'utf8')) as Partial<DiscoveredBoards>;
   } catch {
-    return {};
+    local = {};
   }
+  return {
+    greenhouse: mergeBoards(committed.greenhouse ?? [], local.greenhouse, (b) => b.token),
+    lever: mergeBoards(committed.lever ?? [], local.lever, (b) => b.token),
+    ashby: mergeBoards(committed.ashby ?? [], local.ashby, (b) => b.board),
+  };
 }
 
 /**
@@ -41,8 +61,8 @@ export function mergeBoards<T>(seed: T[], discovered: T[] | undefined, key: (b: 
 /**
  * Curated seed tokens per ATS — a focused set of well-known H1B-sponsor
  * companies (tokens validated against the live ATS APIs). This is the board's
- * durable source of truth; `pnpm ats:discover` can still widen the net into
- * `ats-boards.json` (merged in, seeds win on collision). Tokens churn
+ * durable source of truth; `pnpm ats:discover` widens the net into
+ * `discovered-boards.json` (merged in, seeds win on collision). Tokens churn
  * (~20–40%), so re-validate before relying on any single one.
  */
 export const GREENHOUSE_BOARDS: GreenhouseBoard[] = [

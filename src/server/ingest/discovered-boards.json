@@ -33,10 +33,6 @@
       "company": "DV Trading"
     },
     {
-      "token": "thenewyorktimes",
-      "company": "The New York Times"
-    },
-    {
       "token": "canonical",
       "company": "Canonical"
     },
@@ -45,24 +41,12 @@
       "company": "Artefact"
     },
     {
-      "token": "purestorage",
-      "company": "Pure Storage"
-    },
-    {
-      "token": "axon",
-      "company": "Axon"
-    },
-    {
       "token": "freedomconsulting",
       "company": "Freedom Technology Solutions Group"
     },
     {
       "token": "scoutai",
       "company": "Scout AI"
-    },
-    {
-      "token": "mthreerecruitingportal",
-      "company": "mthree"
     },
     {
       "token": "mavensecuritiesholdingltd",
@@ -77,20 +61,12 @@
       "company": "Geneva Trading"
     },
     {
-      "token": "twitch",
-      "company": "Twitch"
-    },
-    {
       "token": "trueanomalyinc",
       "company": "True Anomaly"
     },
     {
       "token": "redwoodmaterials",
       "company": "Redwood Materials"
-    },
-    {
-      "token": "sonyinteractiveentertainmentglobal",
-      "company": "PlayStation"
     },
     {
       "token": "aquaticcapitalmanagement",
@@ -109,14 +85,6 @@
       "company": "Wonderschool"
     },
     {
-      "token": "xai",
-      "company": "xAI"
-    },
-    {
-      "token": "fireworksai",
-      "company": "Fireworks AI"
-    },
-    {
       "token": "andurilindustries",
       "company": "Anduril"
     },
@@ -133,32 +101,16 @@
       "company": "CLEAR"
     },
     {
-      "token": "anthropic",
-      "company": "Anthropic"
-    },
-    {
       "token": "axq",
       "company": "AXQ Capital"
     },
     {
-      "token": "graphcore",
-      "company": "Graphcore"
-    },
-    {
-      "token": "planetlabs",
-      "company": "Planet"
+      "token": "lilasciences",
+      "company": "Lila Sciences"
     },
     {
       "token": "topsort",
       "company": "Topsort"
-    },
-    {
-      "token": "appian",
-      "company": "Appian"
-    },
-    {
-      "token": "wilsonelser",
-      "company": "Wilson Elser"
     },
     {
       "token": "sigmacomputing",
@@ -175,10 +127,6 @@
     {
       "token": "truveta",
       "company": "Truveta"
-    },
-    {
-      "token": "celigo",
-      "company": "Celigo"
     },
     {
       "token": "sonypicturesimageworks",
@@ -201,14 +149,6 @@
       "company": "TransMarket Group"
     },
     {
-      "token": "systemstechnologyresearch",
-      "company": "STR"
-    },
-    {
-      "token": "torcrobotics",
-      "company": "Torc Robotics"
-    },
-    {
       "token": "origisenergy",
       "company": "Origis Energy"
     },
@@ -217,16 +157,8 @@
       "company": "Evolver"
     },
     {
-      "token": "walleyecapital-external-students",
-      "company": "Walleye Capital"
-    },
-    {
       "token": "furtherearlycareer",
       "company": "Further"
-    },
-    {
-      "token": "icapitalnetwork",
-      "company": "iCapital Network"
     },
     {
       "token": "harborglobal",
@@ -241,16 +173,8 @@
       "company": "Innodata"
     },
     {
-      "token": "anaplan",
-      "company": "Anaplan"
-    },
-    {
       "token": "atlassand",
       "company": "Atlas Energy Solutions"
-    },
-    {
-      "token": "d3",
-      "company": "D3"
     },
     {
       "token": "skildai-careers",
@@ -259,10 +183,6 @@
     {
       "token": "buyersedgeplatformrecruiting",
       "company": "Buyers Edge Platform"
-    },
-    {
-      "token": "horizonsurgicalsystems",
-      "company": "Horizon Surgical Systems"
     },
     {
       "token": "mw-tech-grad",
@@ -281,8 +201,8 @@
       "company": "Shift"
     },
     {
-      "token": "cresta",
-      "company": "Cresta"
+      "token": "twitch",
+      "company": "Twitch"
     },
     {
       "token": "artefactlinkedin",
@@ -301,6 +221,10 @@
       "company": "Verkada"
     },
     {
+      "token": "graphcore",
+      "company": "Graphcore"
+    },
+    {
       "token": "thenuclearcompany",
       "company": "The Nuclear Company"
     },
@@ -309,12 +233,12 @@
       "company": "UJET"
     },
     {
-      "token": "jumio",
-      "company": "Jumio"
+      "token": "torcrobotics",
+      "company": "Torc Robotics"
     },
     {
-      "token": "babelstreet",
-      "company": "Babel Street"
+      "token": "jumio",
+      "company": "Jumio"
     },
     {
       "token": "pathrobotics",
@@ -323,10 +247,6 @@
     {
       "token": "rocketlab",
       "company": "Rocket Lab USA"
-    },
-    {
-      "token": "atomicmachines",
-      "company": "Atomic Machines"
     },
     {
       "token": "freeformfuturecorp",
@@ -345,10 +265,6 @@
       "company": "CGS Immersive"
     },
     {
-      "token": "altaresourcetechnologiesinc",
-      "company": "Alta Resource Technologies"
-    },
-    {
       "token": "headlandstechnologiesllc",
       "company": "Headlands Tech Holdings"
     },
@@ -357,12 +273,12 @@
       "company": "Celonis"
     },
     {
-      "token": "dunnhumby",
-      "company": "dunnhumby"
+      "token": "systemstechnologyresearch",
+      "company": "STR"
     },
     {
-      "token": "vestmark",
-      "company": "Vestmark"
+      "token": "dunnhumby",
+      "company": "dunnhumby"
     },
     {
       "token": "newsbreak",
@@ -409,6 +325,10 @@
       "company": "Alarm.com"
     },
     {
+      "token": "xai",
+      "company": "xAI"
+    },
+    {
       "token": "doordashusa",
       "company": "DoorDash"
     },
@@ -419,10 +339,6 @@
     {
       "token": "maybellquantum",
       "company": "Maybell Quantum Industries"
-    },
-    {
-      "token": "airtable",
-      "company": "Airtable"
     },
     {
       "token": "koboldmetals",
@@ -453,20 +369,12 @@
       "company": "Sleep Doctor"
     },
     {
-      "token": "bgeinc",
-      "company": "BGE"
-    },
-    {
       "token": "bracebridgecapital",
       "company": "Bracebridge Capital"
     },
     {
       "token": "sharpelectronics",
       "company": "Sharp Electronics"
-    },
-    {
-      "token": "vegaamericas",
-      "company": "VEGA Americas"
     },
     {
       "token": "patterndata",
@@ -477,10 +385,6 @@
       "company": "The Brattle Group"
     },
     {
-      "token": "merqube",
-      "company": "MerQube"
-    },
-    {
       "token": "woolpert",
       "company": "Woolpert"
     },
@@ -489,16 +393,12 @@
       "company": "Arize AI"
     },
     {
-      "token": "ddome",
-      "company": "DataDome"
-    },
-    {
-      "token": "bpcs",
-      "company": "Blueprint Technologies"
-    },
-    {
       "token": "3redpartners",
       "company": "3RedPartners"
+    },
+    {
+      "token": "rfsmart",
+      "company": "RF-SMART"
     },
     {
       "token": "pmg",
@@ -529,12 +429,12 @@
       "company": "McMaster-Carr"
     },
     {
-      "token": "commerceiq",
-      "company": "CommerceIQ"
-    },
-    {
       "token": "homesolutions",
       "company": "Home Solutions"
+    },
+    {
+      "token": "appian",
+      "company": "Appian"
     },
     {
       "token": "chicagotrading",
@@ -565,6 +465,10 @@
       "company": "Scale AI"
     },
     {
+      "token": "icapitalnetwork",
+      "company": "iCapital Network"
+    },
+    {
       "token": "carefeed",
       "company": "Carefeed"
     },
@@ -581,24 +485,12 @@
       "company": "Uare.ai"
     },
     {
-      "token": "gingerlabsinc",
-      "company": "Notability"
-    },
-    {
       "token": "energyhub",
       "company": "EnergyHub"
     },
     {
-      "token": "monsterenergy",
-      "company": "Monster Energy"
-    },
-    {
       "token": "botauto",
       "company": "Bot Auto"
-    },
-    {
-      "token": "phoenixcontact",
-      "company": "Phoenix Contact"
     },
     {
       "token": "birdygrey",
@@ -609,46 +501,126 @@
       "company": "AffirmedRx"
     },
     {
-      "token": "reltio",
-      "company": "Reltio"
-    },
-    {
       "token": "flowtraders",
       "company": "Flow Traders"
     },
     {
-      "token": "cadwell",
-      "company": "Cadwell"
-    },
-    {
-      "token": "arenaclub",
-      "company": "Arena Club"
+      "token": "arevonenergyimpltest",
+      "company": "Arevon"
     },
     {
       "token": "armada",
       "company": "Armada"
     },
     {
+      "token": "gemini",
+      "company": "Gemini"
+    },
+    {
+      "token": "ctccampusboard",
+      "company": "Chicago Trading Company"
+    },
+    {
+      "token": "point72",
+      "company": "Point72"
+    },
+    {
+      "token": "roboforce",
+      "company": "RoboForce"
+    },
+    {
+      "token": "voyagertechnologiesinc",
+      "company": "Voyager Technologies"
+    },
+    {
+      "token": "chicagotradingcampus",
+      "company": "Chicago Trading Company"
+    },
+    {
+      "token": "itslogisticsllc",
+      "company": "ITS Logistics"
+    },
+    {
+      "token": "intersystems",
+      "company": "InterSystems"
+    },
+    {
+      "token": "emergingtalent",
+      "company": "Maven Securities"
+    },
+    {
+      "token": "muonspace",
+      "company": "Muon Space"
+    },
+    {
+      "token": "atek",
+      "company": "A-TEK"
+    },
+    {
+      "token": "livescore9",
+      "company": "LiveScore Group"
+    },
+    {
       "token": "cssmerge",
       "company": "Atoms"
     },
     {
-      "token": "nerostechnologies",
-      "company": "Neros Technologies"
+      "token": "walleyecapital-external-fulltime",
+      "company": "Walleye Capital"
+    },
+    {
+      "token": "sharkninjaoperatingllc",
+      "company": "SharkNinja"
+    },
+    {
+      "token": "ionq",
+      "company": "IonQ"
+    },
+    {
+      "token": "alphataraxia",
+      "company": "Alphataraxia"
+    },
+    {
+      "token": "allcareers",
+      "company": "Cortica"
+    },
+    {
+      "token": "verifone",
+      "company": "Verifone"
+    },
+    {
+      "token": "enigmaio",
+      "company": "Enigma"
+    },
+    {
+      "token": "captivation",
+      "company": "Captivation"
+    },
+    {
+      "token": "cadwell",
+      "company": "Cadwell"
+    },
+    {
+      "token": "babelstreet",
+      "company": "Babel Street"
+    },
+    {
+      "token": "philliesbaseballoperations",
+      "company": "Major League Baseball"
+    },
+    {
+      "token": "knowbe4",
+      "company": "KnowBe4"
+    },
+    {
+      "token": "avride",
+      "company": "Avride"
     }
   ],
   "lever": [
     {
-      "token": "leverdemo",
-      "company": "Lever"
-    },
-    {
-      "token": "linkllc",
-      "company": "Link"
-    },
-    {
-      "token": "pibenchmark",
-      "company": "PredictX"
+      "token": "rws",
+      "company": "RWS"
     },
     {
       "token": "wyetechllc",
@@ -671,8 +643,8 @@
       "company": "Schmidt Sciences"
     },
     {
-      "token": "pingwind",
-      "company": "PingWind"
+      "token": "tri",
+      "company": "Toyota Research Institute"
     },
     {
       "token": "ivo",
@@ -689,10 +661,6 @@
     {
       "token": "kitware",
       "company": "Kitware"
-    },
-    {
-      "token": "simulmedia",
-      "company": "Simulmedia"
     },
     {
       "token": "hhaexchange",
@@ -731,10 +699,6 @@
       "company": "Scott Logic"
     },
     {
-      "token": "salvohealth",
-      "company": "Salvo Health"
-    },
-    {
       "token": "lumotive",
       "company": "Lumotive"
     },
@@ -759,18 +723,6 @@
       "company": "Wing Assistant"
     },
     {
-      "token": "dutch",
-      "company": "Dutch"
-    },
-    {
-      "token": "finquery",
-      "company": "FinQuery"
-    },
-    {
-      "token": "capricor",
-      "company": "Capricor Therapeutics"
-    },
-    {
       "token": "palantir",
       "company": "Palantir"
     },
@@ -785,10 +737,6 @@
     {
       "token": "hatchit",
       "company": "Hatch IT"
-    },
-    {
-      "token": "rws",
-      "company": "RWS"
     },
     {
       "token": "appen",
@@ -815,28 +763,16 @@
       "company": "Revenue Analytics"
     },
     {
-      "token": "wwprosolutions",
-      "company": "World Wide Professional Solutions"
-    },
-    {
       "token": "zoox",
       "company": "Zoox"
     },
     {
-      "token": "trio",
-      "company": "Trio"
-    },
-    {
-      "token": "tandh",
-      "company": "Thomas & Hutton"
-    },
-    {
-      "token": "protective",
-      "company": "Protective Life"
-    },
-    {
       "token": "aledade",
       "company": "Aledade"
+    },
+    {
+      "token": "moo",
+      "company": "moo"
     },
     {
       "token": "voltus",
@@ -867,10 +803,6 @@
       "company": "Meds"
     },
     {
-      "token": "life",
-      "company": "Life.Church"
-    },
-    {
       "token": "CesiumAstro",
       "company": "CesiumAstro"
     },
@@ -889,24 +821,44 @@
     {
       "token": "woven-by-toyota",
       "company": "Woven"
+    },
+    {
+      "token": "artera-2",
+      "company": "Artera"
+    },
+    {
+      "token": "upscale-ai",
+      "company": "Upscale AI"
+    },
+    {
+      "token": "agatesoftware",
+      "company": "Agate Software"
+    },
+    {
+      "token": "bluesight",
+      "company": "Bluesight"
+    },
+    {
+      "token": "wisecode",
+      "company": "WISEcode"
+    },
+    {
+      "token": "belvederetrading",
+      "company": "Belvedere Trading"
+    },
+    {
+      "token": "optionmetrics",
+      "company": "OptionMetrics"
+    },
+    {
+      "token": "plus-2",
+      "company": "PlusAI"
     }
   ],
   "ashby": [
     {
-      "board": "magical",
-      "company": "Magical"
-    },
-    {
-      "board": "sentra",
-      "company": "Sentra"
-    },
-    {
       "board": "anything",
       "company": "Anything"
-    },
-    {
-      "board": "baseten",
-      "company": "Baseten"
     },
     {
       "board": "brainco",
@@ -921,28 +873,12 @@
       "company": "Parallel Web Systems"
     },
     {
-      "board": "dyna-robotics",
-      "company": "Dyna Robotics"
-    },
-    {
-      "board": "Fuse",
-      "company": "Fuse Energy"
-    },
-    {
-      "board": "gigaml",
-      "company": "Giga AI"
-    },
-    {
       "board": "onebrief",
       "company": "One Brief"
     },
     {
       "board": "mercor",
       "company": "Mercor"
-    },
-    {
-      "board": "neon-health",
-      "company": "Neon Health"
     },
     {
       "board": "astro-mechanica",
@@ -953,8 +889,8 @@
       "company": "Baton Corporation"
     },
     {
-      "board": "socket",
-      "company": "Socket"
+      "board": "gigaml",
+      "company": "Giga AI"
     },
     {
       "board": "deliveroo",
@@ -969,24 +905,12 @@
       "company": "Titan"
     },
     {
-      "board": "NorthwoodSpace",
-      "company": "Northwood Space"
-    },
-    {
-      "board": "sentilink",
-      "company": "SentiLink"
-    },
-    {
-      "board": "brinc",
-      "company": "BRINC Drones"
-    },
-    {
       "board": "ellipsislabs",
       "company": "Ellipsis Labs"
     },
     {
-      "board": "handshake",
-      "company": "Handshake"
+      "board": "observable-space",
+      "company": "Observable Space"
     },
     {
       "board": "zettabyte-space",
@@ -999,6 +923,14 @@
     {
       "board": "liquid",
       "company": "Liquid"
+    },
+    {
+      "board": "handshake",
+      "company": "Handshake"
+    },
+    {
+      "board": "NorthwoodSpace",
+      "company": "Northwood Space"
     },
     {
       "board": "mach",
@@ -1033,24 +965,8 @@
       "company": "Julius AI"
     },
     {
-      "board": "loveholidays",
-      "company": "loveholidays"
-    },
-    {
-      "board": "iambic-therapeutics",
-      "company": "Iambic Therapeutics"
-    },
-    {
-      "board": "triumph-arcade",
-      "company": "Triumph"
-    },
-    {
-      "board": "candidate.fyi",
-      "company": "candidate fyi"
-    },
-    {
-      "board": "strala-ai",
-      "company": "Strala Group"
+      "board": "marianaminerals",
+      "company": "Mariana Minerals"
     },
     {
       "board": "snowflake",
@@ -1061,32 +977,16 @@
       "company": "Glide"
     },
     {
-      "board": "Talos-Trading",
-      "company": "Talos"
+      "board": "probook",
+      "company": "Probook"
     },
     {
       "board": "people-culture-talent",
       "company": "People Culture Talent"
     },
     {
-      "board": "sewer-ai",
-      "company": "SewerAI"
-    },
-    {
-      "board": "collective",
-      "company": "Collective"
-    },
-    {
-      "board": "Mintlify",
-      "company": "Mintlify"
-    },
-    {
       "board": "silnahealth.com",
       "company": "Silna Health"
-    },
-    {
-      "board": "aditude",
-      "company": "Aditude"
     },
     {
       "board": "klarity-ai",
@@ -1105,22 +1005,6 @@
       "company": "Tracebit"
     },
     {
-      "board": "saronic",
-      "company": "Saronic"
-    },
-    {
-      "board": "clera",
-      "company": "Clera"
-    },
-    {
-      "board": "AfterQuery",
-      "company": "AfterQuery"
-    },
-    {
-      "board": "capy",
-      "company": "Capy"
-    },
-    {
       "board": "generalist",
       "company": "Generalist"
     },
@@ -1129,16 +1013,8 @@
       "company": "Cylake"
     },
     {
-      "board": "PointOne",
-      "company": "PointOne"
-    },
-    {
       "board": "Lynk",
       "company": "Lynk"
-    },
-    {
-      "board": "blitzy",
-      "company": "Blitzy"
     },
     {
       "board": "meticulous",
@@ -1149,20 +1025,16 @@
       "company": "Allen Control Systems"
     },
     {
-      "board": "Etched",
-      "company": "Etched"
+      "board": "saronic",
+      "company": "Saronic"
     },
     {
       "board": "moab",
       "company": "Moab"
     },
     {
-      "board": "specter",
-      "company": "Specter"
-    },
-    {
-      "board": "relationrx",
-      "company": "Relation Therapeutics"
+      "board": "confido",
+      "company": "Confido"
     },
     {
       "board": "Preference-Model",
@@ -1185,80 +1057,24 @@
       "company": "Quantcast"
     },
     {
-      "board": "teza-technologies",
-      "company": "Teza Technologies"
-    },
-    {
-      "board": "blissway",
-      "company": "Blissway"
-    },
-    {
-      "board": "Commure",
-      "company": "Commure"
-    },
-    {
-      "board": "kong",
-      "company": "Kong"
-    },
-    {
-      "board": "quora",
-      "company": "Quora"
-    },
-    {
       "board": "pylon-labs",
       "company": "Pylon"
-    },
-    {
-      "board": "gen-digital",
-      "company": "Gen Digital"
-    },
-    {
-      "board": "exa",
-      "company": "Exa"
-    },
-    {
-      "board": "rhoda-ai",
-      "company": "Rhoda AI"
     },
     {
       "board": "abridge",
       "company": "Abridge"
     },
     {
-      "board": "sunday",
-      "company": "Sunday Robotics"
-    },
-    {
       "board": "AeroVect",
       "company": "AeroVect"
-    },
-    {
-      "board": "polymarket",
-      "company": "Polymarket"
-    },
-    {
-      "board": "fundamentalresearchlabs",
-      "company": "Fundamental Research Labs"
-    },
-    {
-      "board": "quantexa",
-      "company": "Quantexa"
     },
     {
       "board": "faros-ai",
       "company": "Faros AI"
     },
     {
-      "board": "checkout.com",
-      "company": "Checkout.com"
-    },
-    {
       "board": "corvus-robotics",
       "company": "Corvus Robotics"
-    },
-    {
-      "board": "pariveda",
-      "company": "Pariveda Solutions"
     },
     {
       "board": "Vytalize",
@@ -1273,52 +1089,20 @@
       "company": "Lightfield"
     },
     {
-      "board": "hinge-health",
-      "company": "Hinge Health"
-    },
-    {
       "board": "amplify",
       "company": "Amplify"
-    },
-    {
-      "board": "chambercardio",
-      "company": "Chamber Cardio"
     },
     {
       "board": "Antares",
       "company": "Antares Nuclear"
     },
     {
-      "board": "thumbtack",
-      "company": "Thumbtack"
-    },
-    {
-      "board": "haydenai",
-      "company": "Hayden AI"
-    },
-    {
-      "board": "heron-power",
-      "company": "Heron Power"
-    },
-    {
       "board": "KAYAK",
       "company": "KAYAK"
     },
     {
-      "board": "watney",
-      "company": "Watney"
-    },
-    {
       "board": "feathery",
       "company": "Feathery"
-    },
-    {
-      "board": "healf",
-      "company": "Healf"
-    },
-    {
-      "board": "envision-horizons",
-      "company": "Envision Horizons LLC"
     },
     {
       "board": "maya-htt",
@@ -1329,24 +1113,8 @@
       "company": "Logos Space"
     },
     {
-      "board": "arq",
-      "company": "ARQ"
-    },
-    {
-      "board": "frec",
-      "company": "Frec Markets, Inc."
-    },
-    {
       "board": "backbone",
       "company": "Backbone Systems"
-    },
-    {
-      "board": "logiqal",
-      "company": "Logiqal"
-    },
-    {
-      "board": "valinor",
-      "company": "Valinor"
     },
     {
       "board": "maigrate",
@@ -1361,28 +1129,12 @@
       "company": "Teleskope"
     },
     {
-      "board": "sylvera",
-      "company": "Sylvera"
-    },
-    {
-      "board": "runpod",
-      "company": "Runpod"
-    },
-    {
       "board": "packz",
       "company": "Packz"
     },
     {
       "board": "focal",
       "company": "Focal"
-    },
-    {
-      "board": "castle",
-      "company": "Castle"
-    },
-    {
-      "board": "numerixs-quant",
-      "company": "NumerixS Quant"
     },
     {
       "board": "brainbaselabs",
@@ -1405,10 +1157,6 @@
       "company": "Strada"
     },
     {
-      "board": "cohort",
-      "company": "Cohort AI Inc."
-    },
-    {
       "board": "monogram",
       "company": "Monogram"
     },
@@ -1417,32 +1165,12 @@
       "company": "Simple AI"
     },
     {
-      "board": "apiphany",
-      "company": "Apiphany"
-    },
-    {
       "board": "vmax",
       "company": "Vmax AI Corp"
     },
     {
-      "board": "aureliussystems",
-      "company": "Aurelius Systems"
-    },
-    {
-      "board": "archy",
-      "company": "Archy"
-    },
-    {
-      "board": "sauna.ai",
-      "company": "Sauna"
-    },
-    {
       "board": "turn-river",
       "company": "Turn/River Capital"
-    },
-    {
-      "board": "Acorns",
-      "company": "Acorns"
     },
     {
       "board": "astronomer",
@@ -1457,32 +1185,12 @@
       "company": "AlphaLife Sciences"
     },
     {
+      "board": "quantum",
+      "company": "Quantum"
+    },
+    {
       "board": "traba",
       "company": "Traba"
-    },
-    {
-      "board": "lawdepot",
-      "company": "LawDepot"
-    },
-    {
-      "board": "Crusoe",
-      "company": "Crusoe"
-    },
-    {
-      "board": "felicity",
-      "company": "Felicity"
-    },
-    {
-      "board": "clipboard",
-      "company": "Clipboard Health"
-    },
-    {
-      "board": "harvey",
-      "company": "Harvey"
-    },
-    {
-      "board": "motorway",
-      "company": "Motorway"
     },
     {
       "board": "bridger",
@@ -1493,48 +1201,20 @@
       "company": "Anthelion Capital"
     },
     {
-      "board": "ando",
-      "company": "Ando"
-    },
-    {
       "board": "hiive",
       "company": "Hiive"
     },
     {
-      "board": "odysseyml",
-      "company": "Odyssey"
-    },
-    {
-      "board": "nexxen",
-      "company": "Nexxen"
-    },
-    {
-      "board": "limble",
-      "company": "Limble CMMS"
+      "board": "blissway",
+      "company": "Blissway"
     },
     {
       "board": "retell-ai",
       "company": "Retell AI"
     },
     {
-      "board": "trainline",
-      "company": "Trainline"
-    },
-    {
       "board": "9fin",
       "company": "9fin"
-    },
-    {
-      "board": "Inclined",
-      "company": "Inclined Technologies"
-    },
-    {
-      "board": "chainlink-labs",
-      "company": "Chainlink Labs"
-    },
-    {
-      "board": "miovision",
-      "company": "Miovision"
     },
     {
       "board": "runsybil-jobs",
@@ -1545,10 +1225,6 @@
       "company": "Color"
     },
     {
-      "board": "abby-care",
-      "company": "Abby Care"
-    },
-    {
       "board": "alta-ares",
       "company": "Alta Ares"
     },
@@ -1557,28 +1233,16 @@
       "company": "Eliza"
     },
     {
-      "board": "observable-space",
-      "company": "Observable Space"
+      "board": "Crusoe",
+      "company": "Crusoe"
     },
     {
-      "board": "usul",
-      "company": "Usul"
-    },
-    {
-      "board": "elevenlabs",
-      "company": "ElevenLabs"
-    },
-    {
-      "board": "voleon",
-      "company": "The Voleon Group"
+      "board": "nooks",
+      "company": "Nooks"
     },
     {
       "board": "rollout",
       "company": "Rollout"
-    },
-    {
-      "board": "lambda",
-      "company": "Lambda"
     },
     {
       "board": "Flock",
@@ -1587,6 +1251,174 @@
     {
       "board": "fundingcircle",
       "company": "Funding Circle"
+    },
+    {
+      "board": "PAR",
+      "company": "PAR Tech"
+    },
+    {
+      "board": "quora",
+      "company": "Quora"
+    },
+    {
+      "board": "ema",
+      "company": "Ema"
+    },
+    {
+      "board": "prelim",
+      "company": "Prelim"
+    },
+    {
+      "board": "anima",
+      "company": "Anima"
+    },
+    {
+      "board": "Tempo",
+      "company": "Tempo"
+    },
+    {
+      "board": "ashby",
+      "company": "Ashby"
+    },
+    {
+      "board": "avoca",
+      "company": "Avoca AI"
+    },
+    {
+      "board": "harperinsure",
+      "company": "Harper Group"
+    },
+    {
+      "board": "spaitial",
+      "company": "SpAItial"
+    },
+    {
+      "board": "fr",
+      "company": "Maya HTT"
+    },
+    {
+      "board": "terranova",
+      "company": "Terranova"
+    },
+    {
+      "board": "dome-systems-inc",
+      "company": "Dome Systems Inc"
+    },
+    {
+      "board": "polymath",
+      "company": "Polymath"
+    },
+    {
+      "board": "simile",
+      "company": "Simile"
+    },
+    {
+      "board": "oligo",
+      "company": "Oligo Space"
+    },
+    {
+      "board": "atominvest",
+      "company": "Atominvest"
+    },
+    {
+      "board": "e-source",
+      "company": "E Source Companies"
+    },
+    {
+      "board": "trainline",
+      "company": "Trainline"
+    },
+    {
+      "board": "lambda",
+      "company": "Lambda"
+    },
+    {
+      "board": "fs-studio",
+      "company": "FS Studio"
+    },
+    {
+      "board": "pariveda",
+      "company": "Pariveda Solutions"
+    },
+    {
+      "board": "gearset",
+      "company": "Gearset"
+    },
+    {
+      "board": "Kognitos",
+      "company": "Kognitos"
+    },
+    {
+      "board": "serverobotics",
+      "company": "Serve Robotics"
+    },
+    {
+      "board": "cloudscaler",
+      "company": "Cloudscaler"
+    },
+    {
+      "board": "treeswift",
+      "company": "Treeswift"
+    },
+    {
+      "board": "emerald-ai",
+      "company": "Emerald AI"
+    },
+    {
+      "board": "ibotta",
+      "company": "ibotta"
+    },
+    {
+      "board": "trovy",
+      "company": "Trovy"
+    },
+    {
+      "board": "interface-ai",
+      "company": "interface.ai"
+    },
+    {
+      "board": "sentilink",
+      "company": "SentiLink"
+    },
+    {
+      "board": "levels",
+      "company": "Levels Technologies"
+    },
+    {
+      "board": "FSH",
+      "company": "FSH Technologies"
+    },
+    {
+      "board": "nova-talent",
+      "company": "Nova Talent"
+    },
+    {
+      "board": "nory-co",
+      "company": "NORY"
+    },
+    {
+      "board": "mindrobotics",
+      "company": "Mind Robotics"
+    },
+    {
+      "board": "fortuna-health",
+      "company": "Fortuna Health"
+    },
+    {
+      "board": "sentry",
+      "company": "Sentry"
+    },
+    {
+      "board": "lilt-production",
+      "company": "Lilt"
+    },
+    {
+      "board": "n8n",
+      "company": "n8n"
+    },
+    {
+      "board": "hawkeyeinnovations",
+      "company": "Hawk-Eye Innovations"
     }
   ]
 }
