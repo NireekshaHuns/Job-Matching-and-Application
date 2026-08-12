@@ -31,6 +31,7 @@
     "eval:classify": "tsx scripts/eval-classify.ts",
     "score:fits": "tsx scripts/score-fits.ts",
     "backfill:is-us": "tsx scripts/backfill-is-us.ts",
+    "prune:simplify": "tsx scripts/prune-simplify-non-swe.ts",
     "people:purge": "tsx scripts/purge-people-cache.ts",
     "resume:pdf": "tsx scripts/compile-resume.ts"
   },

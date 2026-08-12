@@ -5,6 +5,7 @@
     "url": "https://jobs.example.com/stripe/1",
     "locations": ["New York, NY", "Remote in USA"],
     "date_posted": 1721400000,
+    "category": "Software",
     "active": true,
     "is_visible": true,
     "sponsorship": "Other"
@@ -15,6 +16,7 @@
     "url": "https://jobs.example.com/databricks/2",
     "location": "San Francisco, CA",
     "date_posted": 1721300000,
+    "category": "Software Engineering",
     "active": true,
     "is_visible": true,
     "sponsorship": "U.S. Citizenship is Required"
@@ -24,6 +26,7 @@
     "title": "Should Be Skipped",
     "url": "https://jobs.example.com/hidden/3",
     "date_posted": 1721200000,
+    "category": "Software",
     "active": true,
     "is_visible": false
   },
@@ -32,7 +35,47 @@
     "title": "Also Skipped",
     "url": "https://jobs.example.com/inactive/4",
     "date_posted": 1721100000,
+    "category": "Software",
     "active": false,
+    "is_visible": true
+  },
+  {
+    "company_name": "Chip Co",
+    "title": "Hardware Design Engineer",
+    "url": "https://jobs.example.com/chip/5",
+    "location": "Austin, TX",
+    "date_posted": 1721000000,
+    "category": "Hardware",
+    "active": true,
+    "is_visible": true
+  },
+  {
+    "company_name": "Hedge Fund",
+    "title": "Quantitative Researcher",
+    "url": "https://jobs.example.com/quant/6",
+    "location": "Chicago, IL",
+    "date_posted": 1720900000,
+    "category": "Quant",
+    "active": true,
+    "is_visible": true
+  },
+  {
+    "company_name": "Model Co",
+    "title": "Machine Learning Engineer",
+    "url": "https://jobs.example.com/ml/7",
+    "location": "Seattle, WA",
+    "date_posted": 1720800000,
+    "category": "AI/ML/Data",
+    "active": true,
+    "is_visible": true
+  },
+  {
+    "company_name": "Uncategorized Co",
+    "title": "Mystery Role",
+    "url": "https://jobs.example.com/mystery/8",
+    "location": "Boston, MA",
+    "date_posted": 1720700000,
+    "active": true,
     "is_visible": true
   }
 ]
