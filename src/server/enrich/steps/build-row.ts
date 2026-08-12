@@ -7,6 +7,7 @@ import type { NewJob } from '@/server/db/schema';
 import type { RawPosting } from '@/server/ingest/types';
 import type { Classification } from '../types';
 import { deriveIsUs } from './location';
+import { resolveSeniority } from './seniority';
 import { looksLikeStaffing } from './staffing';
 import type { SponsorMatch } from './sponsor-match';
 
@@ -44,7 +45,9 @@ export function buildJobRow(
         ? 'contract'
         : classification.employmentType,
     roleFamily: classification.roleFamily,
-    seniority: classification.seniority,
+    // The model has no bucket for "the title states no level" and used to dump
+    // plain "Software Engineer" into `other`, which the board hides by default.
+    seniority: resolveSeniority(posting.title, classification.seniority),
     techKeywords: classification.skills,
     softKeywords: classification.softKeywords,
     salaryText: classification.salary ?? null,

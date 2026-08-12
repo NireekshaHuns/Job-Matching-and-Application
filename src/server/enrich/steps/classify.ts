@@ -24,7 +24,7 @@ export const CLASSIFY_SYSTEM_PROMPT = [
   'Fields:',
   `- employmentType: one of ${employmentTypeEnum.enumValues.join(', ')} (contract/staffing/C2C/1099 => "contract", direct-hire => "full_time").`,
   `- roleFamily: one of ${roleFamilyEnum.enumValues.join(', ')}. Use "software" for a general software-engineering role with no specific specialty (e.g. a plain "Software Engineer"); use "other" ONLY for genuinely non-software roles.`,
-  `- seniority: one of ${seniorityEnum.enumValues.join(', ')} ("entry" = new-grad/junior, "mid" = a few years, everything senior/staff/lead/manager => "other").`,
+  `- seniority: one of ${seniorityEnum.enumValues.join(', ')} ("entry" = new-grad/junior, "mid" = a few years, senior/staff/principal/lead/manager => "other"). A title that states NO level (a plain "Software Engineer") is "mid" — never "other" — unless the description clearly demands many years of experience.`,
   '- skills: array of concrete technical keywords — technologies/tools/languages named (e.g. ["go", "kafka", "react"]). Exclude generic basics. Empty array if none.',
   '- softKeywords: array of soft skills/competencies the posting emphasizes (e.g. ["ownership", "cross-functional collaboration", "mentorship"]). Exclude basic expectations. Empty array if none.',
   '- salary: the pay range EXACTLY as stated in the posting, normalized for display (e.g. "$150k–$180k", "$70–$90/hr"). Use null if the posting does not state pay. NEVER guess or invent a number.',
