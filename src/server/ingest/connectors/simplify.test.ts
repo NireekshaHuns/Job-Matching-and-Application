@@ -18,7 +18,7 @@ describe('simplifyNewGradConnector', () => {
     expect(stripe.source).toBe('github:simplify-newgrad');
     expect(stripe.company).toBe('Stripe');
     expect(stripe.location).toBe('New York, NY, Remote in USA');
-    expect(stripe.postedDate).toBe('2024-07-19');
+    expect(stripe.postedAt?.toISOString().slice(0, 10)).toBe('2024-07-19');
     expect(stripe.jdText).toBe('');
     // sponsorship is carried in raw, not acted on by the connector.
     expect((stripe.raw as { sponsorship?: string }).sponsorship).toBe('Other');

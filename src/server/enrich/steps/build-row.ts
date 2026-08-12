@@ -28,7 +28,7 @@ export function buildJobRow(
     source: posting.source,
     sourceJobId: posting.sourceJobId ?? null,
     url: posting.url,
-    postedDate: posting.postedDate,
+    postedAt: posting.postedAt,
     company: posting.company,
     title: posting.title,
     location: posting.location,

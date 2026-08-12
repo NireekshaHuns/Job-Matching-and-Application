@@ -22,7 +22,7 @@ describe('leverConnector', () => {
     expect(first.location).toBe('New York, NY');
     expect(first.url).toBe('https://jobs.lever.co/acme/abc-123');
     expect(first.jdText).toContain('distributed services in Go');
-    expect(first.postedDate).toBe('2024-07-19');
+    expect(first.postedAt?.toISOString().slice(0, 10)).toBe('2024-07-19');
     expect(first.fingerprint.startsWith('ACME|')).toBe(true);
   });
 

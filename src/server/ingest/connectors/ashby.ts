@@ -4,7 +4,7 @@
  * One call returns all postings with full JD text (`descriptionPlain`).
  */
 import { postingFingerprint } from '../fingerprint';
-import { htmlToText, toIsoDate } from '../html';
+import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
 export interface AshbyBoard {
@@ -22,6 +22,13 @@ interface AshbyJob {
   descriptionPlain?: string;
   descriptionHtml?: string;
   isRemote?: boolean;
+  /**
+   * The live posting API returns `publishedAt`. An earlier version of this
+   * connector read `publishedDate`, which does not exist in the response — every
+   * Ashby posting landed with a null date and the board showed "date n/a".
+   * `publishedDate` is kept as a fallback in case a board serves the older shape.
+   */
+  publishedAt?: string;
   publishedDate?: string;
 }
 
@@ -63,7 +70,7 @@ export function ashbyConnector(
             location,
             url,
             jdText,
-            postedDate: toIsoDate(job.publishedDate),
+            postedAt: toPostedAt(job.publishedAt ?? job.publishedDate),
             fingerprint: postingFingerprint(board.company, title, location),
             raw: job,
           });

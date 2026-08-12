@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { htmlToText, toIsoDate } from './html';
+import { htmlToText, toPostedAt } from './html';
 
 describe('htmlToText', () => {
   it('decodes entity-encoded markup and flattens to text', () => {
@@ -24,11 +24,19 @@ describe('htmlToText', () => {
   });
 });
 
-describe('toIsoDate', () => {
+describe('toPostedAt', () => {
   it('normalizes ISO strings and epoch millis; null for junk', () => {
-    expect(toIsoDate('2026-07-20T12:00:00-04:00')).toBe('2026-07-20');
-    expect(toIsoDate(Date.parse('2026-01-02T00:00:00Z'))).toBe('2026-01-02');
-    expect(toIsoDate(null)).toBeNull();
-    expect(toIsoDate('not a date')).toBeNull();
+    expect(toPostedAt('2026-07-20T12:00:00-04:00')?.toISOString()).toBe('2026-07-20T16:00:00.000Z');
+    expect(toPostedAt(Date.parse('2026-01-02T00:00:00Z'))?.toISOString()).toBe(
+      '2026-01-02T00:00:00.000Z',
+    );
+    expect(toPostedAt(null)).toBeNull();
+    expect(toPostedAt('')).toBeNull();
+    expect(toPostedAt('not a date')).toBeNull();
+  });
+
+  it('keeps the time of day instead of truncating to a calendar day', () => {
+    // The whole point of the timestamp column: "5h ago" needs the clock time.
+    expect(toPostedAt('2026-07-20T12:34:56Z')?.toISOString()).toBe('2026-07-20T12:34:56.000Z');
   });
 });

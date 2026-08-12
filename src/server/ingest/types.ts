@@ -19,8 +19,8 @@ export interface RawPosting {
   url: string;
   /** Plain-text job description; may be empty for sources that don't include one. */
   jdText: string;
-  /** ISO date (YYYY-MM-DD) when posted/updated, or null if unknown. */
-  postedDate: string | null;
+  /** When the source says it was posted/updated, or null if unknown. Full precision. */
+  postedAt: Date | null;
   /** company + title + location, normalized — dedup key across sources. */
   fingerprint: string;
   /** The original source payload, kept for debugging / later enrichment. */

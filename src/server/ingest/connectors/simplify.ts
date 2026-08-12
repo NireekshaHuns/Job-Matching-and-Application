@@ -29,12 +29,12 @@ const DEFAULT_SOURCE = 'github:simplify-newgrad';
 const DEFAULT_URL =
   'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json';
 
-function toIsoDate(unix?: number): string | null {
+function toPostedAt(unix?: number): Date | null {
   if (unix == null || Number.isNaN(unix)) return null;
   // Repo uses unix seconds; guard in case a value is already in millis.
   const ms = unix < 1e12 ? unix * 1000 : unix;
   const d = new Date(ms);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function toLocation(listing: SimplifyListing): string | null {
@@ -81,7 +81,7 @@ export function simplifyNewGradConnector(
           url,
           jdText: '',
           // `||` not `??`: treat a 0 / missing date_posted as unknown and fall back.
-          postedDate: toIsoDate(listing.date_posted || listing.date_updated),
+          postedAt: toPostedAt(listing.date_posted || listing.date_updated),
           fingerprint: postingFingerprint(company, title, location),
           raw: listing,
         });

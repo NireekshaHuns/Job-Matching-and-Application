@@ -276,7 +276,13 @@ export const jobs = pgTable(
     /** Per-source external posting id (e.g. Greenhouse/Lever/Ashby/SmartRecruiters id). */
     sourceJobId: text('source_job_id'),
     url: text('url').notNull(),
-    postedDate: date('posted_date'),
+    /**
+     * When the source says the job went up. A timestamp, not a date: every feed
+     * gives us at least minute precision (Ashby `publishedAt`, Lever `createdAt`,
+     * Greenhouse `updated_at`, Simplify `date_posted`), and the board shows
+     * "20m ago" / "5h ago", which a date column cannot express.
+     */
+    postedAt: timestamp('posted_at', { withTimezone: true }),
     /** Lifecycle: `active` while still in a feed, `closed` once it goes stale. */
     status: jobStatusEnum('status').notNull().default('active'),
     /** First time we saw this posting in a feed. */

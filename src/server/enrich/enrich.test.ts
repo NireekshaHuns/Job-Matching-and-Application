@@ -27,7 +27,7 @@ function posting(fingerprint: string, overrides: Partial<RawPosting> = {}): RawP
     location: 'Remote',
     url: `https://example.com/${fingerprint}`,
     jdText: 'Build APIs.',
-    postedDate: '2026-07-01',
+    postedAt: new Date('2026-07-01T00:00:00Z'),
     fingerprint,
     raw: {},
     ...overrides,
