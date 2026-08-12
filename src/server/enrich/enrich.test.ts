@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMBEDDING_DIMENSIONS } from '@/server/db/schema';
+import type { NewJob } from '@/server/db/schema';
 import type { RawPosting } from '@/server/ingest/types';
 import { enrichPostings, type EnrichDeps } from './enrich';
 
@@ -133,12 +134,45 @@ describe('enrichPostings resilience', () => {
       ['a', 'b', 'c', 'd', 'e'].map((f) => posting(f)),
       new Set<string>(),
       deps,
-      { batchSize: 2, onBatch: async (rows) => void batches.push(rows.length) },
+      { batchSize: 2, concurrency: 1, onBatch: async (rows) => void batches.push(rows.length) },
     );
 
     expect(batches).toEqual([2, 2]);
     // The remainder is left for the caller's final insert.
     expect(result.rows).toHaveLength(1);
     expect(result.stats.enriched).toBe(5);
+  });
+
+  it('classifies concurrently without losing or duplicating rows', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const tracking: EnrichDeps = {
+      ...deps,
+      chat: {
+        complete: async () => {
+          inFlight++;
+          peak = Math.max(peak, inFlight);
+          await new Promise((r) => setTimeout(r, 5));
+          inFlight--;
+          return JSON.stringify(CLASSIFICATION);
+        },
+      },
+    };
+    const flushed: NewJob[] = [];
+    const input = Array.from({ length: 20 }, (_, i) => posting(`f${i}`));
+
+    const result = await enrichPostings(input, new Set<string>(), tracking, {
+      batchSize: 6,
+      concurrency: 4,
+      onBatch: async (rows) => void flushed.push(...rows),
+    });
+
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(4);
+    // Every posting is accounted for exactly once, flushed plus remainder.
+    const all = [...flushed, ...result.rows].map((r) => r.fingerprint);
+    expect(all).toHaveLength(20);
+    expect(new Set(all).size).toBe(20);
+    expect(result.stats.enriched).toBe(20);
   });
 });
