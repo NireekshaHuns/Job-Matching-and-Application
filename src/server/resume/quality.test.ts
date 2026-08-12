@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractSections, lintResume } from './quality';
+import { MAX_BULLETS, WORD_MAX, WORD_MIN } from './rubric';
 
 /** A minimal one-page-style LaTeX résumé with the user's fixed section set. */
 const BASE_RESUME = String.raw`\begin{document}
@@ -29,21 +30,60 @@ const TAILORED_OK = BASE_RESUME.replace(
 /**
  * Distinct, realistic bullets with varied strong verbs (incl. ones NOT in the
  * allowlist, e.g. Spearheaded/Refactored/Owned), each with a metric + period.
+ *
+ * Deliberately full-length, the way real résumé bullets read. An earlier version
+ * of this fixture used 44 one-line bullets to reach the word target, which no
+ * longer represents anything that fits on a page — bullet count, not word count,
+ * is what pushes a résumé onto page two.
  */
 const GOOD_BULLETS = [
-  '- Shipped a payments API that cut p99 latency by 40% for active users.',
-  '- Led a data migration that reduced infrastructure cost by 30% across teams.',
-  '- Spearheaded a rewrite that improved request throughput by 3x for the platform.',
-  '- Refactored the auth service, cutting error rates by 25% within two weeks.',
-  '- Automated deployments that improved release frequency by 50% for platform teams.',
-  '- Migrated services to Kubernetes, reducing production incidents by 60% overall.',
-  '- Designed a caching layer that boosted cache hit rate to 95% in production.',
-  '- Owned the billing pipeline, improving invoice accuracy by 20% for customers.',
+  '- Shipped a payments API used across three product lines, cutting p99 latency by 40% for active users while holding error budgets steady through a staged rollout.',
+  '- Led a data migration off a legacy warehouse, reducing infrastructure cost by 30% across teams and shortening the nightly batch window from six hours to under two.',
+  '- Spearheaded a service rewrite that improved request throughput by 3x for the platform, replacing synchronous calls with an event-driven queue and backpressure handling.',
+  '- Refactored the auth service into stateless workers, cutting error rates by 25% within two weeks and removing the shared session store that caused weekly incidents.',
+  '- Automated deployments with a templated pipeline, improving release frequency by 50% for platform teams and eliminating the manual approval step for routine changes.',
+  '- Migrated 40 services to Kubernetes with health checks and autoscaling, reducing production incidents by 60% overall and halving mean time to recovery.',
+  '- Designed a read-through caching layer for the catalogue, boosting cache hit rate to 95% in production and cutting database read load by roughly two thirds.',
+  '- Owned the billing pipeline end to end, improving invoice accuracy by 20% for customers by reconciling usage events against a ledger before each monthly close.',
+  '- Instrumented the checkout flow with distributed tracing, surfacing a serialization bug that had inflated tail latency by 300 ms on 15% of requests.',
+  '- Rebuilt the search index with incremental updates, dropping content freshness lag from 45 minutes to under 90 seconds for 2 million documents.',
+  '- Hardened the public API with per-tenant rate limiting and schema validation, blocking 100,000 malformed requests a day without a single false positive.',
+  '- Mentored three engineers through their first on-call rotations, cutting escalations to senior staff by 45% over two quarters with runbooks and paired debugging.',
 ];
 
-/** Cycle distinct bullets to land within the 475–600 word target. */
-function goodResume(n = 44): string {
-  const lines: string[] = [];
+/**
+ * The non-bullet text every résumé carries — header, education, role headings,
+ * project line and the skills rows. Roughly 150 words, which is what separates
+ * the bullet text from the real document total.
+ */
+const SCAFFOLD = [
+  'JANE DOE | jane@example.com | (555) 010-1234 | linkedin.com/in/janedoe | github.com/janedoe',
+  'EDUCATION',
+  'Master of Science in Computer Software Engineering Systems, December 2026',
+  'Northeastern University, Boston, MA',
+  'Coursework: Data Structures and Algorithms, Web Development and Design, Distributed Systems, Database Design',
+  'Certification: AWS Certified Solutions Architect, valid 2026 to 2029',
+  'EXPERIENCE',
+  'Software Engineer, Riskcast Solutions, New York, July 2025 to January 2026',
+  'Software Engineer, London Stock Exchange Group, Bangalore, January 2022 to August 2024',
+  'PROJECTS',
+  'Job Matching and Application Platform: Next.js, TypeScript, tRPC, PostgreSQL, Inngest',
+  'TECHNICAL SKILLS',
+  'Languages: Python, Java, TypeScript, JavaScript, SQL',
+  'Web and Mobile: React, Next.js, React Native, Node.js, REST APIs, GraphQL, accessible interfaces',
+  'Distributed and Backend: microservices, Kafka, event-driven and parallel systems, multithreading, system design',
+  'AI and Information Retrieval: language models, LangChain, retrieval augmented generation, embeddings, vector search',
+  'Data and Storage: PostgreSQL, Redis, OpenSearch, MongoDB, message queues',
+  'Cloud, Security and DevOps: AWS, Linux, Docker, Kubernetes, Terraform, continuous delivery, Grafana',
+].join('\n');
+
+/**
+ * A whole résumé of `n` full-length bullets plus the usual scaffolding. The
+ * default of 12 sits inside both the word band and the one-page bullet budget,
+ * like the owner's real résumé (442 words / 11 bullets).
+ */
+function goodResume(n = 12): string {
+  const lines: string[] = [SCAFFOLD];
   for (let i = 0; i < n; i++) lines.push(GOOD_BULLETS[i % GOOD_BULLETS.length]);
   return lines.join('\n');
 }
@@ -52,9 +92,22 @@ describe('lintResume', () => {
   it('passes a well-formed resume with varied (incl. unlisted) strong verbs', () => {
     const report = lintResume(goodResume());
     expect(report.ok).toBe(true);
-    expect(report.wordCount).toBeGreaterThanOrEqual(475);
-    expect(report.wordCount).toBeLessThanOrEqual(600);
-    expect(report.bulletCount).toBe(44);
+    expect(report.wordCount).toBeGreaterThanOrEqual(WORD_MIN);
+    expect(report.wordCount).toBeLessThanOrEqual(WORD_MAX);
+    expect(report.bulletCount).toBe(12);
+  });
+
+  it('flags a resume with too many bullets to fit one page', () => {
+    // Inside the word band but well over the bullet budget — the exact shape
+    // that used to slip through and render as two pages.
+    const report = lintResume(goodResume(MAX_BULLETS + 4));
+    expect(report.violations.some((v) => v.rule === 'bullet-count')).toBe(true);
+    expect(report.ok).toBe(false);
+  });
+
+  it('accepts a resume at exactly the bullet ceiling', () => {
+    const report = lintResume(goodResume(MAX_BULLETS));
+    expect(report.violations.some((v) => v.rule === 'bullet-count')).toBe(false);
   });
 
   it('flags a resume that is too short', () => {

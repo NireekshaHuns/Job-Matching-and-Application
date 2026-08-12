@@ -3,7 +3,7 @@
  * text (markdown or LaTeX). Pure and offline; the tailoring generator (Inc 4)
  * will run this on its own output and iterate until it passes.
  */
-import { BUZZWORDS, MIN_METRIC_RATIO, WEAK_VERBS, WORD_MAX, WORD_MIN } from './rubric';
+import { BUZZWORDS, MAX_BULLETS, MIN_METRIC_RATIO, WEAK_VERBS, WORD_MAX, WORD_MIN } from './rubric';
 
 export interface LintViolation {
   rule: string;
@@ -244,6 +244,17 @@ export function lintResume(text: string, opts: LintOptions = {}): LintReport {
       rule: 'word-count',
       severity: 'error',
       message: `Resume is ${wordCount} words; target ${WORD_MIN}–${WORD_MAX}.`,
+    });
+  }
+
+  // Bullet count is what actually decides whether the résumé stays on one page:
+  // every \item costs its own leading and usually wraps to 2–3 lines, so a draft
+  // can sit inside the word band and still spill onto a second page.
+  if (bullets.length > MAX_BULLETS) {
+    violations.push({
+      rule: 'bullet-count',
+      severity: 'error',
+      message: `Resume has ${bullets.length} bullets; at most ${MAX_BULLETS} fit on one page. Cut the weakest, don't shorten them.`,
     });
   }
 
