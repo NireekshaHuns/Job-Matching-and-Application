@@ -56,7 +56,10 @@ export const CLASSIFY_DATASET: ClassifyExample[] = [
     'contract-staffing',
     'Java Developer (W-2 Contract)',
     'Six-month W-2 contract via staffing agency. Spring Boot.',
-    { employmentType: 'contract', roleFamily: 'backend', seniority: 'other' },
+    // This case is about employmentType. Its seniority label used to be `other`,
+    // which every model now "fails": the title states no level, and the rule is
+    // that an unlevelled title is `mid`. See steps/seniority.ts.
+    { employmentType: 'contract', roleFamily: 'backend', seniority: 'mid' },
   ),
   example(
     'sre',
