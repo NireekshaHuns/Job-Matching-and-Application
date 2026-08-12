@@ -12,6 +12,22 @@
 import { resolveLlmEndpoint } from './endpoint';
 import type { ChatClient, Embedder } from './types';
 
+/**
+ * Per-request limits for every enrichment client.
+ *
+ * The SDK defaults to a **10-minute** timeout, and enrichment classifies 8
+ * postings concurrently — so one connection that stalls freezes the whole slice
+ * for ten minutes, then again for each retry. That is exactly what happened
+ * during the first bulk backfill: the process sat at 0% CPU with no open
+ * sockets for over twelve minutes, having made no progress.
+ *
+ * A classify call normally returns in about a second, so 60s is generous; the
+ * point is that a wedged connection fails fast and gets retried instead of
+ * holding the pipeline. Retries cover the transient case, and `enrichPostings`
+ * skips whatever still fails.
+ */
+const REQUEST_LIMITS = { timeout: 60_000, maxRetries: 3 } as const;
+
 export const DEFAULT_CLASSIFY_MODEL = 'gpt-4o-mini';
 export const DEFAULT_EMBED_MODEL = 'text-embedding-3-small';
 
@@ -69,11 +85,11 @@ export async function buildEnrichmentClients(
   const { default: OpenAI } = await import('openai');
   const { openaiChat, openaiEmbedder } = await import('./openai');
 
-  const client = new OpenAI(
-    endpoint.baseURL
-      ? { apiKey: endpoint.apiKey, baseURL: endpoint.baseURL }
-      : { apiKey: endpoint.apiKey },
-  );
+  const client = new OpenAI({
+    apiKey: endpoint.apiKey,
+    ...(endpoint.baseURL ? { baseURL: endpoint.baseURL } : {}),
+    ...REQUEST_LIMITS,
+  });
   const chat = openaiChat(client, envOr(env.OPENAI_CLASSIFY_MODEL, DEFAULT_CLASSIFY_MODEL));
 
   if (!embeddingsEnabled(env)) return { chat };
@@ -83,7 +99,9 @@ export async function buildEnrichmentClients(
   // embedding call along with it.
   const openaiKey = env.OPENAI_API_KEY?.trim();
   if (!openaiKey) return { chat };
-  const embedClient = endpoint.baseURL ? new OpenAI({ apiKey: openaiKey }) : client;
+  const embedClient = endpoint.baseURL
+    ? new OpenAI({ apiKey: openaiKey, ...REQUEST_LIMITS })
+    : client;
   return {
     chat,
     embedder: openaiEmbedder(embedClient, envOr(env.OPENAI_EMBED_MODEL, DEFAULT_EMBED_MODEL)),
