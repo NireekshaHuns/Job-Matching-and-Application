@@ -72,6 +72,8 @@ export const enrichJobs = inngest.createFunction(
         const { buildConnectors: build } = await import('@/server/ingest/registry');
         const { runEnrichment } = await import('@/server/enrich/run');
         const { buildEnrichmentClients } = await import('@/server/enrich/clients');
+        const { installDbTimeout } = await import('@/server/db/http-timeout');
+        installDbTimeout();
 
         const connector = build().find((c) => c.source === source);
         if (!connector) return { fingerprints: [], fetched: 0, inserted: 0, deferred: 0 };
@@ -114,6 +116,8 @@ export const enrichJobs = inngest.createFunction(
       const { drizzle } = await import('drizzle-orm/neon-http');
       const schema = await import('@/server/db/schema');
       const { reconcileFreshness } = await import('@/server/enrich/run');
+      const { installDbTimeout } = await import('@/server/db/http-timeout');
+      installDbTimeout();
       const db = drizzle(neon(process.env.DATABASE_URL ?? ''), { schema });
       return reconcileFreshness(db, seen);
     });

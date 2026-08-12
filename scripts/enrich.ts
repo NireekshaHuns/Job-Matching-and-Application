@@ -8,6 +8,7 @@
 import 'dotenv/config';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
+import { installDbTimeout } from '@/server/db/http-timeout';
 import * as schema from '@/server/db/schema';
 import { buildEnrichmentClients } from '@/server/enrich/clients';
 import { runEnrichment } from '@/server/enrich/run';
@@ -26,6 +27,8 @@ async function main() {
     process.exit(1);
   }
 
+  // Neon's HTTP driver has no request timeout; a silent socket hangs forever.
+  installDbTimeout();
   const db = drizzle(neon(process.env.DATABASE_URL), { schema });
 
   console.log('Fetching postings from connectors...');
