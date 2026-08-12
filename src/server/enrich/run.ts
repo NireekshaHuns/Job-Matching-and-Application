@@ -207,12 +207,53 @@ export interface RunEnrichmentArgs {
   postings: RawPosting[];
   chat: ChatClient;
   embedder: Embedder;
+  /**
+   * Run the freshness reconcile at the end. Off when the caller is enriching
+   * one source at a time: reconcile closes anything not in `postings`, so a
+   * per-source call would close every OTHER source's jobs. Those callers run
+   * `reconcileFreshness` once at the end with every fingerprint they saw.
+   */
+  reconcile?: boolean;
+  /**
+   * Cap on how many NEW postings to enrich in this call; the rest are left for
+   * a later run and reported as `deferred`. Enrichment is the slow, paid part
+   * (one LLM classify + one embed each), and on a serverless host the whole
+   * call has to fit inside one function invocation.
+   */
+  maxNew?: number;
+}
+
+/**
+ * Split a fetch into "enrich now" and "leave for next run".
+ *
+ * Postings we already hold cost nothing (`enrichPostings` skips them), so only
+ * genuinely new ones count against `maxNew`. When nothing needs deferring the
+ * full list is passed straight through, so the uncapped path is unchanged.
+ * Pure.
+ */
+export function planEnrichmentBatch(
+  postings: RawPosting[],
+  existing: ReadonlySet<string>,
+  maxNew?: number,
+): { toEnrich: RawPosting[]; deferred: number } {
+  const cap = maxNew ?? Infinity;
+  if (cap === Infinity) return { toEnrich: postings, deferred: 0 };
+
+  const fresh = postings.filter((p) => !existing.has(p.fingerprint));
+  const deferred = Math.max(0, fresh.length - cap);
+  return { toEnrich: deferred > 0 ? fresh.slice(0, cap) : postings, deferred };
 }
 
 /** End-to-end: load state, enrich new postings, insert, persist aliases, reconcile freshness. */
-export async function runEnrichment(
-  args: RunEnrichmentArgs,
-): Promise<EnrichResult & { inserted: number; aliasesWritten: number; reconcile: ReconcileStats }> {
+export async function runEnrichment(args: RunEnrichmentArgs): Promise<
+  EnrichResult & {
+    inserted: number;
+    aliasesWritten: number;
+    reconcile: ReconcileStats;
+    /** New postings left un-enriched because `maxNew` was reached. */
+    deferred: number;
+  }
+> {
   const [existing, sponsorState] = await Promise.all([
     loadExistingFingerprints(args.db),
     loadSponsorState(args.db),
@@ -224,7 +265,9 @@ export async function runEnrichment(
     confirmedAliases,
   });
 
-  const result = await enrichPostings(args.postings, existing, {
+  const { toEnrich, deferred } = planEnrichmentBatch(args.postings, existing, args.maxNew);
+
+  const result = await enrichPostings(toEnrich, existing, {
     chat: args.chat,
     embedder: args.embedder,
     resolve,
@@ -237,9 +280,14 @@ export async function runEnrichment(
   );
   // Reconcile against every fingerprint seen this run (pre-dedup), so a job
   // present in any feed is kept fresh and only truly-dropped jobs go stale.
-  const reconcile = await reconcileFreshness(
-    args.db,
-    args.postings.map((p) => p.fingerprint),
-  );
-  return { ...result, inserted, aliasesWritten, reconcile };
+  // Note this uses the FULL posting list, not the capped slice — a posting we
+  // deferred is still evidence that the job is live.
+  const reconcile =
+    args.reconcile === false
+      ? { refreshed: 0, closed: 0 }
+      : await reconcileFreshness(
+          args.db,
+          args.postings.map((p) => p.fingerprint),
+        );
+  return { ...result, inserted, aliasesWritten, reconcile, deferred };
 }

@@ -8,7 +8,7 @@
  * the last week.
  */
 import { useRouter } from 'next/navigation';
-import { useDeferredValue, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { ApplyDialog } from '@/components/apply-dialog';
 import { Chip } from '@/components/chip';
 import { PageHeader } from '@/components/page-header';
@@ -34,6 +34,11 @@ const WITHIN_OPTIONS: { value: Within; label: string }[] = [
   { value: 0, label: 'Any time' },
 ];
 
+/** How often to re-check the pipeline while waiting for a refresh to land. */
+const WATCH_POLL_MS = 10_000;
+/** Give up waiting after this long and say so, rather than spinning forever. */
+const WATCH_MS = 5 * 60_000;
+
 const inputCls =
   'rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:border-brand focus:outline-none';
 
@@ -49,7 +54,6 @@ export default function JobsPage() {
   const [applyFor, setApplyFor] = useState<{ id: number; company: string; title: string } | null>(
     null,
   );
-  const [refreshMsg, setRefreshMsg] = useState<string | null>(null);
 
   const router = useRouter();
   const deferredSearch = useDeferredValue(search);
@@ -75,10 +79,54 @@ export default function JobsPage() {
   const dismiss = trpc.jobs.dismiss.useMutation({
     onSuccess: () => utils.jobs.list.invalidate(),
   });
+  /**
+   * Watching the pipeline after a refresh. Firing the event only proves Inngest
+   * accepted it — not that any app is subscribed — so the honest signal is
+   * `lastSeenAt` moving past the moment we asked. Everything below is derived
+   * from that one timestamp rather than held in state.
+   */
+  const [requestedAt, setRequestedAt] = useState<Date | null>(null);
   const refresh = trpc.jobs.refresh.useMutation({
-    onSuccess: () => setRefreshMsg('Finding new jobs… they’ll appear here in a few minutes.'),
-    onError: (e) => setRefreshMsg(`Couldn’t start a refresh: ${e.message}`),
+    onSuccess: (data) => setRequestedAt(new Date(data.requestedAt)),
+    onError: () => setRequestedAt(null),
   });
+
+  const status = trpc.jobs.pipelineStatus.useQuery(undefined, {
+    // Decided from the query's own data so polling stops the moment a run
+    // lands, without needing the derived flags below (which depend on it).
+    refetchInterval: (query) => {
+      if (!requestedAt) return false;
+      const raw = query.state.data?.lastSeenAt;
+      const seen = raw ? new Date(raw) : null;
+      if (seen && seen > requestedAt) return false;
+      if (Date.now() - requestedAt.getTime() > WATCH_MS) return false;
+      return WATCH_POLL_MS;
+    },
+  });
+
+  const lastSeen = status.data?.lastSeenAt ? new Date(status.data.lastSeenAt) : null;
+  const landed = requestedAt != null && lastSeen != null && lastSeen > requestedAt;
+  // `dataUpdatedAt` (when we last checked) is the clock here rather than
+  // Date.now(), which would be an impure read during render. It advances on
+  // every poll, so the deadline is still noticed within one interval.
+  const gaveUp =
+    requestedAt != null && !landed && status.dataUpdatedAt - requestedAt.getTime() > WATCH_MS;
+  const watching = requestedAt != null && !landed && !gaveUp;
+
+  // The one genuine side effect: show the newly-ingested jobs once a run lands.
+  useEffect(() => {
+    if (landed) void utils.jobs.list.invalidate();
+  }, [landed, utils]);
+
+  const refreshMsg = refresh.isError
+    ? `Couldn’t start a refresh: ${refresh.error.message}`
+    : landed
+      ? 'Done — the board is up to date.'
+      : gaveUp
+        ? 'The run was queued but nothing has ingested yet. If this keeps happening, check that the app is registered in Inngest Cloud.'
+        : watching
+          ? 'Looking for new jobs…'
+          : null;
 
   const jobsQuery = trpc.jobs.list.useQuery({
     search: deferredSearch || undefined,

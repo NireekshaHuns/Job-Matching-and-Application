@@ -5,6 +5,7 @@ import {
   escapeLike,
   FRESHNESS_WINDOW_DAYS,
   freshnessScore,
+  isInngestConfigured,
   jobListInput,
   locationMatchRegex,
   resolveJobQueryPlan,
@@ -189,5 +190,23 @@ describe('computePriority', () => {
       computePriority({ tierRank: 3, fit: 100, ageDays: 0 }, { tier: 0, fit: 0, freshness: 0 })
         .priority,
     ).toBe(0);
+  });
+});
+
+describe('isInngestConfigured', () => {
+  it('treats development as configured — `pnpm inngest:dev` needs no key', () => {
+    expect(isInngestConfigured({ NODE_ENV: 'development' } as NodeJS.ProcessEnv)).toBe(true);
+    expect(isInngestConfigured({ NODE_ENV: 'test' } as NodeJS.ProcessEnv)).toBe(true);
+  });
+
+  it('requires an event key in production', () => {
+    const env = (v?: string) =>
+      ({ NODE_ENV: 'production', INNGEST_EVENT_KEY: v }) as NodeJS.ProcessEnv;
+    expect(isInngestConfigured(env('evt_abc'))).toBe(true);
+    expect(isInngestConfigured(env(undefined))).toBe(false);
+    // An empty or whitespace value is the same as unset — `inngest.send` would
+    // resolve and nothing would consume the event.
+    expect(isInngestConfigured(env(''))).toBe(false);
+    expect(isInngestConfigured(env('   '))).toBe(false);
   });
 });
