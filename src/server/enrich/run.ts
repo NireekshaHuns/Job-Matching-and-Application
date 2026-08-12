@@ -206,7 +206,8 @@ export interface RunEnrichmentArgs {
   db: DB;
   postings: RawPosting[];
   chat: ChatClient;
-  embedder: Embedder;
+  /** Omit to skip JD embedding (the default in production) — see steps/embed.ts. */
+  embedder?: Embedder;
   /**
    * Run the freshness reconcile at the end. Off when the caller is enriching
    * one source at a time: reconcile closes anything not in `postings`, so a

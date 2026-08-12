@@ -66,31 +66,26 @@ export const enrichJobs = inngest.createFunction(
       // One step per source: a fresh invocation each, so the 300s budget applies
       // per source rather than to the whole run.
       const result = await step.run(`ingest-${source}`, async () => {
-        const { default: OpenAI } = await import('openai');
         const { neon } = await import('@neondatabase/serverless');
         const { drizzle } = await import('drizzle-orm/neon-http');
         const schema = await import('@/server/db/schema');
         const { buildConnectors: build } = await import('@/server/ingest/registry');
         const { runEnrichment } = await import('@/server/enrich/run');
-        const { openaiChat, openaiEmbedder } = await import('@/server/enrich/openai');
+        const { buildEnrichmentClients } = await import('@/server/enrich/clients');
 
         const connector = build().find((c) => c.source === source);
         if (!connector) return { fingerprints: [], fetched: 0, inserted: 0, deferred: 0 };
 
-        const db = drizzle(neon(process.env.DATABASE_URL ?? ''), { schema });
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        const chat = openaiChat(openai, process.env.OPENAI_CLASSIFY_MODEL ?? 'gpt-4o-mini');
-        const embedder = openaiEmbedder(
-          openai,
-          process.env.OPENAI_EMBED_MODEL ?? 'text-embedding-3-small',
-        );
+        const clients = await buildEnrichmentClients();
+        if (!clients) throw new Error('No LLM key configured — cannot enrich.');
 
+        const db = drizzle(neon(process.env.DATABASE_URL ?? ''), { schema });
         const postings = await connector.fetch();
         const run = await runEnrichment({
           db,
           postings,
-          chat,
-          embedder,
+          chat: clients.chat,
+          embedder: clients.embedder,
           // Reconcile once at the end, over every source — doing it here would
           // close every other source's jobs.
           reconcile: false,

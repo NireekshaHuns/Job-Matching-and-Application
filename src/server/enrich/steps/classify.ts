@@ -30,14 +30,39 @@ export const CLASSIFY_SYSTEM_PROMPT = [
   '- salary: the pay range EXACTLY as stated in the posting, normalized for display (e.g. "$150k–$180k", "$70–$90/hr"). Use null if the posting does not state pay. NEVER guess or invent a number.',
 ].join('\n');
 
+/**
+ * How much of the job description to send.
+ *
+ * Everything this step extracts — employment type, role family, seniority, the
+ * named technologies — is established near the top of a posting. The tail is
+ * benefits, EEO statements and legal boilerplate, and JDs routinely run past
+ * 15,000 characters. Since input tokens dominate the cost of a bulk ingest,
+ * this cap is the single largest saving available and forfeits nothing the
+ * classifier uses.
+ */
+export const MAX_JD_CHARS = 6000;
+
+/** Cut to the cap on a paragraph or sentence boundary where one is close by. */
+export function truncateJd(jdText: string, max: number = MAX_JD_CHARS): string {
+  if (jdText.length <= max) return jdText;
+  const head = jdText.slice(0, max);
+  // Prefer the last paragraph break in the final 20%, else the last sentence
+  // end, so the model never sees a word cut in half.
+  const floor = Math.floor(max * 0.8);
+  const para = head.lastIndexOf('\n\n');
+  const stop = para >= floor ? para : head.lastIndexOf('. ');
+  return (stop >= floor ? head.slice(0, stop) : head).trimEnd();
+}
+
 export function buildClassifyMessages(posting: RawPosting): {
   system: string;
   user: string;
 } {
+  const jd = truncateJd(posting.jdText ?? '');
   const user = [
     `Title: ${posting.title}`,
     `Company: ${posting.company}`,
-    posting.jdText ? `Description:\n${posting.jdText}` : 'Description: (none provided)',
+    jd ? `Description:\n${jd}` : 'Description: (none provided)',
   ].join('\n');
   return { system: CLASSIFY_SYSTEM_PROMPT, user };
 }
