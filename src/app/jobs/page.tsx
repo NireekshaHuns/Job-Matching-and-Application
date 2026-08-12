@@ -273,6 +273,12 @@ export default function JobsPage() {
                 window.open(job.url, '_blank', 'noopener,noreferrer');
                 setApplyFor({ id: job.id, company: job.company, title: job.title });
               };
+              // Some feeds (older Ashby rows) never gave a post date. Showing
+              // when we first saw it beats "date n/a" — it is the same evidence
+              // the age filter uses, so the card agrees with the filter.
+              const posted = formatRelativeTime(job.postedAt);
+              const firstSeen = formatRelativeTime(job.firstSeenAt);
+              const seen = firstSeen ? `seen ${firstSeen}` : null;
               return (
                 <li
                   key={job.id}
@@ -293,9 +299,12 @@ export default function JobsPage() {
                     <div className="mb-2 flex items-center justify-between gap-2 pr-6">
                       <span
                         className="text-faint font-mono text-[11px]"
-                        title={formatAbsoluteTime(job.postedAt) ?? undefined}
+                        title={
+                          formatAbsoluteTime(job.postedAt ?? job.firstSeenAt) ??
+                          (posted ? undefined : 'This source did not publish a posting date.')
+                        }
                       >
-                        {formatRelativeTime(job.postedAt) ?? 'date n/a'}
+                        {posted ?? seen ?? 'date n/a'}
                       </span>
                       <span
                         className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${TIER_STYLES[job.sponsorTier]}`}
