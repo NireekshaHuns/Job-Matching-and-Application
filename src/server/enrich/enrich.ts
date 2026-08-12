@@ -19,7 +19,8 @@ import type { ChatClient, Embedder } from './types';
 
 export interface EnrichDeps {
   chat: ChatClient;
-  embedder: Embedder;
+  /** Omit to skip JD embedding — see steps/embed.ts for why that is the default. */
+  embedder?: Embedder;
   resolve: SponsorResolver;
 }
 
@@ -27,8 +28,8 @@ export interface EnrichDeps {
 export async function enrichPosting(posting: RawPosting, deps: EnrichDeps): Promise<NewJob> {
   const sponsor = matchSponsor(posting.company, posting.jdText, deps.resolve);
   // Classify always: the title alone carries real signal (role/seniority), even
-  // for sources with no JD text. Embedding is skipped for empty JDs (embedJd
-  // returns null) since there's nothing meaningful to embed.
+  // for sources with no JD text. Embedding is skipped when no embedder is
+  // supplied, and for empty JDs, so we never pay for nothing.
   const classification = await classifyPosting(posting, deps.chat);
   const embedding = await embedJd(posting.jdText, deps.embedder);
   return buildJobRow(posting, sponsor, classification, embedding);

@@ -4,7 +4,12 @@ import type { RawPosting } from '@/server/ingest/types';
 import type { SponsorHistory } from '@/lib/sponsorship';
 import type { ChatClient, Embedder } from '../types';
 import { buildJobRow } from './build-row';
-import { classifyPosting, parseClassification } from './classify';
+import {
+  buildClassifyMessages,
+  classifyPosting,
+  parseClassification,
+  truncateJd,
+} from './classify';
 import { dedupPostings } from './dedup';
 import { embedJd } from './embed';
 import { matchSponsor } from './sponsor-match';
@@ -284,5 +289,42 @@ describe('buildJobRow', () => {
       null,
     );
     expect(row.employmentType).toBe('full_time');
+  });
+});
+
+describe('truncateJd', () => {
+  it('leaves a short description untouched', () => {
+    expect(truncateJd('Build things with Go.', 6000)).toBe('Build things with Go.');
+  });
+
+  it('caps a long description at the limit', () => {
+    expect(truncateJd('x'.repeat(9000), 6000).length).toBeLessThanOrEqual(6000);
+  });
+
+  it('cuts on a paragraph break when one is near the limit', () => {
+    const body = 'A'.repeat(4900);
+    const out = truncateJd(`${body}\n\n${'B'.repeat(3000)}`, 6000);
+    expect(out).toBe(body);
+    expect(out).not.toContain('B');
+  });
+
+  it('hard-cuts when there is no boundary to cut on', () => {
+    expect(truncateJd('z'.repeat(9000), 100).length).toBe(100);
+  });
+});
+
+describe('buildClassifyMessages', () => {
+  const posting = (jdText: string) =>
+    ({ title: 'Software Engineer', company: 'Example Co', jdText }) as RawPosting;
+
+  it('truncates the description it sends', () => {
+    // Input tokens dominate bulk-ingest cost; the tail of a JD is boilerplate.
+    const { user } = buildClassifyMessages(posting('q'.repeat(20_000)));
+    expect(user.length).toBeLessThan(7000);
+    expect(user).toContain('Software Engineer');
+  });
+
+  it('says so explicitly when a source carries no description', () => {
+    expect(buildClassifyMessages(posting('')).user).toContain('(none provided)');
   });
 });

@@ -16,6 +16,7 @@ import {
   roleFamilyEnum,
   skillKindEnum,
 } from '@/server/db/schema';
+import { resolveLlmEndpoint } from '@/server/enrich/endpoint';
 import type { ChatClient, Embedder } from '@/server/enrich/types';
 import { ingestResume, type IngestDeps } from '@/server/resume/corpus-ingest';
 import { extractJdKeywords } from '@/server/resume/jd-keywords';
@@ -123,11 +124,12 @@ export function resolveTailorEndpoint(env: {
   tailorKey?: string;
   openaiKey?: string;
 }): { apiKey: string; baseURL?: string } | null {
-  const baseURL = env.baseUrl?.trim();
-  const tailorKey = env.tailorKey?.trim();
-  if (baseURL && tailorKey) return { apiKey: tailorKey, baseURL };
-  const openaiKey = env.openaiKey?.trim();
-  return openaiKey ? { apiKey: openaiKey } : null;
+  // The rule is shared with the classification path — see enrich/endpoint.ts.
+  return resolveLlmEndpoint({
+    baseUrl: env.baseUrl,
+    altKey: env.tailorKey,
+    openaiKey: env.openaiKey,
+  });
 }
 
 /**
