@@ -70,10 +70,13 @@ points at.
 Migrations are **not** applied at build/deploy time — run `pnpm db:migrate` manually whenever
 new migrations land.
 
-**Discovered ATS boards don't ship.** `ats-boards.json` (written by `pnpm ats:discover`) is
-git-ignored, so production ingestion only fans out to the code-seeded boards in
-`src/server/ingest/registry.ts`. Locally discovered boards are local-only until they're
-promoted into those seed lists.
+**Discovered ATS boards ship as code.** `pnpm ats:discover` writes
+`src/server/ingest/discovered-boards.json`, which is **committed** and imported by
+`registry.ts`, so production fans out to it plus the curated seeds. (It used to write a
+git-ignored `ats-boards.json` at the repo root, which never reached production — the
+deployed board ran on ~16 seeds while ~350 discovered boards sat unused.) Re-run the script
+and commit the result to widen the net; an uncommitted local `ats-boards.json` still layers
+on top for experiments.
 
 ## 5. Deploy & verify
 

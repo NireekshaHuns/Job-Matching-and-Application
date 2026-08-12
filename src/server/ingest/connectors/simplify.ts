@@ -80,11 +80,23 @@ function toLocation(listing: SimplifyListing): string | null {
 }
 
 export function simplifyNewGradConnector(
-  opts: { url?: string; source?: string } = {},
+  opts: {
+    url?: string;
+    source?: string;
+    /**
+     * Skip the category filter. For ATS-board DISCOVERY only, which just reads
+     * apply URLs: a company that posts a Hardware or Quant role has a board
+     * that carries its software roles too, so narrowing the scan there loses
+     * employers for no benefit. Ingestion stays filtered.
+     */
+    allCategories?: boolean;
+  } = {},
   fetcher: Fetcher = globalThis.fetch,
 ): JobConnector {
   const source = opts.source ?? DEFAULT_SOURCE;
   const url = opts.url ?? SIMPLIFY_LISTINGS_URL;
+  const inScope = (category: string | undefined) =>
+    opts.allCategories === true || isSoftwareCategory(category);
 
   return {
     source,
@@ -102,8 +114,8 @@ export function simplifyNewGradConnector(
         // Skip inactive / hidden listings (defaults treat missing as active).
         if (listing.active === false || listing.is_visible === false) continue;
         live++;
-        // Software-engineering roles only; the file covers every README section.
-        if (!isSoftwareCategory(listing.category)) continue;
+        // Roles the board covers; the file spans every README section.
+        if (!inScope(listing.category)) continue;
 
         const company = listing.company_name?.trim() ?? '';
         const title = listing.title?.trim() ?? '';
@@ -128,7 +140,7 @@ export function simplifyNewGradConnector(
       // Live listings but nothing matched: the upstream `category` labels have
       // almost certainly changed. Say so loudly — the failure mode of a silent
       // category filter is ingesting zero jobs and looking like an empty feed.
-      if (live > 0 && postings.length === 0) {
+      if (live > 0 && postings.length === 0 && !opts.allCategories) {
         console.warn(
           `[${source}] ${live} active listings but none matched ${[...SWE_CATEGORIES].join('/')} — has the upstream category label changed?`,
         );
