@@ -34,8 +34,26 @@ export const SEED = {
   low: 'E2E Support Engineer',
   excluded: 'E2E Excluded Role',
   contract: 'E2E Contract Engineer',
+  /** Hidden unless "Show closed" — status closed. */
+  closed: 'E2E Closed Engineer',
+  /** Only shown when "Remote only" is on, alongside the remote-flagged ones. */
+  remote: 'E2E Remote Engineer',
+  /** Hidden unless "Include senior" — seniority `other`. */
+  senior: 'E2E Staff Engineer',
+  /** posted_at ~20 days ago: outside "Past week", inside "Any time". */
+  old: 'E2E Older Engineer',
+  /**
+   * No posted_at and first seen ~20 days ago. The age filter falls back to
+   * first_seen_at, so this must behave like `old` — it used to be exempt from
+   * every window, which let stale rows crowd out fresh ones.
+   */
+  undatedOld: 'E2E Undated Older Engineer',
   fitScore: 82,
 } as const;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Comfortably outside the 7-day default window, inside nothing but "Any time". */
+const TWENTY_DAYS_AGO = new Date(Date.now() - 20 * DAY_MS);
 
 /** Truncate the owned tables and insert the fixed fixture. Idempotent. */
 export async function resetAndSeed(): Promise<void> {
@@ -117,6 +135,62 @@ export async function resetAndSeed(): Promise<void> {
         employmentType: 'contract',
         sponsorTier: 'High',
         newHireStatus: 'sponsors_new_hires',
+      },
+      {
+        ...base,
+        fingerprint: 'e2e-closed',
+        company: 'E2E Closed Corp',
+        title: SEED.closed,
+        employmentType: 'full_time',
+        sponsorTier: 'High',
+        newHireStatus: 'unknown',
+        status: 'closed',
+        closedAt: new Date(),
+      },
+      {
+        ...base,
+        fingerprint: 'e2e-remote',
+        company: 'E2E Remote Corp',
+        title: SEED.remote,
+        employmentType: 'full_time',
+        sponsorTier: 'High',
+        newHireStatus: 'unknown',
+        isRemote: true,
+        location: 'Remote - US',
+      },
+      {
+        ...base,
+        fingerprint: 'e2e-senior',
+        company: 'E2E Senior Corp',
+        title: SEED.senior,
+        employmentType: 'full_time',
+        sponsorTier: 'High',
+        newHireStatus: 'unknown',
+        seniority: 'other',
+      },
+      {
+        ...base,
+        fingerprint: 'e2e-old',
+        company: 'E2E Older Corp',
+        title: SEED.old,
+        employmentType: 'full_time',
+        sponsorTier: 'High',
+        newHireStatus: 'unknown',
+        postedAt: TWENTY_DAYS_AGO,
+      },
+      {
+        // posted_at null on purpose — the age filter must fall back to
+        // first_seen_at rather than exempting the row from every window.
+        ...base,
+        fingerprint: 'e2e-undated-old',
+        company: 'E2E Undated Older Corp',
+        title: SEED.undatedOld,
+        employmentType: 'full_time',
+        sponsorTier: 'High',
+        newHireStatus: 'unknown',
+        postedAt: null,
+        firstSeenAt: TWENTY_DAYS_AGO,
+        lastSeenAt: TWENTY_DAYS_AGO,
       },
     ])
     .returning({ id: jobs.id, fingerprint: jobs.fingerprint });
