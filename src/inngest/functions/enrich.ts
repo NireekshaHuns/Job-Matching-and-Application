@@ -1,7 +1,16 @@
 /**
- * Durable enrichment function. Runs on a cron and on demand: fetch from every
+ * Durable enrichment function, triggered ON DEMAND ONLY: fetch from every
  * connector, enrich the new postings, write them to `jobs`, then reconcile
  * freshness.
+ *
+ * NO SCHEDULE, deliberately. It used to also run on a 6-hour cron; the owner
+ * wants ingestion to happen when they ask for it, not in the background. Two
+ * consequences worth knowing:
+ *   - `reconcileFreshness` only runs on a click too, so stale postings are
+ *     closed when you refresh rather than on a timer. Nothing rots — the
+ *     14-day cutoff is measured from `last_seen_at`, not from run count.
+ *   - The longer between clicks, the bigger the delta, so a refresh after a
+ *     quiet fortnight may need several continuation runs to drain.
  *
  * SHAPE OF THE WORK — this is why it is split into steps.
  * Each Inngest step is served by its own HTTP invocation, and on Vercel an
@@ -37,7 +46,7 @@ const MAX_NEW_PER_SOURCE = 100;
 const MAX_CONTINUATIONS = 12;
 
 interface RefreshEventData {
-  /** How many continuations deep we are; absent on a user- or cron-triggered run. */
+  /** How many continuations deep we are; absent on a user-triggered run. */
   continuation?: number;
 }
 
@@ -48,9 +57,9 @@ export const enrichJobs = inngest.createFunction(
     // postings (spending before the insert-conflict catches the dupes). Manual
     // `pnpm enrich` runs should likewise not overlap a scheduled run.
     concurrency: { limit: 1 },
-    // Scheduled every 6h, plus an on-demand trigger from the board's
-    // "Find new jobs" button (jobs.refresh → inngest.send).
-    triggers: [{ cron: '0 */6 * * *' }, { event: 'jobs/refresh.requested' }],
+    // On demand only — the board's "Find new jobs" button (jobs.refresh →
+    // inngest.send), plus this function's own continuation events.
+    triggers: [{ event: 'jobs/refresh.requested' }],
   },
   async ({ event, step }) => {
     const depth = (event?.data as RefreshEventData | undefined)?.continuation ?? 0;

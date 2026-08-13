@@ -19,7 +19,7 @@ Personal H1B-focused job board + application tracker, and a portfolio piece (cod
 
 Five stages: gather → check sponsorship → filter junk → rank vs. resume → help apply & follow up.
 
-1. Inngest cron fans out to one connector per source; each writes new postings to `raw_jobs`.
+1. Inngest fans out to one connector per source, **on demand only** — the board's "Find new jobs" button, no schedule. Each writes new postings to `raw_jobs`.
 2. Enrichment (durable, per-step retries): dedup by fingerprint → sponsor match → LLM classify (employment type + H1B tier + required skills) → embed JD → write clean row to `jobs`.
 3. PostgreSQL + pgvector is the single source of truth.
 4. Resume PDFs in S3; each resume embedded; relevance scored per job × resume into `job_scores`.
