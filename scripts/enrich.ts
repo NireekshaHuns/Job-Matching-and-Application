@@ -10,9 +10,13 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { installDbTimeout } from '@/server/db/http-timeout';
 import * as schema from '@/server/db/schema';
-import { buildEnrichmentClients } from '@/server/enrich/clients';
+import { buildEnrichmentClients, probeRateLimit } from '@/server/enrich/clients';
+import { describeRateLimit, isQuotaExhausted } from '@/server/enrich/ratelimit';
 import { runEnrichment } from '@/server/enrich/run';
 import { buildConnectors } from '@/server/ingest/registry';
+
+/** Below this much remaining daily quota, a bulk run is not worth starting. */
+const MIN_REQUESTS_TO_START = 200;
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -29,6 +33,21 @@ async function main() {
 
   // Neon's HTTP driver has no request timeout; a silent socket hangs forever.
   installDbTimeout();
+  // Preflight: an exhausted daily quota makes every call 429, and the SDK then
+  // backs off silently — the run looks hung rather than throttled (issue #148).
+  // Better to say so up front than to discover it two hours in.
+  const limit = await probeRateLimit();
+  if (limit) {
+    console.log(describeRateLimit(limit));
+    if (isQuotaExhausted(limit, MIN_REQUESTS_TO_START) && !process.argv.includes('--force')) {
+      console.error(
+        `Not enough request quota left to be worth starting (need ~${MIN_REQUESTS_TO_START}).`,
+      );
+      console.error('Wait for the reset, point OPENAI_CLASSIFY_* at another provider, or --force.');
+      process.exit(1);
+    }
+  }
+
   const db = drizzle(neon(process.env.DATABASE_URL), { schema });
 
   console.log('Fetching postings from connectors...');

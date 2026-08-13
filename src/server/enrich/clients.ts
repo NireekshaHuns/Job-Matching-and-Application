@@ -10,6 +10,7 @@
  * both it falls back to OpenAI. See `endpoint.ts` for why both are required.
  */
 import { resolveLlmEndpoint } from './endpoint';
+import { parseRateLimitHeaders, type RateLimitStatus } from './ratelimit';
 import type { ChatClient, Embedder } from './types';
 
 /**
@@ -106,4 +107,45 @@ export async function buildEnrichmentClients(
     chat,
     embedder: openaiEmbedder(embedClient, envOr(env.OPENAI_EMBED_MODEL, DEFAULT_EMBED_MODEL)),
   };
+}
+
+/**
+ * Ask the provider how much request quota is left, using one deliberately tiny
+ * completion — the headers only come back on a real response.
+ *
+ * Returns null when the probe itself fails: a preflight check must never be the
+ * reason a run does not start.
+ */
+export async function probeRateLimit(
+  env: ClientEnv = process.env,
+): Promise<RateLimitStatus | null> {
+  const endpoint = resolveLlmEndpoint({
+    baseUrl: env.OPENAI_CLASSIFY_BASE_URL,
+    altKey: env.OPENAI_CLASSIFY_API_KEY,
+    openaiKey: env.OPENAI_API_KEY,
+  });
+  if (!endpoint) return null;
+
+  try {
+    const { default: OpenAI } = await import('openai');
+    const client = new OpenAI({
+      apiKey: endpoint.apiKey,
+      ...(endpoint.baseURL ? { baseURL: endpoint.baseURL } : {}),
+      timeout: 20_000,
+      // No retries: a 429 here is the ANSWER, not something to back off from.
+      maxRetries: 0,
+    });
+    const { response } = await client.chat.completions
+      .create({
+        model: envOr(env.OPENAI_CLASSIFY_MODEL, DEFAULT_CLASSIFY_MODEL),
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+      })
+      .withResponse();
+    return parseRateLimitHeaders(response.headers);
+  } catch (e) {
+    // A 429 on the probe carries the headers we want, so read them off it.
+    const headers = (e as { headers?: Record<string, string> }).headers;
+    return headers ? parseRateLimitHeaders(headers) : null;
+  }
 }
