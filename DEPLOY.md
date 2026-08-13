@@ -99,7 +99,8 @@ button: `jobs.refresh` (`src/server/trpc/routers/jobs.ts`) only publishes a
 Inngest keys set, that button has nothing to deliver to and the board won't pick up new
 postings. Pick one:
 
-- **Wire up Inngest (needed for the UI button + the cron).** In Inngest Cloud, add an app
+- **Wire up Inngest (needed for the "Find new jobs" button — ingestion is on-demand only,
+  there is no schedule).** In Inngest Cloud, add an app
   pointing at `https://<your-app>.vercel.app/api/inngest`, then set `INNGEST_EVENT_KEY` +
   `INNGEST_SIGNING_KEY` in Vercel and redeploy. The webhook is intentionally excluded from
   the auth middleware (`src/middleware.ts`), so it works with auth on.

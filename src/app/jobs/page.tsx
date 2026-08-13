@@ -118,10 +118,13 @@ export default function JobsPage() {
     if (landed) void utils.jobs.list.invalidate();
   }, [landed, utils]);
 
+  // "Landed" means the first run finished its reconcile — NOT that every new
+  // posting is in. A large delta drains across continuation runs, so the copy
+  // says results are arriving rather than claiming the board is complete.
   const refreshMsg = refresh.isError
     ? `Couldn’t start a refresh: ${refresh.error.message}`
     : landed
-      ? 'Done — the board is up to date.'
+      ? 'New jobs are landing — reload in a minute for the rest.'
       : gaveUp
         ? 'The run was queued but nothing has ingested yet. If this keeps happening, check that the app is registered in Inngest Cloud.'
         : watching
