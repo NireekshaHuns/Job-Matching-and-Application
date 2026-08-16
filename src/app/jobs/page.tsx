@@ -70,8 +70,11 @@ export default function JobsPage() {
   );
   const { sort, within, remoteOnly, includeSenior, includeExcluded, includeClosed } = filters;
 
+  // Spread the STORE's snapshot, not the rendered `filters`. Two calls without
+  // an intervening commit (a preset, a reset button, a transition) would
+  // otherwise rebuild from the pre-first-write object and drop the first change.
   const setFilter = <K extends keyof BoardFilters>(key: K, value: BoardFilters[K]) =>
-    writeFilters({ ...filters, [key]: value });
+    writeFilters({ ...getFiltersSnapshot(), [key]: value });
 
   const router = useRouter();
   const deferredSearch = useDeferredValue(search);
@@ -162,6 +165,10 @@ export default function JobsPage() {
           ? 'Looking for new jobs…'
           : null;
 
+  // Not gated on the store having hydrated. Anyone with saved filters pays one
+  // extra `list` fetch on mount (defaults, then the stored key) and sees the
+  // rail flip a frame after hydration. Gating would mean tracking "have we
+  // hydrated" in state — a setState-in-effect — to save one cached round trip.
   const jobsQuery = trpc.jobs.list.useQuery({
     search: deferredSearch || undefined,
     location: deferredLocation || undefined,
@@ -181,7 +188,7 @@ export default function JobsPage() {
       <PageHeader
         eyebrow="Sponsorship-scored"
         title="Job Board"
-        subtitle="Every card carries an H-1B possibility tier and a recommended priority — US, full-time, fresh."
+        subtitle="Every card carries an H-1B possibility tier and a recommended priority — US, full-time, direct-hire."
         actions={
           <button
             type="button"

@@ -115,6 +115,51 @@ describe('the filter store', () => {
     expect(seen).toHaveBeenCalledTimes(1);
   });
 
+  it('re-reads and notifies when another tab writes', async () => {
+    const store = await freshStore();
+    const seen = vi.fn();
+    store.subscribeFilters(seen);
+    expect(store.getFiltersSnapshot().within).toBe(DEFAULT_FILTERS.within);
+
+    // Another tab saves a different window; the browser fires `storage` here.
+    window.localStorage.setItem(BOARD_FILTERS_KEY, '{"within":7}');
+    window.dispatchEvent(new StorageEvent('storage', { key: BOARD_FILTERS_KEY }));
+
+    expect(seen).toHaveBeenCalledTimes(1);
+    // Without invalidating the cache this would still report the stale value,
+    // and the next local write would spread it back over the other tab's choice.
+    expect(store.getFiltersSnapshot().within).toBe(7);
+  });
+
+  it('re-reads when storage is cleared wholesale (null key)', async () => {
+    const store = await freshStore();
+    store.writeFilters({ ...DEFAULT_FILTERS, within: 1 });
+    store.subscribeFilters(() => {});
+
+    window.localStorage.clear();
+    window.dispatchEvent(new StorageEvent('storage', { key: null }));
+
+    expect(store.getFiltersSnapshot()).toEqual(DEFAULT_FILTERS);
+  });
+
+  it('ignores storage events for unrelated keys', async () => {
+    const store = await freshStore();
+    const seen = vi.fn();
+    store.subscribeFilters(seen);
+
+    window.dispatchEvent(new StorageEvent('storage', { key: 'some-other-app' }));
+    expect(seen).not.toHaveBeenCalled();
+  });
+
+  it('stops listening for storage events after unsubscribe', async () => {
+    const store = await freshStore();
+    const seen = vi.fn();
+    store.subscribeFilters(seen)();
+
+    window.dispatchEvent(new StorageEvent('storage', { key: BOARD_FILTERS_KEY }));
+    expect(seen).not.toHaveBeenCalled();
+  });
+
   it('keeps working when localStorage refuses the write', async () => {
     const store = await freshStore();
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {

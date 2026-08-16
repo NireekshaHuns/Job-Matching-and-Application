@@ -93,7 +93,15 @@ export function serializeFilters(filters: BoardFilters): string {
 let snapshot: BoardFilters | null = null;
 const listeners = new Set<() => void>();
 
+/**
+ * Client-only. Guarded anyway: this module is still evaluated in the SSR pass
+ * (it is imported by a client component), so its module state lives in the
+ * server process. React only ever calls `getServerFiltersSnapshot` there, and
+ * this guard makes sure a stray server-side call returns defaults rather than
+ * throwing — or worse, seeding a cache shared across every request.
+ */
 export function getFiltersSnapshot(): BoardFilters {
+  if (typeof window === 'undefined') return DEFAULT_FILTERS;
   snapshot ??= parseStoredFilters(window.localStorage.getItem(BOARD_FILTERS_KEY));
   return snapshot;
 }
@@ -103,9 +111,28 @@ export function getServerFiltersSnapshot(): BoardFilters {
   return DEFAULT_FILTERS;
 }
 
+/**
+ * Subscribe to filter changes — both our own writes and another tab's.
+ *
+ * The `storage` event is what keeps two open tabs from clobbering each other:
+ * without it, tab B keeps serving its stale cached snapshot, and its next write
+ * spreads that stale object back over whatever tab A just saved.
+ */
 export function subscribeFilters(onChange: () => void): () => void {
   listeners.add(onChange);
-  return () => listeners.delete(onChange);
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== null && event.key !== BOARD_FILTERS_KEY) return;
+    // Null key means storage was cleared wholesale; either way, re-read.
+    snapshot = null;
+    onChange();
+  };
+  window.addEventListener('storage', onStorage);
+
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener('storage', onStorage);
+  };
 }
 
 /** Persist and publish. Writing is best-effort: a full or blocked quota (private

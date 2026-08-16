@@ -71,6 +71,21 @@ test.describe('Job board', () => {
       await expect(page.getByText(SEED.old)).toBeVisible();
     });
 
+    /**
+     * The other direction of the hydration swap. Without this, the test above
+     * passes on the pre-hydration paint alone — it cannot tell "the default is
+     * Any time" from "stored filters are never applied".
+     */
+    test('applies stored filters over the default on first paint', async ({ page }) => {
+      await page.addInitScript(() => {
+        window.localStorage.setItem('h1b-board:filters:v1', JSON.stringify({ within: 7 }));
+      });
+      await page.goto('/jobs');
+
+      await expect(page.getByRole('radio', { name: 'Past week' })).toBeChecked();
+      await expect(page.getByText(SEED.old)).toHaveCount(0);
+    });
+
     test('"Past week" narrows to recent postings', async ({ page }) => {
       await page.goto('/jobs');
       await page.getByRole('radio', { name: 'Past week' }).check();

@@ -1,3 +1,4 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
 import {
   computePriority,
@@ -8,6 +9,7 @@ import {
   isInngestConfigured,
   jobListInput,
   locationMatchRegex,
+  newSinceCountSql,
   resolveJobQueryPlan,
   resolveWeights,
   tierScore,
@@ -208,5 +210,50 @@ describe('isInngestConfigured', () => {
     // resolve and nothing would consume the event.
     expect(isInngestConfigured(env(''))).toBe(false);
     expect(isInngestConfigured(env('   '))).toBe(false);
+  });
+});
+
+describe('newSinceCountSql', () => {
+  const compile = (since: Date | null | undefined) =>
+    new PgDialect().sqlToQuery(newSinceCountSql(since));
+
+  it('binds the timestamp as a parameter rather than inlining it', () => {
+    const since = new Date('2026-08-13T00:00:00.000Z');
+    const { sql, params } = compile(since);
+    expect(params).toEqual([since]);
+    expect(sql).toContain('$1::timestamptz');
+    // No interpolated literal — this is what keeps it injection-proof.
+    expect(sql).not.toContain('2026-08-13');
+  });
+
+  it('still binds one parameter for null', () => {
+    const { sql, params } = compile(null);
+    expect(params).toEqual([null]);
+    expect(sql).toContain('$1::timestamptz');
+  });
+
+  /**
+   * The landmine this guards. Drizzle's `sql` template SILENTLY DROPS an
+   * `undefined` interpolation, so passing one straight through would emit
+   * `where "first_seen_at" > ::timestamptz` — a Postgres syntax error on every
+   * board load. The helper coalesces internally so no caller can reintroduce it.
+   */
+  it('treats undefined as null instead of emitting broken SQL', () => {
+    const { sql, params } = compile(undefined);
+    expect(params).toEqual([null]);
+    expect(sql).toContain('$1::timestamptz');
+    expect(sql).not.toContain('> ::timestamptz');
+  });
+
+  it('counts only what the board shows by default', () => {
+    // A raw count would announce "40 new jobs" over an unchanged grid, because
+    // enrichment retains these categories on purpose.
+    const { sql } = compile(null);
+    expect(sql).toContain(`"status" = 'active'`);
+    expect(sql).toContain('"dismissed_at" is null');
+    expect(sql).toContain(`"sponsor_tier" <> 'Excluded'`);
+    expect(sql).toContain(`"employment_type" = 'full_time'`);
+    expect(sql).toContain(`"seniority" is distinct from 'other'`);
+    expect(sql).toContain('"is_us" is not false');
   });
 });

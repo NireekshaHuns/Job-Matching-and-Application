@@ -52,7 +52,7 @@ export const SEED = {
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Comfortably outside the 7-day default window, inside nothing but "Any time". */
+/** Comfortably outside the 7-day window; visible under the "Any time" default. */
 const TWENTY_DAYS_AGO = new Date(Date.now() - 20 * DAY_MS);
 
 /** Truncate the owned tables and insert the fixed fixture. Idempotent. */

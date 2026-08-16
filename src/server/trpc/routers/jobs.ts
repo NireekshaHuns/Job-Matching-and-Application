@@ -211,6 +211,36 @@ function prioritySql(w: PriorityWeights) {
   return sql`((${w.tier} * ${TIER_SCORE} + ${w.fit} * ${FIT_SCORE} + ${w.freshness} * ${FRESH_SCORE}) / ${sum})`;
 }
 
+/**
+ * Count of postings first seen after `since`, restricted to what the board
+ * shows by DEFAULT.
+ *
+ * Enrichment retains Excluded / contract / senior / non-US postings on purpose,
+ * so a raw count would announce "40 new jobs" over an unchanged grid — the same
+ * lie the "New jobs are landing" banner used to tell, just inverted. The age
+ * window is deliberately not mirrored: these rows are new by construction.
+ *
+ * `since` is normalized to null HERE rather than at the call site. Drizzle's
+ * `sql` template silently DROPS an `undefined` interpolation, which would emit
+ * `where ::timestamptz` — a Postgres syntax error on every board load. Taking
+ * `undefined` and coalescing internally means no caller can reintroduce that.
+ *
+ * No `is not null` guard is needed: FILTER counts only rows whose predicate is
+ * TRUE, and `first_seen_at > NULL` is NULL, so a null `since` yields 0.
+ */
+export function newSinceCountSql(since: Date | null | undefined) {
+  const bound = since ?? null;
+  return sql<number>`count(*) filter (
+    where ${jobs.firstSeenAt} > ${bound}::timestamptz
+      and ${jobs.status} = 'active'
+      and ${jobs.dismissedAt} is null
+      and ${jobs.sponsorTier} <> 'Excluded'
+      and ${jobs.employmentType} = 'full_time'
+      and ${jobs.seniority} is distinct from 'other'
+      and ${jobs.isUs} is not false
+  )`;
+}
+
 export const jobsRouter = createTRPCRouter({
   list: publicProcedure.input(jobListInput).query(async ({ ctx, input }) => {
     const plan = resolveJobQueryPlan(input);
@@ -357,7 +387,8 @@ export const jobsRouter = createTRPCRouter({
   pipelineStatus: publicProcedure
     .input(z.object({ since: z.date().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const since = input?.since ?? null;
+      // Passed through as-is; `newSinceCountSql` owns the undefined handling.
+      const since = input?.since;
       const [row] = await ctx.db
         .select({
           lastSeenAt: sql<Date | null>`max(${jobs.lastSeenAt})`,
@@ -367,7 +398,7 @@ export const jobsRouter = createTRPCRouter({
           // `last_seen_at` but inserts nothing is a real, common outcome, and
           // reporting it as "new jobs are landing" is how the board came to look
           // broken when it was working.
-          newSince: sql<number>`count(*) filter (where ${since}::timestamptz is not null and ${jobs.firstSeenAt} > ${since}::timestamptz)`,
+          newSince: newSinceCountSql(since),
         })
         .from(jobs);
       return {
