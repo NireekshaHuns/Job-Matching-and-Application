@@ -59,16 +59,22 @@ test.describe('Job board', () => {
   });
 
   test.describe('date posted window', () => {
-    test('defaults to Past week and hides a 20-day-old posting', async ({ page }) => {
+    /**
+     * The default is "Any time" on purpose. The age filter reads
+     * `coalesce(posted_at, first_seen_at)`, so a posting discovered today but
+     * published weeks ago is hidden the moment it arrives — which made "Find
+     * new jobs" look broken while it was working.
+     */
+    test('defaults to Any time, so an old-but-newly-found posting is visible', async ({ page }) => {
       await page.goto('/jobs');
-      await expect(page.getByRole('radio', { name: 'Past week' })).toBeChecked();
-      await expect(page.getByText(SEED.old)).toHaveCount(0);
+      await expect(page.getByRole('radio', { name: 'Any time' })).toBeChecked();
+      await expect(page.getByText(SEED.old)).toBeVisible();
     });
 
-    test('"Any time" reveals it', async ({ page }) => {
+    test('"Past week" narrows to recent postings', async ({ page }) => {
       await page.goto('/jobs');
-      await page.getByRole('radio', { name: 'Any time' }).check();
-      await expect(page.getByText(SEED.old)).toBeVisible();
+      await page.getByRole('radio', { name: 'Past week' }).check();
+      await expect(page.getByText(SEED.old)).toHaveCount(0);
     });
 
     /**
@@ -80,12 +86,22 @@ test.describe('Job board', () => {
      */
     test('a posting with no date is aged by when it was first seen', async ({ page }) => {
       await page.goto('/jobs');
-      // First seen 20 days ago: must NOT appear under "Past week"...
-      await expect(page.getByText(SEED.undatedOld)).toHaveCount(0);
-
-      await page.getByRole('radio', { name: 'Any time' }).check();
-      // ...but it is still a real posting, so "Any time" shows it.
+      // It is a real posting, so the default window shows it...
       await expect(page.getByText(SEED.undatedOld)).toBeVisible();
+
+      // ...but first seen 20 days ago, so "Past week" must hide it.
+      await page.getByRole('radio', { name: 'Past week' }).check();
+      await expect(page.getByText(SEED.undatedOld)).toHaveCount(0);
+    });
+
+    test('remembers the chosen window across a reload', async ({ page }) => {
+      await page.goto('/jobs');
+      await page.getByRole('radio', { name: 'Past week' }).check();
+      await expect(page.getByText(SEED.old)).toHaveCount(0);
+
+      await page.reload();
+      await expect(page.getByRole('radio', { name: 'Past week' })).toBeChecked();
+      await expect(page.getByText(SEED.old)).toHaveCount(0);
     });
   });
 });

@@ -4,11 +4,14 @@
  * Job Board — a left filter rail + a card grid. Two independent scores per card
  * (H1B sponsor tier + the recommended priority), best-effort salary, and per-card
  * Apply / Remove. "Find new jobs" fires the enrichment pipeline; Remove hides a
- * job for good; the board defaults to US, full-time, non-excluded, posted within
- * the last week.
+ * job for good; the board defaults to US, full-time, non-excluded, any age.
+ *
+ * Filter state lives in `@/lib/board-filters` and is persisted, so a reload
+ * keeps whatever was picked instead of snapping back to a default that hides
+ * most of the board.
  */
 import { useRouter } from 'next/navigation';
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useState, useSyncExternalStore } from 'react';
 import { ApplyDialog } from '@/components/apply-dialog';
 import { Chip } from '@/components/chip';
 import { PageHeader } from '@/components/page-header';
@@ -20,12 +23,17 @@ import {
   NEW_HIRE_STYLES,
   TIER_STYLES,
 } from '@/components/tier';
+import {
+  getFiltersSnapshot,
+  getServerFiltersSnapshot,
+  subscribeFilters,
+  writeFilters,
+  type BoardFilters,
+  type Sort,
+  type Within,
+} from '@/lib/board-filters';
 import { formatAbsoluteTime, formatRelativeTime } from '@/lib/relative-time';
 import { trpc } from '@/trpc/react';
-
-type Sort = 'combined' | 'fit' | 'recent';
-/** Posted-age window in days; 0 means "any age". */
-type Within = 1 | 3 | 7 | 0;
 
 const WITHIN_OPTIONS: { value: Within; label: string }[] = [
   { value: 1, label: 'Past 24 hours' },
@@ -43,17 +51,27 @@ const inputCls =
   'rounded-md border border-border bg-surface px-3 py-1.5 text-sm focus:border-brand focus:outline-none';
 
 export default function JobsPage() {
+  // Free-text search stays transient — it's a lookup, not a standing preference.
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState('');
-  const [sort, setSort] = useState<Sort>('combined');
-  const [within, setWithin] = useState<Within>(7);
-  const [remoteOnly, setRemoteOnly] = useState(false);
-  const [includeSenior, setIncludeSenior] = useState(false);
-  const [includeExcluded, setIncludeExcluded] = useState(false);
-  const [includeClosed, setIncludeClosed] = useState(false);
   const [applyFor, setApplyFor] = useState<{ id: number; company: string; title: string } | null>(
     null,
   );
+
+  /**
+   * Persisted rail state. Backed by localStorage through `useSyncExternalStore`
+   * so the server renders the defaults and the client swaps in what was saved,
+   * with no hydration mismatch.
+   */
+  const filters = useSyncExternalStore(
+    subscribeFilters,
+    getFiltersSnapshot,
+    getServerFiltersSnapshot,
+  );
+  const { sort, within, remoteOnly, includeSenior, includeExcluded, includeClosed } = filters;
+
+  const setFilter = <K extends keyof BoardFilters>(key: K, value: BoardFilters[K]) =>
+    writeFilters({ ...filters, [key]: value });
 
   const router = useRouter();
   const deferredSearch = useDeferredValue(search);
@@ -91,18 +109,21 @@ export default function JobsPage() {
     onError: () => setRequestedAt(null),
   });
 
-  const status = trpc.jobs.pipelineStatus.useQuery(undefined, {
-    // Decided from the query's own data so polling stops the moment a run
-    // lands, without needing the derived flags below (which depend on it).
-    refetchInterval: (query) => {
-      if (!requestedAt) return false;
-      const raw = query.state.data?.lastSeenAt;
-      const seen = raw ? new Date(raw) : null;
-      if (seen && seen > requestedAt) return false;
-      if (Date.now() - requestedAt.getTime() > WATCH_MS) return false;
-      return WATCH_POLL_MS;
+  const status = trpc.jobs.pipelineStatus.useQuery(
+    { since: requestedAt ?? undefined },
+    {
+      // Decided from the query's own data so polling stops the moment a run
+      // lands, without needing the derived flags below (which depend on it).
+      refetchInterval: (query) => {
+        if (!requestedAt) return false;
+        const raw = query.state.data?.lastSeenAt;
+        const seen = raw ? new Date(raw) : null;
+        if (seen && seen > requestedAt) return false;
+        if (Date.now() - requestedAt.getTime() > WATCH_MS) return false;
+        return WATCH_POLL_MS;
+      },
     },
-  });
+  );
 
   const lastSeen = status.data?.lastSeenAt ? new Date(status.data.lastSeenAt) : null;
   const landed = requestedAt != null && lastSeen != null && lastSeen > requestedAt;
@@ -121,10 +142,20 @@ export default function JobsPage() {
   // "Landed" means the first run finished its reconcile — NOT that every new
   // posting is in. A large delta drains across continuation runs, so the copy
   // says results are arriving rather than claiming the board is complete.
+  //
+  // Report the actual insert count. A run that finds nothing new is a normal
+  // outcome, and claiming "new jobs are landing" when zero arrived is what made
+  // a working button look broken.
+  const newCount = status.data?.newSince ?? 0;
+  const landedMsg =
+    newCount > 0
+      ? `${newCount} new job${newCount === 1 ? '' : 's'} added — more may still be arriving.`
+      : 'Checked every source — nothing new since your last refresh.';
+
   const refreshMsg = refresh.isError
     ? `Couldn’t start a refresh: ${refresh.error.message}`
     : landed
-      ? 'New jobs are landing — reload in a minute for the rest.'
+      ? landedMsg
       : gaveUp
         ? 'The run was queued but nothing has ingested yet. If this keeps happening, check that the app is registered in Inngest Cloud.'
         : watching
@@ -143,6 +174,7 @@ export default function JobsPage() {
   });
 
   const jobs = jobsQuery.data ?? [];
+  const loading = jobsQuery.isLoading;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
@@ -191,7 +223,7 @@ export default function JobsPage() {
           <select
             aria-label="Sort"
             value={sort}
-            onChange={(e) => setSort(e.target.value as Sort)}
+            onChange={(e) => setFilter('sort', e.target.value as Sort)}
             className={inputCls}
           >
             <option value="combined">Recommended</option>
@@ -216,7 +248,7 @@ export default function JobsPage() {
                       type="radio"
                       name="within"
                       checked={within === o.value}
-                      onChange={() => setWithin(o.value)}
+                      onChange={() => setFilter('within', o.value)}
                       className="accent-brand"
                     />
                     {o.label}
@@ -230,22 +262,30 @@ export default function JobsPage() {
                 Show
               </div>
               <div className="flex flex-col gap-2 text-sm">
-                <Toggle label="Remote only" checked={remoteOnly} onChange={setRemoteOnly} />
+                <Toggle
+                  label="Remote only"
+                  checked={remoteOnly}
+                  onChange={(v) => setFilter('remoteOnly', v)}
+                />
                 <Toggle
                   label="Include senior"
                   checked={includeSenior}
-                  onChange={setIncludeSenior}
+                  onChange={(v) => setFilter('includeSenior', v)}
                 />
                 <Toggle
                   label="Show excluded"
                   checked={includeExcluded}
-                  onChange={setIncludeExcluded}
+                  onChange={(v) => setFilter('includeExcluded', v)}
                 />
-                <Toggle label="Show closed" checked={includeClosed} onChange={setIncludeClosed} />
+                <Toggle
+                  label="Show closed"
+                  checked={includeClosed}
+                  onChange={(v) => setFilter('includeClosed', v)}
+                />
               </div>
             </div>
 
-            {!jobsQuery.isLoading && (
+            {!loading && (
               <div className="text-faint border-border border-t pt-4 text-xs">
                 {jobs.length} job{jobs.length === 1 ? '' : 's'} shown
               </div>
@@ -255,14 +295,14 @@ export default function JobsPage() {
 
         {/* Card grid */}
         <section>
-          {jobsQuery.isLoading && <LoadingSkeleton rows={6} />}
+          {loading && <LoadingSkeleton rows={6} />}
           {jobsQuery.isError && (
             <ErrorState
               message={`Failed to load jobs: ${jobsQuery.error.message}`}
               onRetry={() => jobsQuery.refetch()}
             />
           )}
-          {!jobsQuery.isLoading && jobs.length === 0 && (
+          {!loading && jobs.length === 0 && (
             <EmptyState title="No jobs match your filters yet.">
               Widen the date range or clear a filter — or hit <strong>Find new jobs</strong> to
               fetch fresh postings.

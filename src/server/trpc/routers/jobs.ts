@@ -354,17 +354,27 @@ export const jobsRouter = createTRPCRouter({
    * evidence that a run happened, since firing the event proves only that
    * Inngest accepted it, not that any app is subscribed.
    */
-  pipelineStatus: publicProcedure.query(async ({ ctx }) => {
-    const [row] = await ctx.db
-      .select({
-        lastSeenAt: sql<Date | null>`max(${jobs.lastSeenAt})`,
-        activeCount: sql<number>`count(*) filter (where ${jobs.status} = 'active')`,
-      })
-      .from(jobs);
-    return {
-      configured: isInngestConfigured(),
-      lastSeenAt: row?.lastSeenAt ?? null,
-      activeCount: Number(row?.activeCount ?? 0),
-    };
-  }),
+  pipelineStatus: publicProcedure
+    .input(z.object({ since: z.date().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const since = input?.since ?? null;
+      const [row] = await ctx.db
+        .select({
+          lastSeenAt: sql<Date | null>`max(${jobs.lastSeenAt})`,
+          activeCount: sql<number>`count(*) filter (where ${jobs.status} = 'active')`,
+          // How many postings arrived since the caller asked. This is what makes
+          // "did the button do anything?" answerable: a run that refreshes
+          // `last_seen_at` but inserts nothing is a real, common outcome, and
+          // reporting it as "new jobs are landing" is how the board came to look
+          // broken when it was working.
+          newSince: sql<number>`count(*) filter (where ${since}::timestamptz is not null and ${jobs.firstSeenAt} > ${since}::timestamptz)`,
+        })
+        .from(jobs);
+      return {
+        configured: isInngestConfigured(),
+        lastSeenAt: row?.lastSeenAt ?? null,
+        activeCount: Number(row?.activeCount ?? 0),
+        newSince: Number(row?.newSince ?? 0),
+      };
+    }),
 });
