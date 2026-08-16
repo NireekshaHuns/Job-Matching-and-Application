@@ -211,6 +211,36 @@ function prioritySql(w: PriorityWeights) {
   return sql`((${w.tier} * ${TIER_SCORE} + ${w.fit} * ${FIT_SCORE} + ${w.freshness} * ${FRESH_SCORE}) / ${sum})`;
 }
 
+/**
+ * Count of postings first seen after `since`, restricted to what the board
+ * shows by DEFAULT.
+ *
+ * Enrichment retains Excluded / contract / senior / non-US postings on purpose,
+ * so a raw count would announce "40 new jobs" over an unchanged grid — the same
+ * lie the "New jobs are landing" banner used to tell, just inverted. The age
+ * window is deliberately not mirrored: these rows are new by construction.
+ *
+ * `since` is normalized to null HERE rather than at the call site. Drizzle's
+ * `sql` template silently DROPS an `undefined` interpolation, which would emit
+ * `where ::timestamptz` — a Postgres syntax error on every board load. Taking
+ * `undefined` and coalescing internally means no caller can reintroduce that.
+ *
+ * No `is not null` guard is needed: FILTER counts only rows whose predicate is
+ * TRUE, and `first_seen_at > NULL` is NULL, so a null `since` yields 0.
+ */
+export function newSinceCountSql(since: Date | null | undefined) {
+  const bound = since ?? null;
+  return sql<number>`count(*) filter (
+    where ${jobs.firstSeenAt} > ${bound}::timestamptz
+      and ${jobs.status} = 'active'
+      and ${jobs.dismissedAt} is null
+      and ${jobs.sponsorTier} <> 'Excluded'
+      and ${jobs.employmentType} = 'full_time'
+      and ${jobs.seniority} is distinct from 'other'
+      and ${jobs.isUs} is not false
+  )`;
+}
+
 export const jobsRouter = createTRPCRouter({
   list: publicProcedure.input(jobListInput).query(async ({ ctx, input }) => {
     const plan = resolveJobQueryPlan(input);
@@ -354,17 +384,28 @@ export const jobsRouter = createTRPCRouter({
    * evidence that a run happened, since firing the event proves only that
    * Inngest accepted it, not that any app is subscribed.
    */
-  pipelineStatus: publicProcedure.query(async ({ ctx }) => {
-    const [row] = await ctx.db
-      .select({
-        lastSeenAt: sql<Date | null>`max(${jobs.lastSeenAt})`,
-        activeCount: sql<number>`count(*) filter (where ${jobs.status} = 'active')`,
-      })
-      .from(jobs);
-    return {
-      configured: isInngestConfigured(),
-      lastSeenAt: row?.lastSeenAt ?? null,
-      activeCount: Number(row?.activeCount ?? 0),
-    };
-  }),
+  pipelineStatus: publicProcedure
+    .input(z.object({ since: z.date().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      // Passed through as-is; `newSinceCountSql` owns the undefined handling.
+      const since = input?.since;
+      const [row] = await ctx.db
+        .select({
+          lastSeenAt: sql<Date | null>`max(${jobs.lastSeenAt})`,
+          activeCount: sql<number>`count(*) filter (where ${jobs.status} = 'active')`,
+          // How many postings arrived since the caller asked. This is what makes
+          // "did the button do anything?" answerable: a run that refreshes
+          // `last_seen_at` but inserts nothing is a real, common outcome, and
+          // reporting it as "new jobs are landing" is how the board came to look
+          // broken when it was working.
+          newSince: newSinceCountSql(since),
+        })
+        .from(jobs);
+      return {
+        configured: isInngestConfigured(),
+        lastSeenAt: row?.lastSeenAt ?? null,
+        activeCount: Number(row?.activeCount ?? 0),
+        newSince: Number(row?.newSince ?? 0),
+      };
+    }),
 });

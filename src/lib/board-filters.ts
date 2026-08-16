@@ -1,0 +1,148 @@
+/**
+ * Board filter state — the shape, the defaults, and the (de)serialization used
+ * to persist it across reloads. Pure and unit-tested; the page owns the React
+ * wiring.
+ *
+ * WHY THIS IS PERSISTED. The board used to hold filters in plain `useState`, so
+ * every reload snapped back to "Past week". That default is also why "Find new
+ * jobs" looked broken: the age filter reads `coalesce(posted_at, first_seen_at)`,
+ * so a posting we *discovered* today but that was *published* three weeks ago is
+ * hidden the moment it arrives. Measured on the live DB, the old default showed
+ * 2,248 of 11,455 active jobs, and hid 4 of the 5 jobs the last refresh found.
+ * So: default to "Any time", and remember whatever the owner picks instead.
+ */
+
+export type Sort = 'combined' | 'fit' | 'recent';
+/** Posted-age window in days; 0 means "any age". */
+export type Within = 1 | 3 | 7 | 0;
+
+export interface BoardFilters {
+  sort: Sort;
+  within: Within;
+  remoteOnly: boolean;
+  includeSenior: boolean;
+  includeExcluded: boolean;
+  includeClosed: boolean;
+}
+
+const SORTS: Sort[] = ['combined', 'fit', 'recent'];
+const WITHINS: Within[] = [1, 3, 7, 0];
+
+/**
+ * `within: 0` ("Any time") is deliberate — see the file header. A newly
+ * ingested job frequently has an old `posted_at`, so any non-zero default hides
+ * part of what each refresh finds.
+ */
+export const DEFAULT_FILTERS: BoardFilters = {
+  sort: 'combined',
+  within: 0,
+  remoteOnly: false,
+  includeSenior: false,
+  includeExcluded: false,
+  includeClosed: false,
+};
+
+/** Versioned so a future shape change can't be misread as valid stored state. */
+export const BOARD_FILTERS_KEY = 'h1b-board:filters:v1';
+
+function bool(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+/**
+ * Read persisted filters, falling back to a default per field. Deliberately
+ * total: anything unparseable or unrecognized yields defaults rather than
+ * throwing, because a corrupt localStorage entry must never break the board.
+ */
+export function parseStoredFilters(raw: string | null | undefined): BoardFilters {
+  if (!raw) return DEFAULT_FILTERS;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return DEFAULT_FILTERS;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return DEFAULT_FILTERS;
+
+  const v = parsed as Partial<Record<keyof BoardFilters, unknown>>;
+  return {
+    sort: SORTS.includes(v.sort as Sort) ? (v.sort as Sort) : DEFAULT_FILTERS.sort,
+    within: WITHINS.includes(v.within as Within) ? (v.within as Within) : DEFAULT_FILTERS.within,
+    remoteOnly: bool(v.remoteOnly, DEFAULT_FILTERS.remoteOnly),
+    includeSenior: bool(v.includeSenior, DEFAULT_FILTERS.includeSenior),
+    includeExcluded: bool(v.includeExcluded, DEFAULT_FILTERS.includeExcluded),
+    includeClosed: bool(v.includeClosed, DEFAULT_FILTERS.includeClosed),
+  };
+}
+
+export function serializeFilters(filters: BoardFilters): string {
+  return JSON.stringify(filters);
+}
+
+/* -------------------------------------------------------------------------
+ * A tiny store over localStorage, shaped for `useSyncExternalStore`.
+ *
+ * localStorage is an external mutable source that does not exist during SSR,
+ * which is exactly what `useSyncExternalStore` is for: the server snapshot is
+ * the defaults, the client snapshot is what was persisted, and React reconciles
+ * the two without a hydration mismatch or a setState-in-effect.
+ * ---------------------------------------------------------------------- */
+
+/** Cached so `getSnapshot` is referentially stable — React loops otherwise. */
+let snapshot: BoardFilters | null = null;
+const listeners = new Set<() => void>();
+
+/**
+ * Client-only. Guarded anyway: this module is still evaluated in the SSR pass
+ * (it is imported by a client component), so its module state lives in the
+ * server process. React only ever calls `getServerFiltersSnapshot` there, and
+ * this guard makes sure a stray server-side call returns defaults rather than
+ * throwing — or worse, seeding a cache shared across every request.
+ */
+export function getFiltersSnapshot(): BoardFilters {
+  if (typeof window === 'undefined') return DEFAULT_FILTERS;
+  snapshot ??= parseStoredFilters(window.localStorage.getItem(BOARD_FILTERS_KEY));
+  return snapshot;
+}
+
+/** SSR and the hydrating render both see the defaults. */
+export function getServerFiltersSnapshot(): BoardFilters {
+  return DEFAULT_FILTERS;
+}
+
+/**
+ * Subscribe to filter changes — both our own writes and another tab's.
+ *
+ * The `storage` event is what keeps two open tabs from clobbering each other:
+ * without it, tab B keeps serving its stale cached snapshot, and its next write
+ * spreads that stale object back over whatever tab A just saved.
+ */
+export function subscribeFilters(onChange: () => void): () => void {
+  listeners.add(onChange);
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== null && event.key !== BOARD_FILTERS_KEY) return;
+    // Null key means storage was cleared wholesale; either way, re-read.
+    snapshot = null;
+    onChange();
+  };
+  window.addEventListener('storage', onStorage);
+
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+/** Persist and publish. Writing is best-effort: a full or blocked quota (private
+ * browsing) must not take the board down with it. */
+export function writeFilters(next: BoardFilters): void {
+  snapshot = next;
+  try {
+    window.localStorage.setItem(BOARD_FILTERS_KEY, serializeFilters(next));
+  } catch {
+    // Ignore — the in-memory snapshot still drives this session.
+  }
+  for (const listener of listeners) listener();
+}
