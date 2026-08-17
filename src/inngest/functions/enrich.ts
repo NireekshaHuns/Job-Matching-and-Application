@@ -64,7 +64,8 @@ export const enrichJobs = inngest.createFunction(
   async ({ event, step }) => {
     const depth = (event?.data as RefreshEventData | undefined)?.continuation ?? 0;
 
-    const { buildConnectors } = await import('@/server/ingest/registry');
+    const { buildConnectors, isMeteredSource, skipSourceOnRun } =
+      await import('@/server/ingest/registry');
     const sources = buildConnectors().map((c) => c.source);
 
     const seen: string[] = [];
@@ -72,8 +73,38 @@ export const enrichJobs = inngest.createFunction(
     let deferredTotal = 0;
 
     for (const source of sources) {
+      const metered = isMeteredSource(source);
+
+      // A metered source is fetched ONCE per user-triggered refresh. A
+      // continuation exists to drain postings already sitting in the DB, and
+      // this run's `requests` counter resets to zero on every one of them — so
+      // without this guard, one click would re-buy the same listings up to
+      // MAX_CONTINUATIONS more times. Nothing is lost by skipping: a metered
+      // source returns far fewer than MAX_NEW_PER_SOURCE postings, so it is
+      // never the source that deferred.
+      if (skipSourceOnRun(source, depth)) {
+        perSource[source] = { fetched: 0, inserted: 0, deferred: 0 };
+        continue;
+      }
+
       // One step per source: a fresh invocation each, so the 300s budget applies
       // per source rather than to the whole run.
+      //
+      // For a metered source the fetch is split into its OWN step, because
+      // `step.run` re-executes its whole callback on retry — and this callback
+      // fails for reasons that have nothing to do with fetching (a missing LLM
+      // key, a classify/embed 5xx, a Neon timeout). Sharing a retry boundary
+      // would re-buy the listings on every attempt. Split, the fetch memoizes
+      // on success and only enrichment retries. Safe to serialize between steps
+      // because the connector's request cap bounds how much it can return.
+      const prefetched = metered
+        ? await step.run(`fetch-${source}`, async () => {
+            const { buildConnectors: build } = await import('@/server/ingest/registry');
+            const connector = build().find((c) => c.source === source);
+            return connector ? await connector.fetch() : [];
+          })
+        : null;
+
       const result = await step.run(`ingest-${source}`, async () => {
         const { neon } = await import('@neondatabase/serverless');
         const { drizzle } = await import('drizzle-orm/neon-http');
@@ -84,14 +115,25 @@ export const enrichJobs = inngest.createFunction(
         const { installDbTimeout } = await import('@/server/db/http-timeout');
         installDbTimeout();
 
-        const connector = build().find((c) => c.source === source);
-        if (!connector) return { fingerprints: [], fetched: 0, inserted: 0, deferred: 0 };
-
         const clients = await buildEnrichmentClients();
         if (!clients) throw new Error('No LLM key configured — cannot enrich.');
 
+        let postings;
+        if (prefetched) {
+          // Step output round-trips through JSON, so `postedAt` arrives as a
+          // string. Revive it — `jobs.posted_date` and the board's "5h ago"
+          // rendering both depend on it being a real Date.
+          postings = prefetched.map((p) => ({
+            ...p,
+            postedAt: p.postedAt ? new Date(p.postedAt) : null,
+          }));
+        } else {
+          const connector = build().find((c) => c.source === source);
+          if (!connector) return { fingerprints: [], fetched: 0, inserted: 0, deferred: 0 };
+          postings = await connector.fetch();
+        }
+
         const db = drizzle(neon(process.env.DATABASE_URL ?? ''), { schema });
-        const postings = await connector.fetch();
         const run = await runEnrichment({
           db,
           postings,

@@ -70,7 +70,7 @@ Five stages: gather → check sponsorship → filter junk → rank vs. resume �
 
 The Stack/Architecture sections above describe the original intent; these pieces were deliberately dropped and are **not** pending work (don't reintroduce without asking):
 
-- **Aggregator API connector** (JSearch / FlyByAPIs) — public ATS feeds + the GitHub repo give enough coverage.
+- ~~**Aggregator API connector**~~ — reinstated (#157). JSearch covers Indeed / Glassdoor / ZipRecruiter, which have no public API and block direct fetches. Metered: gated on `AGGREGATOR_API_KEY`, capped per run, stops on 429.
 - **Embedding / pgvector relevance** — relevance uses interpretable keyword overlap instead (`src/server/resume/fit.ts`). The `embedding` columns/indexes exist but don't feed scoring.
 - **S3 resume storage** — resumes are handled locally (PDF text extraction + LaTeX compile).
 - **Terraform** — no infra-as-code.
