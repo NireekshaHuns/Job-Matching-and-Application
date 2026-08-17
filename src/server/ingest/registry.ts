@@ -4,6 +4,7 @@
  * fixture client in tests.
  */
 import { existsSync, readFileSync } from 'node:fs';
+import { aggregatorConnector, type AggregatorQuery } from './connectors/aggregator';
 import { ashbyConnector, type AshbyBoard } from './connectors/ashby';
 import { greenhouseConnector, type GreenhouseBoard } from './connectors/greenhouse';
 import { leverConnector, type LeverBoard } from './connectors/lever';
@@ -123,8 +124,34 @@ export function linkedInEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.LINKEDIN_GUEST_ENABLED === 'true';
 }
 
+/**
+ * Queries for the JSearch aggregator. Deliberately the same four themes as
+ * `LINKEDIN_SEARCHES`, so the overlap between the two sources is measurable
+ * rather than guessed — if the aggregator turns out to return mostly jobs
+ * LinkedIn already found, that shows up as near-zero inserts rather than as a
+ * vague impression.
+ */
+export const AGGREGATOR_QUERIES: AggregatorQuery[] = [
+  { query: 'software engineer in United States' },
+  { query: 'backend engineer in United States' },
+  { query: 'full stack engineer in United States' },
+  { query: 'machine learning engineer in United States' },
+];
+
+/**
+ * The aggregator is a METERED, PAID source — the free plan is 200 requests per
+ * month. No key means the connector is not registered at all, so CI, e2e and a
+ * default checkout can never spend the allowance, and clearing the variable is
+ * the kill switch. See connectors/aggregator.ts for the per-run request cap.
+ */
+export function aggregatorApiKey(env: NodeJS.ProcessEnv = process.env): string | null {
+  const key = env.AGGREGATOR_API_KEY?.trim();
+  return key ? key : null;
+}
+
 export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnector[] {
   const discovered = loadDiscoveredBoards();
+  const aggregatorKey = aggregatorApiKey();
   const greenhouse = mergeBoards(GREENHOUSE_BOARDS, discovered.greenhouse, (b) => b.token);
   const lever = mergeBoards(LEVER_BOARDS, discovered.lever, (b) => b.token);
   const ashby = mergeBoards(ASHBY_BOARDS, discovered.ashby, (b) => b.board);
@@ -143,5 +170,10 @@ export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnect
     // fetched and enriched in its own Inngest step, so cross-connector
     // collisions are resolved by `loadExistingFingerprints` rather than here.
     ...(linkedInEnabled() ? [linkedInGuestConnector(LINKEDIN_SEARCHES, fetcher)] : []),
+    // After LinkedIn as well as the ATS feeds: this is the only metered source,
+    // so it should contribute what nothing else already covers. Its postings
+    // carry the publisher's own apply link, not an aggregator redirect, so a
+    // collision here doesn't degrade the URL the board sends you to.
+    ...(aggregatorKey ? [aggregatorConnector(aggregatorKey, AGGREGATOR_QUERIES, fetcher)] : []),
   ];
 }

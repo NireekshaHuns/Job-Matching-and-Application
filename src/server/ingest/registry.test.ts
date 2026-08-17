@@ -31,11 +31,28 @@ describe('buildConnectors', () => {
     expect(sources()).not.toContain('linkedin');
   });
 
-  it('registers LinkedIn last when enabled, so ATS feeds win dedup collisions', () => {
+  it('registers LinkedIn after the ATS feeds when enabled', () => {
+    vi.stubEnv('AGGREGATOR_API_KEY', '');
     vi.stubEnv('LINKEDIN_GUEST_ENABLED', 'true');
     const registered = sources();
     expect(registered).toContain('linkedin');
     expect(registered.at(-1)).toBe('linkedin');
+  });
+
+  it('leaves the metered aggregator out unless a key is present', () => {
+    vi.stubEnv('AGGREGATOR_API_KEY', '');
+    expect(sources()).not.toContain('aggregator:jsearch');
+    // Whitespace is not a key — this one costs money per request.
+    vi.stubEnv('AGGREGATOR_API_KEY', '   ');
+    expect(sources()).not.toContain('aggregator:jsearch');
+  });
+
+  it('registers the aggregator last, after LinkedIn as well as the ATS feeds', () => {
+    vi.stubEnv('LINKEDIN_GUEST_ENABLED', 'true');
+    vi.stubEnv('AGGREGATOR_API_KEY', 'test-key');
+    const registered = sources();
+    expect(registered).toContain('aggregator:jsearch');
+    expect(registered.at(-1)).toBe('aggregator:jsearch');
   });
 });
 
