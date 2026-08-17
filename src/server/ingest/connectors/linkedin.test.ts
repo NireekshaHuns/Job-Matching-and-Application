@@ -257,6 +257,29 @@ describe('parseJobDetail', () => {
   it('returns empty output for markup it does not recognize', () => {
     expect(parseJobDetail('<div>nothing familiar</div>')).toEqual({ jdText: '', criteria: {} });
   });
+
+  it('yields no JD when the end marker is missing, rather than swallowing the page', () => {
+    // Start marker present, end marker gone — the shape a LinkedIn markup change
+    // produces. Running to EOF would pull the script body (and its disqualifying
+    // phrase) into the JD, and `matchSponsor` would then read it as Excluded.
+    const truncated = [
+      '<div class="show-more-less-html__markup">',
+      '<p>Real description text.</p>',
+      '<script>var t = "must be authorized to work without sponsorship";</script>',
+      '<footer>Unrelated page copy</footer>',
+    ].join('');
+
+    const { jdText } = parseJobDetail(truncated);
+    expect(jdText).toBe('');
+    expect(jdText).not.toContain('without sponsorship');
+  });
+
+  it('caps a runaway JD so it cannot blow past the embedding input limit', () => {
+    const huge = 'word '.repeat(20_000);
+    const html = `<div class="show-more-less-html__markup"><p>${huge}</p></div></section>`;
+
+    expect(parseJobDetail(html).jdText.length).toBeLessThanOrEqual(20_000);
+  });
 });
 
 describe('normalizeLinkedInLocation', () => {

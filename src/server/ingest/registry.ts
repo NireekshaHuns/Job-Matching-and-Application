@@ -135,9 +135,13 @@ export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnect
     ashbyConnector(ashby, fetcher),
     smartRecruitersConnector(SMARTRECRUITERS_BOARDS, fetcher),
     simplifyNewGradConnector({}, fetcher),
-    // LAST on purpose: `dedupPostings` keeps the first occurrence of a
-    // fingerprint, so the official ATS feeds above win any collision and
-    // LinkedIn only contributes jobs they didn't already cover.
+    // LAST on purpose, so LinkedIn only contributes jobs the official feeds
+    // didn't already cover. Note this is NOT simply "first occurrence wins":
+    // `dedupPostings` lets a JD-bearing posting replace a JD-less earlier one,
+    // so a LinkedIn duplicate can still displace a JD-less Simplify row (and
+    // with it, Simplify's direct apply URL). In production each connector is
+    // fetched and enriched in its own Inngest step, so cross-connector
+    // collisions are resolved by `loadExistingFingerprints` rather than here.
     ...(linkedInEnabled() ? [linkedInGuestConnector(LINKEDIN_SEARCHES, fetcher)] : []),
   ];
 }

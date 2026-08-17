@@ -22,6 +22,24 @@ describe('htmlToText', () => {
   it('turns block/br boundaries into line breaks', () => {
     expect(htmlToText('<p>One</p><p>Two</p>')).toBe('One\nTwo');
   });
+
+  // Company names arrive as HTML from the LinkedIn connector, and an undecoded
+  // entity survives into `normalizeCompanyName`, where `&` becomes ' AND ' and
+  // the sponsor join key stops matching its ATS spelling.
+  it.each([
+    ['Nestl&eacute;', 'Nestlé'],
+    ['Nestl&#233;', 'Nestlé'],
+    ['Nestl&#xe9;', 'Nestlé'],
+    ['Moody&rsquo;s', 'Moody’s'],
+    ['Booz Allen &mdash; Digital', 'Booz Allen — Digital'],
+  ])('decodes %s to %s', (input, expected) => {
+    expect(htmlToText(input)).toBe(expected);
+  });
+
+  it('leaves an unknown or malformed entity alone rather than mangling it', () => {
+    expect(htmlToText('A&notarealentity;B')).toBe('A&notarealentity;B');
+    expect(htmlToText('cost &#99999999999;')).toBe('cost &#99999999999;');
+  });
 });
 
 describe('toPostedAt', () => {

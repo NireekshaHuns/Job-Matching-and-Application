@@ -43,7 +43,7 @@ Five stages: gather → check sponsorship → filter junk → rank vs. resume �
 - Two independent scores stored and displayed per job card: H1B possibility (tier + short "why") and relevance (% vs selected resume + skill-gap chips). The board offers jobright-style sorts — **Recommended** (a tier-dominant blend, the default), **Most fit** (relevance), and **Most recent**; H1B tier is surfaced per card and governs the Excluded filter + the Recommended weighting. The blended "Recommended" score is computed at read time only — never blend the two scores into a single **stored** value (they live in separate columns/tables).
 - Multiple resumes ("lenses"): relevance is computed per job × resume. Jobs whose required skills exceed a resume are **not hidden** — they score lower and show the gap (e.g. "missing: Kafka, Go").
 - Cost control: run LLM classify/embed **once per new job** and cache; never re-analyze an already-processed job.
-- Sourcing: prefer public ATS endpoints and public GitHub repos. Never scrape Indeed or Glassdoor. LinkedIn is a deliberate, bounded exception: the `linkedin` connector reads their undocumented guest job-search endpoint, gated behind `LINKEDIN_GUEST_ENABLED` (off by default). It stays low-volume and polite — sequential requests with a delay, capped pages and capped JD fetches — and **aborts the whole run on 429/403/999**. Never add retry-into-a-block, proxy/IP rotation, or fingerprint spoofing to get around a block; if LinkedIn refuses, the connector returns what it has and the other sources carry the run.
+- Sourcing: prefer public ATS endpoints and public GitHub repos.
 - Do NOT build application autofill (Simplify's extension handles the submit step).
 
 ## Conventions

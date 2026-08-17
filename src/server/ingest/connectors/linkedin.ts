@@ -165,6 +165,12 @@ export function parseSearchCards(html: string): LinkedInCard[] {
   return cards;
 }
 
+/**
+ * Belt-and-braces bound on a single JD. Well above any real posting, low enough
+ * that a runaway match can't reach `embedJd`'s input limit.
+ */
+const MAX_JD_CHARS = 20_000;
+
 const JD_START_RE = /<div[^>]*show-more-less-html__markup[^>]*>/;
 /** The JD block runs until the "show more" control or the end of its section. */
 const JD_END_RE = /show-more-less-html__button|<\/section>/;
@@ -193,7 +199,16 @@ export function parseJobDetail(html: string): LinkedInDetail {
   if (start) {
     const rest = html.slice(start.index + start[0].length);
     const end = JD_END_RE.exec(rest);
-    jdText = htmlToText(end ? rest.slice(0, end.index) : rest);
+    // BOTH markers required. Falling back to "rest of the document" on a missing
+    // end marker looks harmless but isn't: `htmlToText` doesn't strip <script>
+    // contents, so the JD would absorb inline JS and unrelated page copy — and a
+    // stray "must be authorized to work without sponsorship" anywhere in that
+    // tail flips the job to Excluded (`matchSponsor` reads the untruncated
+    // text), while an oversized blob fails `embedJd` outright. Cost control says
+    // a processed job is never re-analysed, so either mistake is permanent.
+    // No end marker means the markup moved: return nothing and let the zero-JD
+    // warning surface it.
+    jdText = end ? htmlToText(rest.slice(0, end.index)).slice(0, MAX_JD_CHARS) : '';
   }
 
   const criteria: Record<string, string> = {};
@@ -323,12 +338,18 @@ export function linkedInGuestConnector(
       );
 
       const postings: RawPosting[] = [];
+      let detailsFetched = 0;
+      let detailsWithoutJd = 0;
       for (const card of cards) {
         let detail: LinkedInDetail | null = null;
         if (!blocked && wanted.has(card.jobId)) {
           const html = await get(buildDetailUrl(card.jobId), `job ${card.jobId}`);
           // Best-effort: a failed detail fetch yields an empty JD, not a lost job.
-          if (html !== null) detail = parseJobDetail(html);
+          if (html !== null) {
+            detail = parseJobDetail(html);
+            detailsFetched++;
+            if (!detail.jdText) detailsWithoutJd++;
+          }
         }
 
         postings.push({
@@ -347,6 +368,14 @@ export function linkedInGuestConnector(
 
       if (blocked && postings.length === 0) {
         console.warn('[linkedin] blocked before any posting was collected — returning nothing.');
+      }
+      // A page we fetched fine but couldn't read a JD out of means the detail
+      // markup moved. Say so: the jobs still land, silently JD-less, and cost
+      // control means they are never looked at again.
+      if (detailsWithoutJd > 0) {
+        console.warn(
+          `[linkedin] ${detailsWithoutJd}/${detailsFetched} detail pages parsed to an empty JD — check the detail selectors (pnpm linkedin:probe).`,
+        );
       }
       return postings;
     },
