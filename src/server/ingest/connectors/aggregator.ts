@@ -17,7 +17,9 @@ import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
-const SOURCE = 'aggregator:jsearch';
+/** Exported so the registry can mark this source metered without a literal. */
+export const AGGREGATOR_SOURCE = 'aggregator:jsearch';
+const SOURCE = AGGREGATOR_SOURCE;
 const API_BASE = 'https://api.openwebninja.com/jsearch/search-v2';
 
 /**
@@ -202,16 +204,26 @@ export function aggregatorConnector(
             const posting = toPosting(job);
             // Keyed by job_id so the same posting returned by two queries costs
             // one row; falling back to the fingerprint when the API omits an id.
-            if (posting) byJobId.set(job.job_id ?? posting.fingerprint, posting);
+            // `??` alone would let an EMPTY id become the key `''`, collapsing
+            // every such posting into one row.
+            if (posting) byJobId.set(job.job_id?.trim() || posting.fingerprint, posting);
           }
 
           // A missing cursor means the last page — walking further would spend
-          // requests re-reading page one.
-          cursor = body.cursor ?? null;
-          if (!cursor || jobs.length === 0) break;
+          // requests re-reading page one. An unchanged cursor means the same,
+          // via a provider bug rather than the end of the results.
+          const next = body.cursor ?? null;
+          if (!next || next === cursor || jobs.length === 0) break;
+          cursor = next;
         }
       }
 
+      // Always report spend, not just at the cap. The only other budget signal
+      // this API gives is a 429, which arrives after the money is gone — the
+      // same blind spot that made issue #148 take hours to diagnose.
+      console.info(
+        `[jsearch] spent ${requests} request(s) this run for ${byJobId.size} posting(s).`,
+      );
       if (requests >= maxRequests) {
         console.warn(
           `[jsearch] hit the ${maxRequests}-request cap for this run; some queries were not searched.`,

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AGGREGATOR_QUERIES } from '../registry';
 import type { Fetcher } from '../types';
 import { aggregatorConnector, formatLocation, toPosting } from './aggregator';
 import searchFixture from './__fixtures__/jsearch-search.json';
@@ -158,6 +159,45 @@ describe('aggregatorConnector', () => {
     expect(urls).toHaveLength(1);
   });
 
+  it('does not collapse distinct postings that share an empty job_id', async () => {
+    const { fetcher } = recordingFetcher(() => ({
+      body: {
+        cursor: null,
+        data: [
+          {
+            job_id: '',
+            employer_name: 'Acme',
+            job_title: 'Software Engineer',
+            job_city: 'Austin',
+            job_state: 'TX',
+            job_apply_link: 'https://acme.com/1',
+          },
+          {
+            job_id: '',
+            employer_name: 'Globex',
+            job_title: 'Backend Engineer',
+            job_city: 'Seattle',
+            job_state: 'WA',
+            job_apply_link: 'https://globex.com/2',
+          },
+        ],
+      },
+    }));
+
+    const postings = await aggregatorConnector('key', QUERIES, fetcher).fetch();
+    expect(postings).toHaveLength(2);
+  });
+
+  it('stops paginating when the provider echoes the same cursor back', async () => {
+    const { fetcher, urls } = recordingFetcher(() => ({
+      body: { cursor: 'stuck', data: endlessPage(2, 0).data },
+    }));
+
+    await aggregatorConnector('key', QUERIES, fetcher, { maxPagesPerQuery: 10 }).fetch();
+    // Page 1, then page 2 with cursor=stuck, then stop rather than re-reading it.
+    expect(urls).toHaveLength(2);
+  });
+
   it('collapses the same job returned by two different queries', async () => {
     const { fetcher } = recordingFetcher(() => ({
       body: { data: endlessPage(2, 0).data, cursor: null },
@@ -182,6 +222,44 @@ describe('aggregatorConnector', () => {
     await expect(aggregatorConnector('key', QUERIES, serverError).fetch()).resolves.toEqual([]);
 
     warn.mockRestore();
+  });
+
+  // The caps that actually ship are the DEFAULTS. Every other cap test passes
+  // explicit options, so without these you could raise DEFAULT_MAX_PAGES_PER_QUERY
+  // to 50 and the suite would stay green — on the one file whose whole premise
+  // is that the request budget is the design constraint.
+  it('defaults to at most 2 pages per query without any options', async () => {
+    const { fetcher, urls } = recordingFetcher((_url, call) => ({
+      body: endlessPage(5, call * 5),
+    }));
+
+    await aggregatorConnector('key', QUERIES, fetcher).fetch();
+    expect(urls).toHaveLength(2);
+  });
+
+  it('defaults to a run costing no more than 12 requests, for any query list', async () => {
+    const { fetcher, urls } = recordingFetcher((_url, call) => ({
+      body: endlessPage(5, call * 5),
+    }));
+
+    const manyQueries = Array.from({ length: 40 }, (_, i) => ({ query: `q${i}` }));
+    await aggregatorConnector('key', manyQueries, fetcher).fetch();
+
+    expect(urls.length).toBeLessThanOrEqual(12);
+  });
+
+  it('costs at most 12 requests with the queries actually shipped in the registry', async () => {
+    const { fetcher, urls } = recordingFetcher((_url, call) => ({
+      body: endlessPage(5, call * 5),
+    }));
+
+    await aggregatorConnector('key', AGGREGATOR_QUERIES, fetcher).fetch();
+
+    // 4 shipped queries x 2 default pages = 8, inside the 12 ceiling. If someone
+    // adds queries without raising the cap, this catches the silent truncation;
+    // if they raise both, it catches the spend.
+    expect(urls).toHaveLength(8);
+    expect(urls.length).toBeLessThanOrEqual(12);
   });
 
   it('does not throw when the network rejects', async () => {

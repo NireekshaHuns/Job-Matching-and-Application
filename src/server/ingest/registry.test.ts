@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildConnectors, loadDiscoveredBoards, mergeBoards } from './registry';
+import {
+  buildConnectors,
+  isMeteredSource,
+  loadDiscoveredBoards,
+  mergeBoards,
+  skipSourceOnRun,
+} from './registry';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -53,6 +59,30 @@ describe('buildConnectors', () => {
     const registered = sources();
     expect(registered).toContain('aggregator:jsearch');
     expect(registered.at(-1)).toBe('aggregator:jsearch');
+  });
+});
+
+describe('metered-source policy', () => {
+  it('marks only the paid aggregator as metered', () => {
+    expect(isMeteredSource('aggregator:jsearch')).toBe(true);
+    for (const free of ['greenhouse', 'lever', 'ashby', 'linkedin', 'github:simplify-newgrad']) {
+      expect(isMeteredSource(free)).toBe(false);
+    }
+  });
+
+  it('fetches the metered source on the initial run only', () => {
+    expect(skipSourceOnRun('aggregator:jsearch', 0)).toBe(false);
+    // Every continuation resets the connector's per-run request counter, so
+    // fetching here would re-buy the same listings once per continuation.
+    expect(skipSourceOnRun('aggregator:jsearch', 1)).toBe(true);
+    expect(skipSourceOnRun('aggregator:jsearch', 12)).toBe(true);
+  });
+
+  it('never skips a free source, which must keep draining the backlog', () => {
+    for (const depth of [0, 1, 12]) {
+      expect(skipSourceOnRun('greenhouse', depth)).toBe(false);
+      expect(skipSourceOnRun('linkedin', depth)).toBe(false);
+    }
   });
 });
 

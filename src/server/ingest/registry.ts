@@ -4,7 +4,11 @@
  * fixture client in tests.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { aggregatorConnector, type AggregatorQuery } from './connectors/aggregator';
+import {
+  AGGREGATOR_SOURCE,
+  aggregatorConnector,
+  type AggregatorQuery,
+} from './connectors/aggregator';
 import { ashbyConnector, type AshbyBoard } from './connectors/ashby';
 import { greenhouseConnector, type GreenhouseBoard } from './connectors/greenhouse';
 import { leverConnector, type LeverBoard } from './connectors/lever';
@@ -147,6 +151,39 @@ export const AGGREGATOR_QUERIES: AggregatorQuery[] = [
 export function aggregatorApiKey(env: NodeJS.ProcessEnv = process.env): string | null {
   const key = env.AGGREGATOR_API_KEY?.trim();
   return key ? key : null;
+}
+
+/**
+ * Sources that cost money per request. The orchestrator treats these
+ * differently: it fetches them at most once per user-triggered refresh, never
+ * on a continuation run, and never inside a step that can retry for reasons
+ * unrelated to fetching.
+ *
+ * A connector's own per-run cap can only bound ONE `fetch()` call — it cannot
+ * see that the orchestrator is about to call it another twelve times. That
+ * accounting has to live here.
+ */
+const METERED_SOURCES = new Set<string>([AGGREGATOR_SOURCE]);
+
+export function isMeteredSource(source: string): boolean {
+  return METERED_SOURCES.has(source);
+}
+
+/**
+ * Whether the orchestrator should skip a source on this run.
+ *
+ * A continuation run exists to drain postings already in the DB, and every one
+ * of them resets the connector's per-run request counter — so a metered source
+ * fetched on continuations would be re-bought up to `MAX_CONTINUATIONS` extra
+ * times per user click. Free sources are unaffected; they must keep running or
+ * the backlog never drains.
+ *
+ * Extracted from the Inngest function so the policy is testable without a
+ * step-runner harness — it is the guard standing between one button click and
+ * half the monthly quota.
+ */
+export function skipSourceOnRun(source: string, continuationDepth: number): boolean {
+  return isMeteredSource(source) && continuationDepth > 0;
 }
 
 export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnector[] {
