@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { ashbyConnector, type AshbyBoard } from './connectors/ashby';
 import { greenhouseConnector, type GreenhouseBoard } from './connectors/greenhouse';
 import { leverConnector, type LeverBoard } from './connectors/lever';
+import { linkedInGuestConnector, type LinkedInSearch } from './connectors/linkedin';
 import { simplifyNewGradConnector } from './connectors/simplify';
 import { smartRecruitersConnector, type SmartRecruitersBoard } from './connectors/smartrecruiters';
 import type { DiscoveredBoards } from './discover';
@@ -99,6 +100,29 @@ export const SMARTRECRUITERS_BOARDS: SmartRecruitersBoard[] = [
   { identifier: 'Visa', company: 'Visa' },
 ];
 
+/**
+ * Keyword/location queries for the LinkedIn guest search. Deliberately few and
+ * broad: every search costs list requests, and the JD-fetch cap is shared
+ * across all of them, so more searches mean thinner coverage of each rather
+ * than more jobs. Widen only after watching a real run's counts.
+ */
+export const LINKEDIN_SEARCHES: LinkedInSearch[] = [
+  { keywords: 'software engineer', location: 'United States' },
+  { keywords: 'backend engineer', location: 'United States' },
+  { keywords: 'full stack engineer', location: 'United States' },
+  { keywords: 'machine learning engineer', location: 'United States' },
+];
+
+/**
+ * LinkedIn is OFF unless explicitly switched on. It reads an undocumented
+ * internal endpoint that LinkedIn rate-limits hard, so it must never run in CI,
+ * e2e, or a default checkout — and this is the one-variable kill switch when it
+ * starts getting blocked. See connectors/linkedin.ts for the full caveats.
+ */
+export function linkedInEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.LINKEDIN_GUEST_ENABLED === 'true';
+}
+
 export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnector[] {
   const discovered = loadDiscoveredBoards();
   const greenhouse = mergeBoards(GREENHOUSE_BOARDS, discovered.greenhouse, (b) => b.token);
@@ -111,5 +135,13 @@ export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnect
     ashbyConnector(ashby, fetcher),
     smartRecruitersConnector(SMARTRECRUITERS_BOARDS, fetcher),
     simplifyNewGradConnector({}, fetcher),
+    // LAST on purpose, so LinkedIn only contributes jobs the official feeds
+    // didn't already cover. Note this is NOT simply "first occurrence wins":
+    // `dedupPostings` lets a JD-bearing posting replace a JD-less earlier one,
+    // so a LinkedIn duplicate can still displace a JD-less Simplify row (and
+    // with it, Simplify's direct apply URL). In production each connector is
+    // fetched and enriched in its own Inngest step, so cross-connector
+    // collisions are resolved by `loadExistingFingerprints` rather than here.
+    ...(linkedInEnabled() ? [linkedInGuestConnector(LINKEDIN_SEARCHES, fetcher)] : []),
   ];
 }

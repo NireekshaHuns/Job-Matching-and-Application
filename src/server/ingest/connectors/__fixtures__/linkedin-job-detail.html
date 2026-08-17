@@ -1,0 +1,70 @@
+<!--
+  SYNTHETIC fixture for the LinkedIn guest job-detail endpoint. See the header
+  of linkedin-search.html — same caveat, same way to regenerate.
+
+  Covers on purpose: the JD markup block, the "show more" button that terminates
+  it, trailing non-JD markup that must NOT be swallowed, and the job-criteria
+  table (whose "Employment type" line is appended to the JD text).
+-->
+<section class="core-section-container my-3 description">
+  <div class="description__text description__text--rich">
+    <div class="show-more-less-html" data-max-lines="5">
+      <div
+        class="show-more-less-html__markup show-more-less-html__markup--clamp-after-5 relative overflow-hidden"
+      >
+        <p><strong>About the role</strong></p>
+        <p>
+          We&#39;re hiring a backend engineer to scale APIs in Go &amp; Rust across our payments
+          platform.
+        </p>
+        <p><strong>What you&#39;ll do</strong></p>
+        <ul>
+          <li>Design and ship distributed services handling 100k+ requests per second</li>
+          <li>Own reliability for the ledger, including on-call rotation</li>
+        </ul>
+        <p><strong>Requirements</strong></p>
+        <ul>
+          <li>5+ years building production backend systems</li>
+          <li>Experience with Kafka, Postgres and Kubernetes</li>
+        </ul>
+        <p>
+          Acme will sponsor H-1B visas for exceptional candidates. We are an equal opportunity
+          employer.
+        </p>
+      </div>
+      <button
+        class="show-more-less-html__button show-more-less-html__button--more"
+        data-tracking-control-name="public_jobs_show-more-html-btn"
+      >
+        Show more
+        <icon class="show-more-less-html__button-icon"></icon>
+      </button>
+    </div>
+  </div>
+</section>
+<ul class="description__job-criteria-list">
+  <li class="description__job-criteria-item">
+    <h3 class="description__job-criteria-subheader">Seniority level</h3>
+    <span class="description__job-criteria-text description__job-criteria-text--criteria">
+      Mid-Senior level
+    </span>
+  </li>
+  <li class="description__job-criteria-item">
+    <h3 class="description__job-criteria-subheader">Employment type</h3>
+    <span class="description__job-criteria-text description__job-criteria-text--criteria">
+      Full-time
+    </span>
+  </li>
+  <li class="description__job-criteria-item">
+    <h3 class="description__job-criteria-subheader">Job function</h3>
+    <span class="description__job-criteria-text description__job-criteria-text--criteria">
+      Engineering and Information Technology
+    </span>
+  </li>
+  <li class="description__job-criteria-item">
+    <h3 class="description__job-criteria-subheader">Industries</h3>
+    <span class="description__job-criteria-text description__job-criteria-text--criteria">
+      Financial Services
+    </span>
+  </li>
+</ul>

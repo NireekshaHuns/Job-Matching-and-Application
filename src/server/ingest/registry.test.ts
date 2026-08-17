@@ -1,13 +1,18 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildConnectors, loadDiscoveredBoards, mergeBoards } from './registry';
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('buildConnectors', () => {
+  const sources = () => buildConnectors(async () => new Response('{}')).map((c) => c.source);
+
   it('registers the ATS + simplify connectors', () => {
-    const sources = buildConnectors(async () => new Response('{}')).map((c) => c.source);
-    expect(sources).toEqual(
+    expect(sources()).toEqual(
       expect.arrayContaining([
         'greenhouse',
         'lever',
@@ -16,6 +21,21 @@ describe('buildConnectors', () => {
         'github:simplify-newgrad',
       ]),
     );
+  });
+
+  it('leaves LinkedIn out unless it is explicitly switched on', () => {
+    vi.stubEnv('LINKEDIN_GUEST_ENABLED', '');
+    expect(sources()).not.toContain('linkedin');
+    // Anything other than the exact opt-in string keeps it off.
+    vi.stubEnv('LINKEDIN_GUEST_ENABLED', '1');
+    expect(sources()).not.toContain('linkedin');
+  });
+
+  it('registers LinkedIn last when enabled, so ATS feeds win dedup collisions', () => {
+    vi.stubEnv('LINKEDIN_GUEST_ENABLED', 'true');
+    const registered = sources();
+    expect(registered).toContain('linkedin');
+    expect(registered.at(-1)).toBe('linkedin');
   });
 });
 

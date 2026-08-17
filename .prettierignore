@@ -6,3 +6,7 @@ coverage
 public/swiftlatex
 *.tsbuildinfo
 next-env.d.ts
+
+# HTML ingestion fixtures — kept byte-exact so they stay a faithful record of
+# what the source actually returns (see `pnpm linkedin:probe --write-fixtures`).
+src/server/ingest/connectors/__fixtures__/*.html
