@@ -38,14 +38,93 @@ describe('smartRecruitersConnector', () => {
     expect(first.location).toBe('New York, NY');
     expect(first.url).toBe('https://jobs.smartrecruiters.com/Acme/1001');
     expect(first.postedAt?.toISOString().slice(0, 10)).toBe('2026-07-18');
-    expect(first.jdText).toContain('scale APIs in Go');
-    expect(first.jdText).toContain('5+ years');
+    // fetch() no longer buys descriptions — hydrate() does, after selection.
+    expect(first.jdText).toBe('');
     // fingerprint uses the normalized company ("ACME"), not the raw string.
     expect(first.fingerprint.startsWith('ACME|')).toBe(true);
 
     // An empty city/region with remote=true collapses to just "Remote".
     expect(second.location).toBe('Remote');
+  });
+
+  it('fills in descriptions for the postings handed to hydrate', async () => {
+    const connector = smartRecruitersConnector(
+      [{ identifier: 'Acme', company: 'Acme, Inc.' }],
+      routingFetcher(listFixture, detailFixture),
+    );
+    const [first, second] = await connector.hydrate!(await connector.fetch());
+
+    expect(first.jdText).toContain('scale APIs in Go');
+    expect(first.jdText).toContain('5+ years');
     expect(second.jdText).toContain('Build UIs in React');
+  });
+
+  it('hydrates only what it is given, so the JD budget tracks the enrichment window', async () => {
+    // The bug this shape prevents: buying JDs during fetch() always spent the
+    // budget on the HEAD of the feed, while the enrichment cap had already moved
+    // past it. From run 2 onward every enriched posting arrived with an empty
+    // JD — and `Excluded` is derived from JD text alone and never recomputed.
+    const detailIds: string[] = [];
+    const content = Array.from({ length: 300 }, (_, i) => ({
+      id: String(i),
+      name: 'Software Engineer',
+      location: { city: 'NYC' },
+    }));
+    const fetcher: Fetcher = async (url) => {
+      const detail = url.match(/\/postings\/([^?]+)$/);
+      if (detail) {
+        detailIds.push(detail[1]);
+        return new Response(JSON.stringify({ jobAd: { sections: { d: { text: 'JD' } } } }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ content, totalFound: 300 }), { status: 200 });
+    };
+
+    const connector = smartRecruitersConnector([{ identifier: 'Acme', company: 'Acme' }], fetcher);
+    const all = await connector.fetch();
+    expect(detailIds).toEqual([]); // fetch() buys nothing
+
+    // Second run's slice, the way planEnrichmentBatch would hand it over.
+    const hydrated = await connector.hydrate!(all.slice(100, 105));
+    expect(detailIds).toEqual(['100', '101', '102', '103', '104']);
+    expect(hydrated.every((p) => p.jdText === 'JD')).toBe(true);
+  });
+
+  it('stops buying descriptions once the per-call budget is spent', async () => {
+    let detailFetches = 0;
+    const content = Array.from({ length: 200 }, (_, i) => ({
+      id: String(i),
+      name: 'Software Engineer',
+      location: { city: 'NYC' },
+    }));
+    const fetcher: Fetcher = async (url) => {
+      if (/\/postings\/[^?]+$/.test(url)) {
+        detailFetches++;
+        return new Response(JSON.stringify({ jobAd: { sections: { d: { text: 'JD' } } } }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ content, totalFound: 200 }), { status: 200 });
+    };
+
+    const connector = smartRecruitersConnector([{ identifier: 'Acme', company: 'Acme' }], fetcher);
+    const hydrated = await connector.hydrate!(await connector.fetch());
+
+    expect(detailFetches).toBe(120);
+    expect(hydrated).toHaveLength(200);
+    // Past the budget the posting still survives, just without a description.
+    expect(hydrated[199].jdText).toBe('');
+  });
+
+  it('reports a page that fails mid-pagination instead of passing it off as the end', async () => {
+    const fetcher: Fetcher = async () => new Response('boom', { status: 500 });
+    const connector = smartRecruitersConnector([{ identifier: 'Visa', company: 'Visa' }], fetcher);
+    await connector.fetch();
+
+    const report = connector.lastReport?.();
+    expect(report?.failed).toBe(1);
+    expect(report?.failures[0]).toBe('Visa -> HTTP 500 at offset 0');
   });
 
   it('yields an empty JD when the detail fetch fails (best-effort)', async () => {
@@ -53,7 +132,7 @@ describe('smartRecruitersConnector', () => {
       [{ identifier: 'Acme', company: 'Acme' }],
       routingFetcher(listFixture, {}, { detailStatus: 500 }),
     );
-    const postings = await connector.fetch();
+    const postings = await connector.hydrate!(await connector.fetch());
     expect(postings).toHaveLength(2);
     expect(postings[0].jdText).toBe('');
   });

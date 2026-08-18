@@ -69,7 +69,10 @@ export const enrichJobs = inngest.createFunction(
     const sources = buildConnectors().map((c) => c.source);
 
     const seen: string[] = [];
-    const perSource: Record<string, { fetched: number; inserted: number; deferred: number }> = {};
+    const perSource: Record<
+      string,
+      { fetched: number; inserted: number; deferred: number; boardsFailed: number }
+    > = {};
     let deferredTotal = 0;
 
     for (const source of sources) {
@@ -83,7 +86,7 @@ export const enrichJobs = inngest.createFunction(
       // source returns far fewer than MAX_NEW_PER_SOURCE postings, so it is
       // never the source that deferred.
       if (skipSourceOnRun(source, depth)) {
-        perSource[source] = { fetched: 0, inserted: 0, deferred: 0 };
+        perSource[source] = { fetched: 0, inserted: 0, deferred: 0, boardsFailed: 0 };
         continue;
       }
 
@@ -111,6 +114,7 @@ export const enrichJobs = inngest.createFunction(
         const schema = await import('@/server/db/schema');
         const { buildConnectors: build } = await import('@/server/ingest/registry');
         const { runEnrichment } = await import('@/server/enrich/run');
+        type JobConnector = Awaited<ReturnType<typeof build>>[number];
         const { buildEnrichmentClients } = await import('@/server/enrich/clients');
         const { installDbTimeout } = await import('@/server/db/http-timeout');
         installDbTimeout();
@@ -119,6 +123,8 @@ export const enrichJobs = inngest.createFunction(
         if (!clients) throw new Error('No LLM key configured — cannot enrich.');
 
         let postings;
+        let boardsFailed = 0;
+        let hydrator: JobConnector['hydrate'];
         if (prefetched) {
           // Step output round-trips through JSON, so `postedAt` arrives as a
           // string. Revive it — `jobs.posted_date` and the board's "5h ago"
@@ -129,8 +135,19 @@ export const enrichJobs = inngest.createFunction(
           }));
         } else {
           const connector = build().find((c) => c.source === source);
-          if (!connector) return { fingerprints: [], fetched: 0, inserted: 0, deferred: 0 };
+          if (!connector)
+            return { fingerprints: [], fetched: 0, inserted: 0, deferred: 0, boardsFailed: 0 };
           postings = await connector.fetch();
+          hydrator = connector.hydrate?.bind(connector);
+          // Dead ATS tokens used to vanish into a console.warn — the run looked
+          // healthy while a board quietly contributed nothing. Carry the count out.
+          const report = connector.lastReport?.();
+          if (report && report.failed > 0) {
+            boardsFailed = report.failed;
+            console.warn(
+              `[${source}] ${report.failed}/${report.attempted} boards failed: ${report.failures.join(', ')}`,
+            );
+          }
         }
 
         const db = drizzle(neon(process.env.DATABASE_URL ?? ''), { schema });
@@ -139,6 +156,9 @@ export const enrichJobs = inngest.createFunction(
           postings,
           chat: clients.chat,
           embedder: clients.embedder,
+          // Sources that charge a request per description fill them in after the
+          // cap has chosen, so the budget lands on postings that get enriched.
+          hydrate: hydrator,
           // Reconcile once at the end, over every source — doing it here would
           // close every other source's jobs.
           reconcile: false,
@@ -150,6 +170,7 @@ export const enrichJobs = inngest.createFunction(
           fetched: postings.length,
           inserted: run.inserted,
           deferred: run.deferred,
+          boardsFailed,
         };
       });
 
@@ -158,6 +179,7 @@ export const enrichJobs = inngest.createFunction(
         fetched: result.fetched,
         inserted: result.inserted,
         deferred: result.deferred,
+        boardsFailed: result.boardsFailed,
       };
       deferredTotal += result.deferred;
     }

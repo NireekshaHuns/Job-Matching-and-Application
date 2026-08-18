@@ -7,6 +7,7 @@
 import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
+import { emptyReport, recordAttempt, recordFailure } from '../report';
 
 export interface GreenhouseBoard {
   /** Board token, e.g. `stripe` from boards.greenhouse.io/stripe. */
@@ -47,15 +48,20 @@ export function greenhouseConnector(
   boards: GreenhouseBoard[],
   fetcher: Fetcher = globalThis.fetch,
 ): JobConnector {
+  // Reset per fetch, so a report never mixes two runs.
+  let report = emptyReport();
   return {
     source: SOURCE,
+    lastReport: () => report,
     async fetch(): Promise<RawPosting[]> {
+      report = emptyReport();
       const postings: RawPosting[] = [];
 
       for (const board of boards) {
+        recordAttempt(report);
         const res = await fetcher(`${API_BASE}/${board.token}/jobs?content=true`);
         if (!res.ok) {
-          console.warn(`[greenhouse] ${board.token} -> HTTP ${res.status}`);
+          recordFailure(report, board.token, `HTTP ${res.status}`);
           continue;
         }
         const data = (await res.json()) as { jobs?: GreenhouseJob[] };
