@@ -54,6 +54,43 @@ describe('looksLikeSwe', () => {
     }
   });
 
+  it('keeps software-adjacent roles whose titles never say "engineer"', () => {
+    for (const title of [
+      'Technical Product Manager',
+      'Tech Product Manager',
+      'Technical Program Manager',
+      'TPM, Platform',
+      'Product Manager, Developer Tools',
+      'Software Analyst',
+      'Systems Analyst',
+      'Solutions Architect',
+      'Cloud Architect',
+      'Solutions Engineer',
+      'Developer Advocate',
+      'Tech Lead',
+      'Engineering Manager',
+      'Director of Engineering',
+      'Database Administrator',
+      'Research Scientist',
+    ]) {
+      expect(looksLikeSwe(title), title).toBe(true);
+    }
+  });
+
+  it('keeps the abbreviations that read as noise but are real SWE titles', () => {
+    for (const title of ['FDE', 'Forward Deployed Engineer', 'SRE II', 'MLOps Engineer', 'SDET']) {
+      expect(looksLikeSwe(title), title).toBe(true);
+    }
+  });
+
+  it('still drops an UNQUALIFIED product/program/project manager', () => {
+    // The technical-PM patterns require a qualifier precisely so this stays out:
+    // a bare "Product Manager" is usually a business role.
+    for (const title of ['Product Manager', 'Program Manager', 'Project Manager', 'Scrum Master']) {
+      expect(looksLikeSwe(title), title).toBe(false);
+    }
+  });
+
   it('drops clear non-software roles', () => {
     for (const title of [
       'Junior Optical Technician',
@@ -65,7 +102,9 @@ describe('looksLikeSwe', () => {
       'Enterprise Sales Representative',
       'Marketing Manager',
       'Product Manager',
-      'Technical Program Manager',
+      // 'Technical Program Manager' was here. Deliberate policy change: the
+      // filter is now lenient toward software-ADJACENT titles, so a technical
+      // PM/TPM is kept and only the unqualified "Product Manager" is dropped.
       'Mechanical Engineer',
       'Electrical Engineer',
       'Recruiter',

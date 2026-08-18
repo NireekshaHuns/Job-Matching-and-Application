@@ -13,6 +13,14 @@
  * precise role_family to whatever passes. Title-only (JD text is often empty at
  * fetch time).
  *
+ * The positive list also covers SOFTWARE-ADJACENT roles whose titles never say
+ * "engineer" — technical product/program manager, solutions architect, solutions
+ * engineer, developer advocate, systems analyst, tech lead. These are jobs a
+ * software engineer applies to, and several were being dropped by blanket rules
+ * (any "product manager" was denied, which took "Technical Product Manager" with
+ * it). An unqualified "Product Manager" stays denied: without a technical
+ * qualifier it is usually a business role.
+ *
  * A false-drop here is unrecoverable (the job never reaches the DB), so the filter
  * leans lenient — in the spirit of the project's "broad net over SWE titles, then
  * filter by classification" approach. Tune the arrays if real SWE roles get dropped.
@@ -50,6 +58,34 @@ const SWE_POSITIVE_PATTERNS: RegExp[] = [
   // Named-language roles are already covered by "developer" / generic "engineer";
   // "golang" is the one language token that isn't a common English word on its own.
   /\bgolang\b/i,
+
+  // --- Software-adjacent roles ------------------------------------------------
+  // Deliberately broad: these are jobs a software engineer applies to, even
+  // though the title never says "engineer". Listed as POSITIVES so they beat the
+  // non-software denylist below — a "Technical Product Manager" would otherwise
+  // be dropped by the blanket `product manager` rule.
+
+  // Technical PM/TPM. A qualifier is required on purpose: an unqualified
+  // "Product Manager" is usually a business role and stays denied.
+  /\b(?:technical|tech|platform|engineering|developer|api|infrastructure|data|cloud|ml|ai|security)\s+(?:product|program|project)\s+manager\b/i,
+  /\btpm\b/i,
+  // "Product Manager, Developer Tools" — qualifier trailing rather than leading.
+  /\b(?:product|program)\s+manager\b[\s,–—-]*(?:developer|platform|infrastructure|api|data|cloud|ml\b|ai\b|security|engineering|technical)/i,
+
+  // Architects and technical leadership.
+  /\b(?:solutions?|cloud|technical|enterprise|systems?|security|data)\s+architect\b/i,
+  /\b(?:tech|technical|engineering)\s+lead\b/i,
+  /\b(?:engineering|software)\s+(?:manager|director|lead)\b/i,
+  /\bdirector\s+of\s+engineering\b/i,
+
+  // Technical individual contributors whose titles avoid "engineer".
+  /\bsolutions?\s+(?:engineer|consultant|developer)\b/i,
+  /\bforward[\s-]?deployed\b/i,
+  /\b(?:systems?|technical|business systems|data|security)\s+analyst\b/i,
+  /\b(?:ml|mlops|dataops|devrel)\b/i,
+  /\bdeveloper\s+(?:advocate|relations|experience)\b/i,
+  /\b(?:database|system)s?\s+administrator\b|\bsysadmin\b|\bdba\b/i,
+  /\bresearch\s+scientist\b/i,
 ];
 
 /** Bare "engineer/engineering" — kept only after the non-software checks above. */
