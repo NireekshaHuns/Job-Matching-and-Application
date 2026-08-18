@@ -61,6 +61,83 @@ function levenshteinRatio(a: string, b: string): number {
   return max === 0 ? 1 : 1 - levenshtein(a, b) / max;
 }
 
+/** All spaces removed — "WAL MART ASSOCIATES" -> "WALMARTASSOCIATES". */
+function compress(key: string): string {
+  return key.replace(/ /g, '');
+}
+
+/**
+ * Cumulative concatenations at token boundaries:
+ * "WAL MART ASSOCIATES" -> ["WAL", "WALMART", "WALMARTASSOCIATES"].
+ */
+function tokenBoundaryPrefixes(key: string): string[] {
+  const out: string[] = [];
+  let acc = '';
+  for (const tok of key.split(' ')) {
+    if (!tok) continue;
+    acc += tok;
+    out.push(acc);
+  }
+  return out;
+}
+
+/**
+ * Similarity for names that differ only in WORD SPACING, which neither the token
+ * nor the character measure can see.
+ *
+ * The motivating case is real and expensive: postings say "Walmart" (key
+ * `WALMART`) while USCIS files as "Wal-Mart Associates, Inc." (key
+ * `WAL MART ASSOCIATES`, since the hyphen becomes a separator). They share no
+ * token, `WAL` is too short for the prefix index, and the character ratio is
+ * 0.37 — so Walmart scored `Low` ("no sponsorship history") against 1,669 real
+ * sponsorships with a 2026 filing.
+ *
+ * DELIBERATELY BOUNDARY-ALIGNED, not a plain substring test. The shorter
+ * compressed name must equal a whole-token prefix of the longer one, so
+ * `WALMART` matches `WAL MART ASSOCIATES` but `APPLE` does NOT match
+ * `APPLEBEES` — a plain `startsWith` would happily assert that one, and a
+ * false High tier is worse than a false Low.
+ *
+ * Names that compress identically ("WAL MART" vs "WALMART") score 1; the caller
+ * still caps fuzzy confidence below an exact hit, so this never impersonates one.
+ *
+ * KNOWN FALSE POSITIVE, measured against the live sponsor table: "PaperCut" (the
+ * print-management vendor) resolves to "PAPER CUT CLOTHING" at 0.85. That pair is
+ * structurally identical to the Walmart one — a two-token span plus one trailing
+ * token — so the name alone carries no signal to separate them, exactly the
+ * ambiguity documented on `similarity`. The trade was measured and taken: one
+ * employer with a single filing scores slightly generously, versus Walmart's
+ * 1,669 filings being reported as "no sponsorship history". The visible
+ * confidence and the correctable `company_aliases` row are the backstop.
+ */
+export function spacingSimilarity(a: string, b: string): number {
+  const ca = compress(a);
+  const cb = compress(b);
+  if (!ca || !cb) return 0;
+  if (ca === cb) return 1;
+
+  const [shortKey, longKey] = ca.length <= cb.length ? [a, b] : [b, a];
+  const shortComp = compress(shortKey);
+
+  // How many of the longer name's tokens the shorter name covers.
+  const spanned = tokenBoundaryPrefixes(longKey).indexOf(shortComp) + 1;
+
+  // Must span at least TWO tokens. That is precisely what makes this a SPACING
+  // difference ("WALMART" = "WAL" + "MART") rather than plain token containment
+  // ("APPLE" is just the first token of "APPLE BANK FOR SAVINGS"). The token
+  // measure already scores containment, and scores it low on purpose — one
+  // shared token out of four is weak evidence, and overriding that here would
+  // resolve Apple to a savings bank.
+  if (spanned < 2) return 0;
+
+  // Scored on coverage, but floored well above FUZZY_THRESHOLD: a boundary
+  // -aligned spacing variant is strong evidence even when the legal name carries
+  // several extra tokens.
+  const shorter = shortComp.length;
+  const longer = compress(longKey).length;
+  return 0.75 + 0.2 * (shorter / longer);
+}
+
 /**
  * Blended similarity of two already-normalized keys. Takes the max of a
  * token-overlap score (handles suffix/subset variants like "Stripe" vs
@@ -88,7 +165,7 @@ export function similarity(a: string, b: string): number {
   const containment = inter / Math.min(aTokens.size, bTokens.size);
   const tokenScore = 0.6 * jaccard + 0.4 * containment;
 
-  return Math.max(tokenScore, levenshteinRatio(a, b));
+  return Math.max(tokenScore, levenshteinRatio(a, b), spacingSimilarity(a, b));
 }
 
 /** An index over sponsor keys supporting exact lookup + fuzzy candidate generation. */
@@ -110,6 +187,7 @@ export function buildSponsorIndex(keys: Iterable<string>): SponsorIndex {
   const all = new Set<string>();
   const byToken = new Map<string, Set<string>>();
   const byPrefix = new Map<string, Set<string>>();
+  const byBoundary = new Map<string, Set<string>>();
 
   for (const key of keys) {
     if (!key) continue;
@@ -119,6 +197,11 @@ export function buildSponsorIndex(keys: Iterable<string>): SponsorIndex {
       addTo(byToken, tok, key);
       if (tok.length >= PREFIX_LEN) addTo(byPrefix, tok.slice(0, PREFIX_LEN), key);
     }
+    // Space-insensitive bucketing at token boundaries, so a spacing variant is
+    // even PROPOSED as a candidate. Without this, `WALMART` generated an empty
+    // candidate list against `WAL MART ASSOCIATES` — the similarity measure
+    // never got a chance to score it.
+    for (const boundary of tokenBoundaryPrefixes(key)) addTo(byBoundary, boundary, key);
   }
 
   return {
@@ -131,6 +214,15 @@ export function buildSponsorIndex(keys: Iterable<string>): SponsorIndex {
         if (tok.length >= PREFIX_LEN) {
           for (const key of byPrefix.get(tok.slice(0, PREFIX_LEN)) ?? []) out.add(key);
         }
+      }
+      // Looking up EVERY cumulative prefix of the query covers both directions:
+      // a sponsor whose boundary prefix is the whole query ("Walmart" ->
+      // "WAL MART ASSOCIATES"), and a sponsor whose full name is a prefix of the
+      // query ("Wal-Mart Associates" -> "WALMART").
+      let acc = '';
+      for (const tok of tokens) {
+        acc += tok;
+        for (const key of byBoundary.get(acc) ?? []) out.add(key);
       }
       return [...out];
     },
