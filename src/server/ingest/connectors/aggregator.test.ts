@@ -19,25 +19,32 @@ function recordingFetcher(
   return { fetcher, urls };
 }
 
-/** A page of N synthetic jobs plus a cursor, so pagination never terminates. */
+/**
+ * A page of N synthetic jobs plus a cursor, so pagination never terminates.
+ * Mirrors the real envelope — results are nested under `data.jobs`, not `data`.
+ */
 function endlessPage(n: number, offset: number) {
   return {
-    cursor: `cursor-${offset}`,
-    data: Array.from({ length: n }, (_, i) => ({
-      job_id: `job-${offset + i}`,
-      employer_name: `Company ${offset + i}`,
-      job_title: 'Software Engineer',
-      job_city: 'Austin',
-      job_state: 'TX',
-      job_apply_link: `https://example.com/${offset + i}`,
-      job_description: 'Work on things.',
-    })),
+    data: {
+      cursor: `cursor-${offset}`,
+      jobs: Array.from({ length: n }, (_, i) => ({
+        job_id: `job-${offset + i}`,
+        employer_name: `Company ${offset + i}`,
+        job_title: 'Software Engineer',
+        job_city: 'Austin',
+        job_state: 'TX',
+        job_apply_link: `https://example.com/${offset + i}`,
+        job_description: 'Work on things.',
+      })),
+    },
   };
 }
 
 describe('aggregatorConnector', () => {
   it('maps API jobs to normalized postings and drops unusable rows', async () => {
-    const { fetcher } = recordingFetcher(() => ({ body: { ...searchFixture, cursor: null } }));
+    const { fetcher } = recordingFetcher(() => ({
+      body: { ...searchFixture, data: { ...searchFixture.data, cursor: null } },
+    }));
     const postings = await aggregatorConnector('key', QUERIES, fetcher).fetch();
 
     // 5 in the fixture; one has no employer name and one has no apply link.
@@ -57,7 +64,9 @@ describe('aggregatorConnector', () => {
   });
 
   it('decodes entities in the employer name so the sponsor join key survives', async () => {
-    const { fetcher } = recordingFetcher(() => ({ body: { ...searchFixture, cursor: null } }));
+    const { fetcher } = recordingFetcher(() => ({
+      body: { ...searchFixture, data: { ...searchFixture.data, cursor: null } },
+    }));
     const postings = await aggregatorConnector('key', QUERIES, fetcher).fetch();
 
     const nestle = postings.find((p) => p.sourceJobId === 'jsearch-1002');
@@ -72,7 +81,7 @@ describe('aggregatorConnector', () => {
 
   it('sends the api key and the recency filter, and flattens HTML descriptions', async () => {
     const { fetcher, urls } = recordingFetcher(() => ({
-      body: { ...searchFixture, cursor: null },
+      body: { ...searchFixture, data: { ...searchFixture.data, cursor: null } },
     }));
     const seen: RequestInit[] = [];
     const spy: Fetcher = async (url, init) => {
@@ -93,7 +102,8 @@ describe('aggregatorConnector', () => {
 
   it('stops the entire run on 429 and keeps what it already collected', async () => {
     const { fetcher, urls } = recordingFetcher((_url, call) => {
-      if (call === 0) return { body: { ...searchFixture, cursor: null } };
+      if (call === 0)
+        return { body: { ...searchFixture, data: { ...searchFixture.data, cursor: null } } };
       return { status: 429, body: { message: 'quota exceeded' } };
     });
 
@@ -152,7 +162,50 @@ describe('aggregatorConnector', () => {
 
   it('stops paginating a query when the cursor runs out', async () => {
     const { fetcher, urls } = recordingFetcher(() => ({
-      body: { data: endlessPage(2, 0).data, cursor: null },
+      body: { data: { jobs: endlessPage(2, 0).data.jobs, cursor: null } },
+    }));
+
+    await aggregatorConnector('key', QUERIES, fetcher, { maxPagesPerQuery: 5 }).fetch();
+    expect(urls).toHaveLength(1);
+  });
+
+  // The live API returns { status, request_id, parameters, data: { jobs, cursor } }.
+  // Reading `data` as the array (or `cursor` from the top level) fails SILENTLY:
+  // HTTP 200, no warning, zero postings, and a request spent to learn nothing.
+  it('reads jobs from the nested data.jobs envelope, not from data itself', async () => {
+    const flat: Fetcher = async () =>
+      new Response(
+        JSON.stringify({
+          status: 'OK',
+          cursor: null,
+          data: [
+            {
+              job_id: 'x',
+              employer_name: 'Acme',
+              job_title: 'Software Engineer',
+              job_apply_link: 'https://acme.com/x',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+
+    // A flat payload must yield nothing — that shape is not what this API sends.
+    await expect(aggregatorConnector('key', QUERIES, flat).fetch()).resolves.toEqual([]);
+
+    const { fetcher } = recordingFetcher(() => ({
+      body: { data: { cursor: null, jobs: endlessPage(2, 0).data.jobs } },
+    }));
+    await expect(aggregatorConnector('key', QUERIES, fetcher).fetch()).resolves.toHaveLength(2);
+  });
+
+  it('paginates on data.cursor rather than a top-level cursor', async () => {
+    const { fetcher, urls } = recordingFetcher((_url, call) => ({
+      // A decoy top-level cursor that must be ignored.
+      body: {
+        cursor: 'top-level-decoy',
+        data: { cursor: null, jobs: endlessPage(2, call).data.jobs },
+      },
     }));
 
     await aggregatorConnector('key', QUERIES, fetcher, { maxPagesPerQuery: 5 }).fetch();
@@ -162,25 +215,27 @@ describe('aggregatorConnector', () => {
   it('does not collapse distinct postings that share an empty job_id', async () => {
     const { fetcher } = recordingFetcher(() => ({
       body: {
-        cursor: null,
-        data: [
-          {
-            job_id: '',
-            employer_name: 'Acme',
-            job_title: 'Software Engineer',
-            job_city: 'Austin',
-            job_state: 'TX',
-            job_apply_link: 'https://acme.com/1',
-          },
-          {
-            job_id: '',
-            employer_name: 'Globex',
-            job_title: 'Backend Engineer',
-            job_city: 'Seattle',
-            job_state: 'WA',
-            job_apply_link: 'https://globex.com/2',
-          },
-        ],
+        data: {
+          cursor: null,
+          jobs: [
+            {
+              job_id: '',
+              employer_name: 'Acme',
+              job_title: 'Software Engineer',
+              job_city: 'Austin',
+              job_state: 'TX',
+              job_apply_link: 'https://acme.com/1',
+            },
+            {
+              job_id: '',
+              employer_name: 'Globex',
+              job_title: 'Backend Engineer',
+              job_city: 'Seattle',
+              job_state: 'WA',
+              job_apply_link: 'https://globex.com/2',
+            },
+          ],
+        },
       },
     }));
 
@@ -190,7 +245,7 @@ describe('aggregatorConnector', () => {
 
   it('stops paginating when the provider echoes the same cursor back', async () => {
     const { fetcher, urls } = recordingFetcher(() => ({
-      body: { cursor: 'stuck', data: endlessPage(2, 0).data },
+      body: { data: { cursor: 'stuck', jobs: endlessPage(2, 0).data.jobs } },
     }));
 
     await aggregatorConnector('key', QUERIES, fetcher, { maxPagesPerQuery: 10 }).fetch();
@@ -200,7 +255,7 @@ describe('aggregatorConnector', () => {
 
   it('collapses the same job returned by two different queries', async () => {
     const { fetcher } = recordingFetcher(() => ({
-      body: { data: endlessPage(2, 0).data, cursor: null },
+      body: { data: { jobs: endlessPage(2, 0).data.jobs, cursor: null } },
     }));
 
     const postings = await aggregatorConnector(

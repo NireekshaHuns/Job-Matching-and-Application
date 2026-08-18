@@ -69,10 +69,18 @@ interface JSearchJob {
   job_publisher?: string | null;
 }
 
+/**
+ * The API nests results one level deeper than the field name suggests:
+ * `{ status, request_id, parameters, data: { jobs, cursor } }`. Reading
+ * `data` as the array yields zero postings with no error — the request
+ * succeeds, `Array.isArray` is false, and the run silently returns nothing.
+ */
 interface JSearchResponse {
-  data?: JSearchJob[];
-  /** Opaque pagination token; absent on the last page. */
-  cursor?: string | null;
+  data?: {
+    jobs?: JSearchJob[];
+    /** Opaque pagination token; absent on the last page. */
+    cursor?: string | null;
+  } | null;
 }
 
 /**
@@ -199,7 +207,7 @@ export function aggregatorConnector(
             break;
           }
 
-          const jobs = Array.isArray(body.data) ? body.data : [];
+          const jobs = Array.isArray(body.data?.jobs) ? body.data.jobs : [];
           for (const job of jobs) {
             const posting = toPosting(job);
             // Keyed by job_id so the same posting returned by two queries costs
@@ -212,7 +220,7 @@ export function aggregatorConnector(
           // A missing cursor means the last page — walking further would spend
           // requests re-reading page one. An unchanged cursor means the same,
           // via a provider bug rather than the end of the results.
-          const next = body.cursor ?? null;
+          const next = body.data?.cursor ?? null;
           if (!next || next === cursor || jobs.length === 0) break;
           cursor = next;
         }
