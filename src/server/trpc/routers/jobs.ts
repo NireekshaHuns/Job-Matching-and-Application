@@ -336,7 +336,6 @@ export const jobsRouter = createTRPCRouter({
         /** Fallback for the card's age label when the feed gave us no post date. */
         firstSeenAt: jobs.firstSeenAt,
         salaryText: jobs.salaryText,
-        salaryMaxUsd: jobs.salaryMaxUsd,
         status: jobs.status,
         roleFamily: jobs.roleFamily,
         seniority: jobs.seniority,

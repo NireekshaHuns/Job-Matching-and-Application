@@ -12,11 +12,17 @@
  *
  * DELIBERATELY CONSERVATIVE. Anything ambiguous returns null, and null means
  * "unknown pay", which the board KEEPS. A parse that guesses wrong hides a real
- * job for good; a parse that gives up only leaves a job unfiltered.
+ * job for good; a parse that gives up only leaves a job unfiltered. Every
+ * judgement call below is settled in that direction.
  */
 
 /** Full-time hours per year, for annualizing an hourly rate. */
 const HOURS_PER_YEAR = 2080;
+/** Working days per year, for annualizing a day rate. */
+const DAYS_PER_YEAR = 260;
+/** Weeks and months, for the same reason. */
+const WEEKS_PER_YEAR = 52;
+const MONTHS_PER_YEAR = 12;
 
 /**
  * Currencies we refuse to read as USD. A bare "$" is treated as USD, but a
@@ -28,14 +34,20 @@ const NON_USD =
 
 /**
  * A money token: optional "$", digits with optional thousands separators and
- * cents, optional "k"/"m" magnitude suffix. Captured so the caller can tell a
- * dollar-marked number from a bare one.
+ * cents, optional "k"/"m" magnitude suffix.
  *
  * The suffix must not be followed by another letter, or the "m" of
  * "$2,000 monthly housing stipend" reads as a magnitude and turns $2,000 into
  * $2 billion. Real data; it cost us that posting.
  */
 const TOKEN = /(\$\s*)?(\d[\d,]*(?:\.\d+)?)(?:\s*([kKmM])(?![A-Za-z]))?/g;
+
+/**
+ * What may sit between the two ends of one range. Anything else — a comma, "+",
+ * "/hr", the word "base" — means the next figure is a SEPARATE amount (a bonus,
+ * a stipend, an unrelated number) rather than the top of this range.
+ */
+const RANGE_SEPARATOR = /^\s*(?:[-–—~]|to|through)\s*$/i;
 
 export interface SalaryRange {
   /** Bottom of the stated range, annualized USD. Equal to `maxUsd` for a single figure. */
@@ -60,11 +72,11 @@ function annualize(amount: number, period: Period): number {
     case 'hour':
       return amount * HOURS_PER_YEAR;
     case 'day':
-      return amount * 260;
+      return amount * DAYS_PER_YEAR;
     case 'week':
-      return amount * 52;
+      return amount * WEEKS_PER_YEAR;
     case 'month':
-      return amount * 12;
+      return amount * MONTHS_PER_YEAR;
     case 'year':
       return amount;
   }
@@ -86,6 +98,89 @@ const RATE_CEILING = 2_000;
 const MIN_ANNUAL = 15_000;
 const MAX_ANNUAL = 10_000_000;
 
+interface Token {
+  value: number;
+  /** Whether the figure carried a "$". */
+  marked: boolean;
+  /** Whether a magnitude suffix ("k"/"m") set the scale explicitly. */
+  scaled: boolean;
+  start: number;
+  end: number;
+}
+
+function tokenize(text: string): Token[] {
+  const tokens: Token[] = [];
+  for (const m of text.matchAll(TOKEN)) {
+    const [whole, dollar, digits, suffix] = m;
+    const start = m.index ?? 0;
+    // Skip percentages ("+ 0.5% equity"), which are equity, not pay.
+    if (/^\s*%/.test(text.slice(start + whole.length))) continue;
+
+    let value = Number(digits.replace(/,/g, ''));
+    if (!Number.isFinite(value)) continue;
+    switch (suffix?.toLowerCase()) {
+      case 'k':
+        value *= 1_000;
+        break;
+      case 'm':
+        value *= 1_000_000;
+        break;
+    }
+
+    tokens.push({
+      value,
+      marked: Boolean(dollar),
+      scaled: Boolean(suffix),
+      start,
+      end: start + whole.length,
+    });
+  }
+  return tokens;
+}
+
+/**
+ * The figures that make up the pay range, and nothing else.
+ *
+ * Anchored on the first dollar-marked figure (or the first figure at all when
+ * none is marked), then extended across range separators only. Two things fall
+ * out of that, both of which the previous "every marked token" reading got
+ * wrong:
+ *
+ *  - "$120,000 - 165,000" keeps BOTH ends. Postings routinely write the "$"
+ *    once, and reading only marked figures capped that job at $120,000 — which
+ *    hid it at the $150k threshold, permanently, since enrichment never
+ *    re-runs on an existing job. Exactly the failure this module exists to avoid.
+ *  - "$150,000 base + $20,000 bonus" stops at the base. A signing bonus is not
+ *    the bottom of the salary range.
+ */
+function payExpression(tokens: Token[], text: string): Token[] {
+  const anchor = tokens.findIndex((t) => t.marked);
+  const first = anchor === -1 ? 0 : anchor;
+  const expression = [tokens[first]];
+
+  for (let i = first; i + 1 < tokens.length; i++) {
+    const gap = text.slice(tokens[i].end, tokens[i + 1].start).replace(/\$/g, '');
+    if (!RANGE_SEPARATOR.test(gap)) break;
+    expression.push(tokens[i + 1]);
+  }
+  return expression;
+}
+
+/**
+ * Is this text talking about money at all? Without a "$" somewhere we need
+ * another signal — "USD", a k/m suffix, or a stated period — or a bare number
+ * gets read as pay. "401(k) match" is the case that matters: 401 annualizes as
+ * an hourly rate to $834,080 and fabricates a salary for a posting that states
+ * none. Deliberately does NOT count the word "salary", which is exactly what
+ * a posting says when it is about to not give you a number.
+ */
+function statesMoney(text: string, tokens: Token[]): boolean {
+  if (tokens.some((t) => t.marked || t.scaled)) return true;
+  if (/\bUSD\b/i.test(text)) return true;
+  if (detectPeriod(text) !== 'year') return true;
+  return /\bper\s+(?:year|annum)\b|\bannually\b/i.test(text);
+}
+
 /**
  * Read annualized USD bounds out of a pay string, or null when the text states
  * no usable USD figure (empty, non-USD, equity-only, unparseable).
@@ -95,48 +190,21 @@ export function parseSalaryRange(text: string | null | undefined): SalaryRange |
   const trimmed = text.trim();
   if (!trimmed || NON_USD.test(trimmed)) return null;
 
+  const tokens = tokenize(trimmed);
+  if (tokens.length === 0 || !statesMoney(trimmed, tokens)) return null;
+
+  const expression = payExpression(tokens, trimmed);
   const period = detectPeriod(trimmed);
 
-  interface Token {
-    value: number;
-    /** Whether the figure carried a "$" — used to ignore stray numbers. */
-    marked: boolean;
-    /** Whether a magnitude suffix ("k"/"m") set the scale explicitly. */
-    scaled: boolean;
-  }
-  const tokens: Token[] = [];
+  // Decided ONCE for the whole range, not per figure: reading "$1,500 - $2,500"
+  // as $3.12M–$2,500 (one end hourly, the other annual) is worse than not
+  // reading it at all, and the mixed result then fails the band check below —
+  // which is the conservative outcome this module wants.
+  const unlabelledRate =
+    period === 'year' && expression.every((t) => !t.scaled && t.value < RATE_CEILING);
+  const effective: Period = unlabelledRate ? 'hour' : period;
 
-  TOKEN.lastIndex = 0;
-  for (let m = TOKEN.exec(trimmed); m !== null; m = TOKEN.exec(trimmed)) {
-    const [, dollar, digits, suffix] = m;
-    // Skip percentages ("+ 0.5% equity") and year-like mentions ("2026 bonus"),
-    // neither of which is pay.
-    const after = trimmed.slice(m.index + m[0].length);
-    if (/^\s*%/.test(after)) continue;
-
-    let value = Number(digits.replace(/,/g, ''));
-    if (!Number.isFinite(value)) continue;
-    if (suffix === 'k' || suffix === 'K') value *= 1_000;
-    else if (suffix === 'm' || suffix === 'M') value *= 1_000_000;
-
-    tokens.push({ value, marked: Boolean(dollar), scaled: Boolean(suffix) });
-  }
-
-  // When any figure is dollar-marked, the unmarked ones are context ("2 years
-  // experience"), not pay — with the exception of the tail of a range written
-  // "$120,000 - 165,000", which the marked-only set already covers well enough.
-  const marked = tokens.filter((t) => t.marked);
-  const usable = marked.length > 0 ? marked : tokens;
-  if (usable.length === 0) return null;
-
-  const annual = usable.map((t) => {
-    // An unsuffixed sub-$2k figure in a range the text never labelled is an
-    // unlabelled hourly rate; a "$150k" figure is never reinterpreted.
-    const effective: Period =
-      period === 'year' && !t.scaled && t.value < RATE_CEILING ? 'hour' : period;
-    return Math.round(annualize(t.value, effective));
-  });
-
+  const annual = expression.map((t) => Math.round(annualize(t.value, effective)));
   const minUsd = Math.min(...annual);
   const maxUsd = Math.max(...annual);
   if (maxUsd < MIN_ANNUAL || maxUsd > MAX_ANNUAL) return null;

@@ -86,11 +86,62 @@ describe('parseSalaryRange', () => {
   it('does not read the "m" of a following word as a magnitude suffix', () => {
     // Regression: "$2,000 monthly" once parsed as $2,000,000,000 and the whole
     // posting fell out of the sanity band.
+    expect(parseSalaryRange('$2,000 monthly')).toEqual({ minUsd: 24_000, maxUsd: 24_000 });
+    expect(parseSalaryRange('$180,000 max')).toEqual({ minUsd: 180_000, maxUsd: 180_000 });
+  });
+
+  it('keeps both ends when only the first figure carries the "$"', () => {
+    // The posting writes the dollar sign once. Reading only marked figures
+    // capped this at $120,000 and hid the job at the $150k threshold — the
+    // exact permanent-hiding failure the parser exists to avoid.
+    expect(parseSalaryRange('$120,000 - 165,000')).toEqual({ minUsd: 120_000, maxUsd: 165_000 });
+    expect(parseSalaryRange('$120k - 150k')).toEqual({ minUsd: 120_000, maxUsd: 150_000 });
+    expect(parseSalaryRange('$130,000 – 160,000 per year')).toEqual({
+      minUsd: 130_000,
+      maxUsd: 160_000,
+    });
+  });
+
+  it('stops at the range and ignores amounts that follow it', () => {
+    // A bonus is not the bottom of the salary range, and a stipend is not the top.
+    expect(parseSalaryRange('$150,000 base + $20,000 bonus')).toEqual({
+      minUsd: 150_000,
+      maxUsd: 150_000,
+    });
     expect(parseSalaryRange('$25.00/hr + $2,000 monthly housing stipend')).toEqual({
       minUsd: 52_000,
-      maxUsd: 4_160_000,
+      maxUsd: 52_000,
     });
-    expect(parseSalaryRange('$180,000 max')).toEqual({ minUsd: 180_000, maxUsd: 180_000 });
+    expect(parseSalaryRange('$140,000–$180,000 plus equity and a $15,000 signing bonus')).toEqual({
+      minUsd: 140_000,
+      maxUsd: 180_000,
+    });
+  });
+
+  it('scales a range as a whole, never one end hourly and the other annual', () => {
+    // Read per-figure, "$1,500 - $2,500" came out as $2,500–$3,120,000 and
+    // cleared every threshold. Mixed scaling is worse than no parse.
+    expect(parseSalaryRange('$1,500 - $2,500')).toBeNull();
+    expect(parseSalaryRange('$1,800 - $2,200')).toBeNull();
+  });
+
+  it('does not invent a salary from a bare number with no money signal', () => {
+    // "401" annualized as an hourly rate is $834,080 — a fabricated figure in a
+    // column whose whole contract is "null means we did not know".
+    expect(parseSalaryRange('401(k)')).toBeNull();
+    expect(parseSalaryRange('Competitive salary with 401(k) match')).toBeNull();
+  });
+
+  it('still reads unmarked figures when something else signals money', () => {
+    expect(parseSalaryRange('70k - 90k')).toEqual({ minUsd: 70_000, maxUsd: 90_000 });
+    expect(parseSalaryRange('Salary: 100,000 - 130,000 USD')).toEqual({
+      minUsd: 100_000,
+      maxUsd: 130_000,
+    });
+    expect(parseSalaryRange('120,000 - 150,000 annually')).toEqual({
+      minUsd: 120_000,
+      maxUsd: 150_000,
+    });
   });
 
   it('ignores unmarked context numbers when a dollar figure is present', () => {

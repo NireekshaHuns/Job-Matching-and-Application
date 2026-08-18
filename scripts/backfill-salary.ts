@@ -8,7 +8,10 @@
  * can be corrected without re-classifying anything — the cost-control invariant
  * holds.
  *
- * Idempotent: re-running re-derives the same values from the same text.
+ * Idempotent, and re-runnable AFTER A PARSER FIX: rows that no longer parse are
+ * actively reset to null rather than skipped. Without that, a value written by
+ * an earlier, buggier parser would survive the fix forever — and a wrong
+ * `salary_max_usd` hides a real job at every threshold above it.
  *
  * Usage: pnpm backfill:salary [--dry-run]
  * Requires DATABASE_URL.
@@ -49,12 +52,29 @@ async function main() {
     .from(schema.jobs)
     .where(isNotNull(schema.jobs.salaryText));
 
-  const parsed: { id: number; text: string; minUsd: number; maxUsd: number }[] = [];
+  interface Update {
+    id: number;
+    text: string;
+    minUsd: number | null;
+    maxUsd: number | null;
+  }
+  const updates: Update[] = [];
+  /** Reporting only — the write list is `updates`. */
+  const parsed: { text: string; minUsd: number; maxUsd: number }[] = [];
   const unparsed: string[] = [];
   for (const row of rows) {
+    const text = row.salaryText ?? '';
     const range = parseSalaryRange(row.salaryText);
-    if (range) parsed.push({ id: row.id, text: row.salaryText ?? '', ...range });
-    else unparsed.push(row.salaryText ?? '');
+    if (range) parsed.push({ text, ...range });
+    else unparsed.push(text);
+    // Unparseable rows are written too, as an explicit null pair — see the
+    // header. Skipping them is what would make a bad parse permanent.
+    updates.push({
+      id: row.id,
+      text,
+      minUsd: range?.minUsd ?? null,
+      maxUsd: range?.maxUsd ?? null,
+    });
   }
 
   const pct = rows.length ? ((parsed.length / rows.length) * 100).toFixed(1) : '0.0';
@@ -65,16 +85,16 @@ async function main() {
   }
   // Left as null (= "unknown pay"), so these postings stay visible at every
   // threshold. In practice they are non-USD ranges we refuse to guess at.
-  console.log(`\nUnparsed (stay visible at every threshold): ${unparsed.length}`);
+  console.log(`\nUnparsed → reset to null (stay visible at every threshold): ${unparsed.length}`);
   for (const u of [...new Set(unparsed)].slice(0, 10)) console.log(`  ${u}`);
 
   if (dryRun) {
-    console.log(`\n--dry-run: would update ${parsed.length} row(s).`);
+    console.log(`\n--dry-run: would write ${updates.length} row(s), ${parsed.length} with values.`);
     return;
   }
 
   let updated = 0;
-  for (const batch of chunk(parsed, CHUNK)) {
+  for (const batch of chunk(updates, CHUNK)) {
     const values = sql.join(
       batch.map((p) => sql`(${p.id}::int, ${p.text}::text, ${p.minUsd}::int, ${p.maxUsd}::int)`),
       sql`, `,
@@ -91,9 +111,14 @@ async function main() {
          and j.salary_text = v.salary_text
     `);
     updated += res.rowCount ?? 0;
-    console.log(`  …${updated}/${parsed.length}`);
+    console.log(`  …${updated}/${updates.length}`);
   }
-  console.log(`\nUpdated ${updated} row(s).`);
+  // A shortfall here is expected, not an error: the guard above skips any row an
+  // enrich run re-classified while this script was reading.
+  console.log(
+    `\nWrote ${updated} of ${updates.length} row(s)` +
+      (updated < updates.length ? ' (the rest changed under us and kept their own values).' : '.'),
+  );
 }
 
 main().catch((err) => {
