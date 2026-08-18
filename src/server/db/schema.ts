@@ -317,6 +317,15 @@ export const jobs = pgTable(
     sponsorMatchConfidence: real('sponsor_match_confidence'),
     /** Best-effort pay range extracted from the JD (e.g. "$150k–$180k"); null when unstated. */
     salaryText: text('salary_text'),
+    /**
+     * `salary_text` parsed into annualized USD bounds so pay can be FILTERED,
+     * not just displayed (see `@/lib/salary`). Null when the posting states no
+     * pay or states it in a currency we won't guess at — and null always means
+     * "unknown", which the board keeps.
+     */
+    salaryMinUsd: integer('salary_min_usd'),
+    /** Top of the parsed range — what the "Min pay" filter compares against. */
+    salaryMaxUsd: integer('salary_max_usd'),
     /** Set when the user removes a job from the board; hidden and never re-shown. */
     dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -327,6 +336,7 @@ export const jobs = pgTable(
     index('jobs_status_idx').on(t.status),
     index('jobs_last_seen_at_idx').on(t.lastSeenAt),
     index('jobs_role_family_idx').on(t.roleFamily),
+    index('jobs_salary_max_usd_idx').on(t.salaryMaxUsd),
     // Approximate nearest-neighbour index for resume↔job similarity search.
     index('jobs_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
   ],
