@@ -1,72 +1,79 @@
 {
   "status": "OK",
   "request_id": "fixture-0001",
-  "cursor": "cursor-page-2",
-  "data": [
-    {
-      "job_id": "jsearch-1001",
-      "employer_name": "Acme, Inc.",
-      "job_publisher": "Indeed",
-      "job_title": "Senior Software Engineer, Backend",
-      "job_city": "New York",
-      "job_state": "NY",
-      "job_country": "US",
-      "job_is_remote": false,
-      "job_posted_at_datetime_utc": "2026-08-12T14:30:00.000Z",
-      "job_apply_link": "https://acme.com/careers/1001",
-      "job_description": "We are hiring engineers to scale APIs.\n\nRequirements:\n- 5+ years of backend experience\n- Go or Java\n\nAcme sponsors H-1B visas for this role."
-    },
-    {
-      "job_id": "jsearch-1002",
-      "employer_name": "Nestl&eacute; USA",
-      "job_publisher": "Glassdoor",
-      "job_title": "Software Engineer (Remote)",
-      "job_city": null,
-      "job_state": null,
-      "job_country": "US",
-      "job_is_remote": true,
-      "job_posted_at_datetime_utc": "2026-08-14T09:00:00.000Z",
-      "job_apply_link": "https://nestleusa.com/jobs/1002",
-      "job_description": "<p>Build internal platform tooling.</p><ul><li>Python</li><li>Kubernetes</li></ul>"
-    },
-    {
-      "job_id": "jsearch-1003",
-      "employer_name": "Globex",
-      "job_publisher": "ZipRecruiter",
-      "job_title": "Full Stack Engineer",
-      "job_city": "Austin",
-      "job_state": "TX",
-      "job_country": "US",
-      "job_is_remote": false,
-      "job_posted_at_datetime_utc": null,
-      "job_apply_link": "https://globex.example/apply/1003",
-      "job_description": "Own features end to end."
-    },
-    {
-      "job_id": "jsearch-1004",
-      "employer_name": "",
-      "job_publisher": "Indeed",
-      "job_title": "Unnamed Employer Role",
-      "job_city": "Boston",
-      "job_state": "MA",
-      "job_country": "US",
-      "job_is_remote": false,
-      "job_posted_at_datetime_utc": "2026-08-15T00:00:00.000Z",
-      "job_apply_link": "https://example.com/apply/1004",
-      "job_description": "Should be dropped: no employer name."
-    },
-    {
-      "job_id": "jsearch-1005",
-      "employer_name": "Initech",
-      "job_publisher": "Indeed",
-      "job_title": "Backend Engineer",
-      "job_city": "Seattle",
-      "job_state": "WA",
-      "job_country": "US",
-      "job_is_remote": false,
-      "job_posted_at_datetime_utc": "2026-08-13T12:00:00.000Z",
-      "job_apply_link": null,
-      "job_description": "Should be dropped: no apply link."
-    }
-  ]
+  "parameters": {
+    "query": "software engineer in United States",
+    "country": "us",
+    "date_posted": "week"
+  },
+  "data": {
+    "jobs": [
+      {
+        "job_id": "jsearch-1001",
+        "employer_name": "Acme, Inc.",
+        "job_publisher": "Indeed",
+        "job_title": "Senior Software Engineer, Backend",
+        "job_city": "New York",
+        "job_state": "NY",
+        "job_country": "US",
+        "job_is_remote": false,
+        "job_posted_at_datetime_utc": "2026-08-12T14:30:00.000Z",
+        "job_apply_link": "https://acme.com/careers/1001",
+        "job_description": "We are hiring engineers to scale APIs.\n\nRequirements:\n- 5+ years of backend experience\n- Go or Java\n\nAcme sponsors H-1B visas for this role."
+      },
+      {
+        "job_id": "jsearch-1002",
+        "employer_name": "Nestl&eacute; USA",
+        "job_publisher": "Glassdoor",
+        "job_title": "Software Engineer (Remote)",
+        "job_city": null,
+        "job_state": null,
+        "job_country": "US",
+        "job_is_remote": true,
+        "job_posted_at_datetime_utc": "2026-08-14T09:00:00.000Z",
+        "job_apply_link": "https://nestleusa.com/jobs/1002",
+        "job_description": "<p>Build internal platform tooling.</p><ul><li>Python</li><li>Kubernetes</li></ul>"
+      },
+      {
+        "job_id": "jsearch-1003",
+        "employer_name": "Globex",
+        "job_publisher": "ZipRecruiter",
+        "job_title": "Full Stack Engineer",
+        "job_city": "Austin",
+        "job_state": "TX",
+        "job_country": "US",
+        "job_is_remote": false,
+        "job_posted_at_datetime_utc": null,
+        "job_apply_link": "https://globex.example/apply/1003",
+        "job_description": "Own features end to end."
+      },
+      {
+        "job_id": "jsearch-1004",
+        "employer_name": "",
+        "job_publisher": "Indeed",
+        "job_title": "Unnamed Employer Role",
+        "job_city": "Boston",
+        "job_state": "MA",
+        "job_country": "US",
+        "job_is_remote": false,
+        "job_posted_at_datetime_utc": "2026-08-15T00:00:00.000Z",
+        "job_apply_link": "https://example.com/apply/1004",
+        "job_description": "Should be dropped: no employer name."
+      },
+      {
+        "job_id": "jsearch-1005",
+        "employer_name": "Initech",
+        "job_publisher": "Indeed",
+        "job_title": "Backend Engineer",
+        "job_city": "Seattle",
+        "job_state": "WA",
+        "job_country": "US",
+        "job_is_remote": false,
+        "job_posted_at_datetime_utc": "2026-08-13T12:00:00.000Z",
+        "job_apply_link": null,
+        "job_description": "Should be dropped: no apply link."
+      }
+    ],
+    "cursor": "cursor-page-2"
+  }
 }
