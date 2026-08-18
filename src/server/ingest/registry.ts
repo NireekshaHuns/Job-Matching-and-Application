@@ -49,9 +49,14 @@ export function loadDiscoveredBoards(file: string = LOCAL_FILE): Partial<Discove
     greenhouse: mergeBoards(committed.greenhouse ?? [], local.greenhouse, (b) => b.token),
     lever: mergeBoards(committed.lever ?? [], local.lever, (b) => b.token),
     ashby: mergeBoards(committed.ashby ?? [], local.ashby, (b) => b.board),
-    // Keyed by host: a tenant's site is part of the identity, but two entries
-    // for one host would fetch the same board twice.
-    workday: mergeBoards(committed.workday ?? [], local.workday, (b) => b.host),
+    // Keyed by host AND site, matching `discover.ts`: one tenant can publish
+    // several career sites and they hold different postings, so keying on host
+    // alone would silently throw one away.
+    workday: mergeBoards(
+      committed.workday ?? [],
+      local.workday,
+      (b) => `${b.host}/${b.site.toLowerCase()}`,
+    ),
   };
 }
 
@@ -282,7 +287,7 @@ export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnect
     // Ahead of the rest: these are the enterprise sponsors nothing else reaches,
     // and the board's whole premise is ranking by real sponsorship history.
     workdayConnector(
-      mergeBoards(WORKDAY_BOARDS, discovered.workday, (b) => b.host),
+      mergeBoards(WORKDAY_BOARDS, discovered.workday, (b) => `${b.host}/${b.site.toLowerCase()}`),
       fetcher,
     ),
     smartRecruitersConnector(SMARTRECRUITERS_BOARDS, fetcher),

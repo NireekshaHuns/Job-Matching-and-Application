@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Fetcher } from '../types';
-import { workdayConnector } from './workday';
+import { postingLocation, workdayConnector } from './workday';
 import detailFixture from './__fixtures__/workday-statestreet-detail.json';
 import listFixture from './__fixtures__/workday-statestreet-list.json';
 
@@ -192,10 +192,12 @@ describe('workdayConnector', () => {
     const connector = workdayConnector([STATE_STREET], fetcher);
     const postings = await connector.fetch();
 
-    // The first term pages all 8 deep (160 postings) instead of stopping at 2.
-    // The other two terms return the same synthetic postings, so the
-    // nothing-new guard stops each after a single page: 8 + 1 + 1.
-    expect(posts).toBe(10);
+    // 8 pages for each of the 3 terms, not 2. The stop decision is per term, so
+    // a near-synonym still walks its own results instead of looking empty just
+    // because an earlier term already claimed them.
+    expect(posts).toBe(24);
+    // Output is still deduped globally — the terms return the same synthetic
+    // postings, so 160 unique rows, not 480.
     expect(postings.length).toBe(160);
     // Offset 40 is exactly where the real State Street requisition sits.
     expect(postings.some((p) => p.sourceJobId === 'R-1040')).toBe(true);
@@ -216,8 +218,122 @@ describe('workdayConnector', () => {
 
     const connector = workdayConnector([STATE_STREET], fetcher);
     await connector.fetch();
-    // Page 1 is all new, page 2 adds nothing → stop. Three terms, but only the
-    // first contributes anything new.
-    expect(posts).toBe(4);
+    // Per term: page 1 is new to that term, page 2 repeats it → stop. Two
+    // requests each across three terms.
+    expect(posts).toBe(6);
+  });
+
+  it('gives multi-location postings distinct fingerprints', async () => {
+    // Workday renders a multi-location requisition as a COUNT, not a place.
+    // Using it as the fingerprint's location made distinct requisitions collide,
+    // and `dedupPostings` then dropped one — permanently, since a dropped
+    // posting is never inserted and so never recorded as seen. Measured live:
+    // 11 of 20 Capital One postings and 4 of 20 NVIDIA ones are count-shaped.
+    const list = {
+      total: 2,
+      jobPostings: [
+        {
+          title: 'Lead Software Engineer, Full Stack',
+          externalPath: '/job/Richmond-VA/Lead-Software-Engineer--Full-Stack_R241175',
+          locationsText: '3 Locations',
+        },
+        {
+          title: 'Lead Software Engineer, Full Stack',
+          externalPath: '/job/McLean-VA/Lead-Software-Engineer--Full-Stack_R249333',
+          locationsText: '3 Locations',
+        },
+      ],
+    };
+    const connector = workdayConnector([STATE_STREET], routingFetcher(list, detailFixture));
+    const postings = await connector.fetch();
+
+    expect(postings.map((p) => p.location)).toEqual(['Richmond, VA', 'McLean, VA']);
+    expect(postings[0].fingerprint).not.toBe(postings[1].fingerprint);
+  });
+
+  it('spreads its request budget evenly across boards', async () => {
+    // One unbounded tenant could otherwise drain the run before the heaviest
+    // sponsors further down the list were reached at all.
+    const perHost = new Map<string, number>();
+    const fetcher: Fetcher = async (url, init) => {
+      if (init?.method !== 'POST') return new Response(JSON.stringify(detailFixture));
+      const host = new URL(url).host;
+      perHost.set(host, (perHost.get(host) ?? 0) + 1);
+      const page = Array.from({ length: 20 }, (_, i) => ({
+        title: `Software Engineer ${Math.random()}`,
+        externalPath: `/job/Boston-MA/SWE_R-${Math.floor(Math.random() * 1e9)}`,
+        locationsText: 'Boston, MA',
+      }));
+      return new Response(JSON.stringify({ total: 9999, jobPostings: page }));
+    };
+
+    const boards = Array.from({ length: 10 }, (_, i) => ({
+      host: `t${i}.wd1.myworkdayjobs.com`,
+      tenant: `t${i}`,
+      site: 'External',
+      company: `Company ${i}`,
+    }));
+    const connector = workdayConnector(boards, fetcher);
+    await connector.fetch();
+
+    // 120 total / 10 boards = 12 each; every board gets its share.
+    expect([...perHost.values()]).toEqual(Array(10).fill(12));
+  });
+
+  it('keeps the right career site when a tenant publishes two', async () => {
+    // `boardForUrl` matches host AND site — building the CXS path with the wrong
+    // site 404s, which would mean an empty JD and a mis-tiered job.
+    const detailUrls: string[] = [];
+    const fetcher: Fetcher = async (url, init) => {
+      if (init?.method === 'POST') {
+        const site = url.includes('/Campus/') ? 'Campus' : 'External';
+        return new Response(
+          JSON.stringify({
+            total: 1,
+            jobPostings: [
+              {
+                title: `${site} Software Engineer`,
+                externalPath: `/job/Boston-MA/${site}-SWE_R-100${site === 'Campus' ? 1 : 2}`,
+                locationsText: 'Boston, MA',
+              },
+            ],
+          }),
+        );
+      }
+      detailUrls.push(url);
+      return new Response(JSON.stringify(detailFixture));
+    };
+
+    const boards = [
+      { host: 'acme.wd1.myworkdayjobs.com', tenant: 'acme', site: 'External', company: 'Acme' },
+      { host: 'acme.wd1.myworkdayjobs.com', tenant: 'acme', site: 'Campus', company: 'Acme' },
+    ];
+    const connector = workdayConnector(boards, fetcher);
+    const postings = await connector.fetch();
+    await connector.hydrate!(postings);
+
+    expect(detailUrls.some((u) => u.includes('/acme/External/job/'))).toBe(true);
+    expect(detailUrls.some((u) => u.includes('/acme/Campus/job/'))).toBe(true);
+  });
+});
+
+describe('postingLocation', () => {
+  it('keeps a real location as given', () => {
+    expect(postingLocation('Burlington Massachusetts', '/job/Burlington-MA/X_R-1')).toBe(
+      'Burlington Massachusetts',
+    );
+  });
+
+  it('falls back to the path when Workday reports a count', () => {
+    expect(postingLocation('3 Locations', '/job/McLean-VA/X_R-1')).toBe('McLean, VA');
+    expect(postingLocation('2 locations', '/job/San-Jose-CA/X_R-1')).toBe('San Jose, CA');
+  });
+
+  it('leaves a place with no trailing state code alone', () => {
+    expect(postingLocation('5 Locations', '/job/Bengaluru/X_R-1')).toBe('Bengaluru');
+  });
+
+  it('returns null when there is nothing to go on', () => {
+    expect(postingLocation(undefined, '/job')).toBeNull();
   });
 });

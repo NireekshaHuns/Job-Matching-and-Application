@@ -126,6 +126,11 @@ export const enrichJobs = inngest.createFunction(
         let boardsFailed = 0;
         let hydrator: JobConnector['hydrate'];
         if (prefetched) {
+          // Assigned on BOTH branches: a source that needs hydration but is also
+          // metered would otherwise ingest every posting with an empty JD, and
+          // sponsorship is derived from JD text on a row that is never re-analyzed.
+          const metredConnector = build().find((c) => c.source === source);
+          hydrator = metredConnector?.hydrate?.bind(metredConnector);
           // Step output round-trips through JSON, so `postedAt` arrives as a
           // string. Revive it — `jobs.posted_date` and the board's "5h ago"
           // rendering both depend on it being a real Date.

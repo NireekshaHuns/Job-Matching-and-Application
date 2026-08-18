@@ -84,6 +84,33 @@ const SEARCH_TERMS = ['software engineer', 'software developer', 'backend engine
 /** Ceiling on detail requests per hydrate call — each one is a sequential fetch. */
 const MAX_DETAIL_FETCHES = 100;
 
+/**
+ * Ceiling on list requests per `fetch()`, shared evenly across boards.
+ *
+ * All of this — the list walk, `hydrate`, and 100 LLM classify calls — runs
+ * inside ONE Inngest step with a 300s budget, and CXS is slower per request than
+ * a static ATS feed. An even per-board share also stops the first board draining
+ * the whole run: the enrichment cap is 100 new postings per source, and one
+ * unbounded tenant can produce several hundred, which would leave the heaviest
+ * sponsors further down the list permanently unreached.
+ */
+const MAX_LIST_REQUESTS = 120;
+
+/**
+ * Workday renders a multi-location requisition as a COUNT ("3 Locations"), not a
+ * place. That is a display string, and using it as the fingerprint's location
+ * makes distinct requisitions collide — one is then dropped by `dedupPostings`,
+ * never inserted, never recorded, and re-dropped on every later run. Measured on
+ * the live boards: 11 of 20 Capital One postings and 4 of 20 NVIDIA ones are
+ * count-shaped, so this silently loses exactly the enterprise roles this
+ * connector exists to reach.
+ *
+ * `externalPath` carries the real primary location per posting
+ * (`/job/McLean-VA/...`), which is both distinct and consistent with how other
+ * sources spell it.
+ */
+const COUNT_LOCATION_RE = /^\d+\s+locations?$/i;
+
 function cxsBase(board: WorkdayBoard): string {
   return `https://${board.host}/wday/cxs/${board.tenant}/${board.site}`;
 }
@@ -97,12 +124,36 @@ function publicUrl(board: WorkdayBoard, externalPath: string): string {
  * Requisition id, preferred from `bulletFields` and otherwise recovered from the
  * `_R-792647` tail of the path. It is the only stable per-posting id Workday
  * exposes in the list response.
+ *
+ * The bullet must start with a letter: `bulletFields` is tenant-defined and
+ * routinely carries other things (a year, a salary), which a digits-only pattern
+ * would happily accept ahead of the real id.
  */
 function requisitionId(posting: WorkdayListPosting): string | null {
-  const bullet = posting.bulletFields?.find((f) => /^[A-Z]*-?\d{3,}$/i.test(f.trim()));
+  const bullet = posting.bulletFields?.find((f) => /^[A-Z][A-Z0-9]*-?\d{3,}$/i.test(f.trim()));
   if (bullet) return bullet.trim();
-  const tail = posting.externalPath?.match(/_([A-Za-z]*-?\d{3,})$/);
+  const tail = posting.externalPath?.match(/_([A-Za-z]+-?\d{3,}(?:-\d+)?)$/);
   return tail ? tail[1] : null;
+}
+
+/**
+ * A real location for the posting. Falls back to the path's location segment
+ * when Workday gives a count instead of a place — see `COUNT_LOCATION_RE`.
+ * `McLean-VA` becomes `McLean, VA`, which normalizes to the same fingerprint
+ * component as another source's "McLean, VA".
+ */
+export function postingLocation(
+  locationsText: string | undefined,
+  externalPath: string,
+): string | null {
+  const text = locationsText?.trim();
+  if (text && !COUNT_LOCATION_RE.test(text)) return text;
+
+  const slug = externalPath.split('/')[2];
+  if (!slug) return text || null;
+  const place = slug.replace(/-/g, ' ').trim();
+  // Re-comma a trailing state code so it reads like every other source.
+  return place.replace(/\s+([A-Z]{2})$/, ', $1') || text || null;
 }
 
 export function workdayConnector(
@@ -112,9 +163,14 @@ export function workdayConnector(
   // Reset per fetch, so a report never mixes two runs.
   let report = emptyReport();
 
-  /** Board a posting came from, recovered from its URL host at hydrate time. */
+  /**
+   * Board a posting came from, recovered from its URL at hydrate time. Matches
+   * host AND site: one tenant can publish several career sites, and building the
+   * CXS path with the wrong site yields a 404 — which would mean an empty JD and
+   * a permanently mis-tiered job.
+   */
   function boardForUrl(url: string): WorkdayBoard | undefined {
-    return boards.find((b) => url.startsWith(`https://${b.host}/`));
+    return boards.find((b) => url.startsWith(`https://${b.host}/${b.site}/`));
   }
 
   async function fetchDetail(board: WorkdayBoard, externalPath: string): Promise<WorkdayDetail> {
@@ -168,9 +224,21 @@ export function workdayConnector(
       // tenant can list one requisition in multiple locations.
       const seen = new Set<string>();
 
+      // Even share per board, so board 1 cannot drain the run before the
+      // heaviest sponsors further down the list are reached at all.
+      const perBoard = Math.max(1, Math.floor(MAX_LIST_REQUESTS / Math.max(1, boards.length)));
+
       for (const board of boards) {
+        let spent = 0;
         for (const searchText of SEARCH_TERMS) {
+          // Tracked per TERM so the stop decision doesn't depend on what an
+          // earlier, near-synonymous term already claimed — otherwise term 2's
+          // first page looks empty, it stops immediately, and the extra terms
+          // are inert. `seen` still dedups the OUTPUT globally.
+          const seenInTerm = new Set<string>();
           for (let page = 0; page < MAX_PAGES; page++) {
+            if (spent >= perBoard) break;
+            spent++;
             recordAttempt(report);
             const res = await fetcher(`${cxsBase(board)}/jobs`, {
               method: 'POST',
@@ -199,18 +267,22 @@ export function workdayConnector(
               jobPostings?: WorkdayListPosting[];
             };
             const found = Array.isArray(data.jobPostings) ? data.jobPostings : [];
-            let added = 0;
+            /** Postings this page contributed to THIS term's walk. */
+            let newInTerm = 0;
 
             for (const posting of found) {
               const title = posting.title?.trim() ?? '';
               const externalPath = posting.externalPath?.trim() ?? '';
               if (!title || !externalPath) continue;
               const url = publicUrl(board, externalPath);
+              if (seenInTerm.has(url)) continue;
+              seenInTerm.add(url);
+              newInTerm++;
+              // Emitted once, however many terms surfaced it.
               if (seen.has(url)) continue;
               seen.add(url);
-              added++;
 
-              const location = posting.locationsText?.trim() || null;
+              const location = postingLocation(posting.locationsText, externalPath);
               postings.push({
                 source: SOURCE,
                 sourceJobId: requisitionId(posting),
@@ -227,16 +299,16 @@ export function workdayConnector(
             }
 
             // A short page is the end of this term's results.
-            if (found.length < PAGE_SIZE) break;
-            // DO NOT trust `total` past the first page. Workday reports the real
+            //
+            // `total` is deliberately NOT consulted. Workday reports the real
             // count at offset 0 and then returns `total: 0` for every subsequent
             // page while still serving 20 postings — so a `(page+1)*size >= total`
             // check stopped every term after two pages, and the requisition this
             // connector exists to find sits at offset 40.
-            if (page === 0 && data.total != null && data.total <= PAGE_SIZE) break;
-            // A full page that contributed nothing new means the tenant is
-            // repeating itself; paging further just spends requests.
-            if (added === 0) break;
+            if (found.length < PAGE_SIZE) break;
+            // A full page that repeated this term's own earlier results means
+            // the tenant is looping; paging further just spends requests.
+            if (newInTerm === 0) break;
           }
         }
       }
