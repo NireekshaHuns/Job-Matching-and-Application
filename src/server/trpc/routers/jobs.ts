@@ -47,6 +47,12 @@ export const jobListInput = z.object({
   search: z.string().trim().max(100).optional(),
   /** Location filter, e.g. "MA" or "Boston" — word-boundary match on jobs.location. */
   location: z.string().trim().max(100).optional(),
+  /**
+   * Minimum annualized USD pay; 0/absent means no pay filter. Compared against
+   * the TOP of the parsed range, and postings that state no pay are KEPT — see
+   * `meetsMinSalary`, which this query mirrors.
+   */
+  minSalaryUsd: z.number().int().min(0).max(1_000_000).default(0),
   sort: z.enum(['combined', 'sponsor', 'fit', 'recent']).default('combined'),
   /** Apply-priority weights for the `combined` sort; absent/all-zero → defaults. */
   weights: z
@@ -81,6 +87,8 @@ export interface JobQueryPlan {
   search: string | null;
   /** Free-text location filter (state code or city), or null. */
   location: string | null;
+  /** Minimum annualized USD pay, or null when no pay filter is active. */
+  minSalaryUsd: number | null;
   /** Max posting age in days (null = any). */
   postedWithinDays: number | null;
   /** Hide jobs the user removed from the board. */
@@ -105,6 +113,7 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
     hideNonUs: !input.includeNonUs,
     search: input.search ? input.search : null,
     location: input.location ? input.location : null,
+    minSalaryUsd: input.minSalaryUsd > 0 ? input.minSalaryUsd : null,
     postedWithinDays: input.postedWithinDays ?? null,
     hideDismissed: !input.includeDismissed,
     sort: input.sort,
@@ -266,6 +275,16 @@ export const jobsRouter = createTRPCRouter({
     // no location are excluded when a location filter is active.
     if (plan.location) {
       where.push(sql`${jobs.location} ~* ${locationMatchRegex(plan.location)}`);
+    }
+    // Min pay. `is null` first, and deliberately: only a posting that STATES a
+    // ceiling below the bar is hidden. Roughly 70% of the board states no pay
+    // at all, and dropping those would leave a board of 2,000 rows out of
+    // 9,900 — the same "never discard unknown" rule sponsorship tiering follows.
+    // Mirrors `meetsMinSalary` in @/lib/salary; change them together.
+    if (plan.minSalaryUsd != null) {
+      where.push(
+        sql`(${jobs.salaryMaxUsd} is null or ${jobs.salaryMaxUsd} >= ${plan.minSalaryUsd})`,
+      );
     }
     // Age filter, measured from `now()` so "Past 24h" is a real 24 hours.
     //

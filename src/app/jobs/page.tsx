@@ -29,6 +29,7 @@ import {
   subscribeFilters,
   writeFilters,
   type BoardFilters,
+  type MinSalary,
   type Sort,
   type Within,
 } from '@/lib/board-filters';
@@ -40,6 +41,19 @@ const WITHIN_OPTIONS: { value: Within; label: string }[] = [
   { value: 3, label: 'Past 3 days' },
   { value: 7, label: 'Past week' },
   { value: 0, label: 'Any time' },
+];
+
+/**
+ * "Any" first and default. A posting that states no pay always passes this
+ * filter, so these thresholds only ever hide jobs that named a ceiling below
+ * the bar.
+ */
+const MIN_SALARY_OPTIONS: { value: MinSalary; label: string }[] = [
+  { value: 0, label: 'Any' },
+  { value: 80_000, label: '$80k+' },
+  { value: 100_000, label: '$100k+' },
+  { value: 120_000, label: '$120k+' },
+  { value: 150_000, label: '$150k+' },
 ];
 
 /** How often to re-check the pipeline while waiting for a refresh to land. */
@@ -68,7 +82,8 @@ export default function JobsPage() {
     getFiltersSnapshot,
     getServerFiltersSnapshot,
   );
-  const { sort, within, remoteOnly, includeSenior, includeExcluded, includeClosed } = filters;
+  const { sort, within, minSalary, remoteOnly, includeSenior, includeExcluded, includeClosed } =
+    filters;
 
   // Spread the STORE's snapshot, not the rendered `filters`. Two calls without
   // an intervening commit (a preset, a reset button, a transition) would
@@ -174,6 +189,7 @@ export default function JobsPage() {
     location: deferredLocation || undefined,
     sort,
     postedWithinDays: within || undefined,
+    minSalaryUsd: minSalary,
     remoteOnly,
     includeSenior,
     includeExcluded,
@@ -262,6 +278,27 @@ export default function JobsPage() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="border-border border-t pt-4">
+              <div className="text-faint mb-2 text-xs font-medium tracking-wide uppercase">
+                Min pay
+              </div>
+              <select
+                aria-label="Minimum pay"
+                value={minSalary}
+                onChange={(e) => setFilter('minSalary', Number(e.target.value) as MinSalary)}
+                className={`${inputCls} w-full`}
+              >
+                {MIN_SALARY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-faint mt-1.5 text-xs">
+                Jobs that don&rsquo;t state pay are still shown.
+              </p>
             </div>
 
             <div className="border-border border-t pt-4">

@@ -225,6 +225,55 @@ describe('buildJobRow', () => {
     expect(row).not.toHaveProperty('relevanceScore');
   });
 
+  it('stores the pay range as both display text and filterable USD bounds', () => {
+    const row = buildJobRow(
+      posting(),
+      {
+        tier: 'High',
+        reason: 'why',
+        sponsorCount: 10,
+        newHireStatus: 'sponsors_new_hires',
+        matchConfidence: 0.9,
+      },
+      {
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: ['go'],
+        softKeywords: ['ownership'],
+        salary: '$143k–$191k',
+      },
+      null,
+    );
+    expect(row.salaryText).toBe('$143k–$191k');
+    expect(row.salaryMinUsd).toBe(143_000);
+    expect(row.salaryMaxUsd).toBe(191_000);
+  });
+
+  it('leaves the USD bounds null when pay is unstated — null means "unknown", never "$0"', () => {
+    const row = buildJobRow(
+      posting(),
+      {
+        tier: 'High',
+        reason: 'why',
+        sponsorCount: 10,
+        newHireStatus: 'sponsors_new_hires',
+        matchConfidence: 0.9,
+      },
+      {
+        employmentType: 'full_time',
+        roleFamily: 'backend',
+        seniority: 'entry',
+        skills: ['go'],
+        softKeywords: ['ownership'],
+      },
+      null,
+    );
+    expect(row.salaryText).toBeNull();
+    expect(row.salaryMinUsd).toBeNull();
+    expect(row.salaryMaxUsd).toBeNull();
+  });
+
   it('overrides a full_time label to contract when the JD reads as a staffing placement', () => {
     const row = buildJobRow(
       posting({ jdText: 'Our client is seeking a Go engineer. Corp-to-corp only.' }),
