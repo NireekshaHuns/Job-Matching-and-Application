@@ -65,6 +65,13 @@ describe('resolveJobQueryPlan', () => {
     expect(plan({ postedWithinDays: 7 }).postedWithinDays).toBe(7);
   });
 
+  it('applies no pay floor by default, and carries the one it is given', () => {
+    expect(plan().minSalaryUsd).toBeNull();
+    expect(plan({ minSalaryUsd: 100_000 }).minSalaryUsd).toBe(100_000);
+    // "Any" is 0 on the wire; it must become "no filter", not ">= $0".
+    expect(plan({ minSalaryUsd: 0 }).minSalaryUsd).toBeNull();
+  });
+
   it('hides non-US jobs by default, shows them only when the toggle is on', () => {
     expect(plan().hideNonUs).toBe(true);
     expect(plan({ includeNonUs: true }).hideNonUs).toBe(false);
