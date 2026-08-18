@@ -65,4 +65,57 @@ describe('extractAtsBoards', () => {
     // Deduped case-insensitively (one entry) but the first token's case is kept.
     expect(boards.greenhouse).toEqual([{ token: 'Stripe', company: 'Stripe' }]);
   });
+
+  it('reads the three coordinates a Workday board needs', () => {
+    // Every Workday apply-URL used to be discarded, which is how a live State
+    // Street requisition stayed invisible while an older one for the same role
+    // came through the Simplify repo.
+    const { workday } = extractAtsBoards([
+      {
+        url: 'https://statestreet.wd1.myworkdayjobs.com/Global/job/Burlington-Massachusetts/Software-Engineer--CRD--New-Graduate_R-792647',
+        company: 'State Street',
+      },
+    ]);
+    expect(workday).toEqual([
+      {
+        host: 'statestreet.wd1.myworkdayjobs.com',
+        tenant: 'statestreet',
+        site: 'Global',
+        company: 'State Street',
+      },
+    ]);
+  });
+
+  it('skips the locale segment some Workday URLs carry', () => {
+    const { workday } = extractAtsBoards([
+      {
+        url: 'https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA/Engineer_JR123',
+        company: 'NVIDIA',
+      },
+    ]);
+    expect(workday[0]).toMatchObject({ tenant: 'nvidia', site: 'NVIDIAExternalCareerSite' });
+  });
+
+  it('ignores a Workday URL with no career-site segment', () => {
+    // The CXS path needs the site and it cannot be guessed.
+    const { workday } = extractAtsBoards([
+      { url: 'https://acme.wd1.myworkdayjobs.com/job/Boston/Engineer_R-1', company: 'Acme' },
+    ]);
+    expect(workday).toEqual([]);
+  });
+
+  it('keeps two career sites published by one tenant', () => {
+    const { workday } = extractAtsBoards([
+      { url: 'https://acme.wd1.myworkdayjobs.com/External/job/Boston/A_R-1', company: 'Acme' },
+      { url: 'https://acme.wd1.myworkdayjobs.com/Campus/job/Boston/B_R-2', company: 'Acme' },
+    ]);
+    expect(workday.map((b) => b.site)).toEqual(['External', 'Campus']);
+  });
+
+  it('does not read a Workday host out of a redirect parameter', () => {
+    const { workday } = extractAtsBoards([
+      { url: 'https://evil.example/?u=acme.wd1.myworkdayjobs.com/External/job/x', company: 'Evil' },
+    ]);
+    expect(workday).toEqual([]);
+  });
 });

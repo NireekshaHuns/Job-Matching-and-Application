@@ -1,0 +1,19 @@
+{
+  "total": 2,
+  "jobPostings": [
+    {
+      "title": "Software Engineer, CRD- New Graduate",
+      "externalPath": "/job/Burlington-Massachusetts/Software-Engineer--CRD--New-Graduate_R-792647",
+      "locationsText": "Burlington Massachusetts",
+      "postedOn": "Posted Today",
+      "bulletFields": ["R-792647"]
+    },
+    {
+      "title": "Software Engineer, CRD- New Graduate",
+      "externalPath": "/job/Burlington-Massachusetts/Software-Engineer--CRD--New-Graduate_R-795953",
+      "locationsText": "Burlington Massachusetts",
+      "postedOn": "Posted 7 Days Ago",
+      "bulletFields": ["R-795953"]
+    }
+  ]
+}

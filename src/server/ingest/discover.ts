@@ -1,11 +1,12 @@
 /**
  * Discover ATS board tokens from posting apply-URLs. SimplifyJobs listings link
- * to employer ATS boards, so we can harvest Greenhouse/Lever/Ashby tokens (with
- * the company name) to auto-seed the direct-JD connectors. Pure.
+ * to employer ATS boards, so we can harvest Greenhouse/Lever/Ashby/Workday
+ * coordinates (with the company name) to auto-seed the direct-JD connectors. Pure.
  */
 import type { AshbyBoard } from './connectors/ashby';
 import type { GreenhouseBoard } from './connectors/greenhouse';
 import type { LeverBoard } from './connectors/lever';
+import type { WorkdayBoard } from './connectors/workday';
 
 // Host is anchored to a boundary (start, `//`, or a subdomain dot) so a token
 // only matches a real ATS host — not one embedded in a redirect/tracking query
@@ -22,6 +23,33 @@ const GREENHOUSE_FOR_RE = /[?&]for=([a-z0-9_-]+)/i;
 // Lever/Ashby slugs can contain a dot (e.g. `openai.com`), so keep `.` in the class.
 const LEVER_RE = new RegExp(`${HOST}jobs\\.lever\\.co\\/([a-z0-9._-]+)`, 'i');
 const ASHBY_RE = new RegExp(`${HOST}jobs\\.ashbyhq\\.com\\/([a-z0-9._-]+)`, 'i');
+/**
+ * Workday needs three coordinates, not one token: the host, the tenant (the
+ * first subdomain label) and the career-site name (the path segment before
+ * `/job/`, after an optional `en-US`-style locale). Nothing here could read a
+ * Workday URL before, so every one Simplify handed us was thrown away — which is
+ * how a live State Street requisition stayed invisible while an older one for
+ * the same role, listed in the repo, came through.
+ */
+const WORKDAY_RE = new RegExp(
+  `${HOST}([a-z0-9-]+)\\.(wd\\d+)\\.myworkdayjobs\\.com\\/(?:[a-z]{2}-[A-Za-z]{2}\\/)?([^/?\\s]+)`,
+  'i',
+);
+
+/** `{host, tenant, site}` from a Workday apply URL, or undefined if it isn't one. */
+function workdayCoordinates(url: string): Omit<WorkdayBoard, 'company'> | undefined {
+  const m = WORKDAY_RE.exec(url);
+  if (!m) return undefined;
+  const [, tenant, pod, site] = m;
+  // `/job/...` straight after the host means the site segment is missing, and it
+  // cannot be guessed — the CXS path needs it.
+  if (!site || site.toLowerCase() === 'job') return undefined;
+  return {
+    host: `${tenant}.${pod}.myworkdayjobs.com`.toLowerCase(),
+    tenant: tenant.toLowerCase(),
+    site,
+  };
+}
 
 /** Greenhouse board token from an apply URL, handling both path and `embed` shapes. */
 function greenhouseToken(url: string): string | undefined {
@@ -35,6 +63,7 @@ export interface DiscoveredBoards {
   greenhouse: GreenhouseBoard[];
   lever: LeverBoard[];
   ashby: AshbyBoard[];
+  workday: WorkdayBoard[];
 }
 
 export interface DiscoverablePosting {
@@ -51,6 +80,7 @@ export function extractAtsBoards(postings: DiscoverablePosting[]): DiscoveredBoa
   const greenhouse = new Map<string, Entry>();
   const lever = new Map<string, Entry>();
   const ashby = new Map<string, Entry>();
+  const workday = new Map<string, WorkdayBoard>();
 
   const add = (map: Map<string, Entry>, token: string | undefined, company: string) => {
     if (!token) return;
@@ -63,11 +93,20 @@ export function extractAtsBoards(postings: DiscoverablePosting[]): DiscoveredBoa
     add(greenhouse, greenhouseToken(url), p.company);
     add(lever, LEVER_RE.exec(url)?.[1], p.company);
     add(ashby, ASHBY_RE.exec(url)?.[1], p.company);
+
+    const wd = workdayCoordinates(url);
+    // Keyed by host+site: one tenant can publish several career sites, and they
+    // hold different postings.
+    const wdKey = wd && `${wd.host}/${wd.site.toLowerCase()}`;
+    if (wd && wdKey && !workday.has(wdKey) && p.company.trim()) {
+      workday.set(wdKey, { ...wd, company: p.company.trim() });
+    }
   }
 
   return {
     greenhouse: [...greenhouse.values()].map(({ token, company }) => ({ token, company })),
     lever: [...lever.values()].map(({ token, company }) => ({ token, company })),
     ashby: [...ashby.values()].map(({ token, company }) => ({ board: token, company })),
+    workday: [...workday.values()],
   };
 }
