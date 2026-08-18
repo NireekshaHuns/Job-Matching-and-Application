@@ -96,8 +96,46 @@ describe('mergeBoards', () => {
       key,
     );
     expect(merged).toEqual([
-      { token: 'figure', company: 'Figure' },
       { token: 'stripe', company: 'Stripe' },
+      { token: 'figure', company: 'Figure' },
+    ]);
+  });
+
+  it('fetches the curated seeds FIRST, not just eventually', () => {
+    // A capped run walks this list from the front. Building it discovered-first
+    // pushed the hand-picked H1B sponsors to indices 154-158 of the real
+    // Greenhouse list, so the boards most worth fetching were the ones the
+    // window never reached.
+    const discovered = Array.from({ length: 50 }, (_, i) => ({
+      token: `discovered-${i}`,
+      company: `Discovered ${i}`,
+    }));
+    const seed = [
+      { token: 'stripe', company: 'Stripe' },
+      { token: 'databricks', company: 'Databricks' },
+    ];
+    const merged = mergeBoards(seed, discovered, key);
+    expect(merged.slice(0, 2)).toEqual(seed);
+    expect(merged).toHaveLength(52);
+  });
+
+  it('keeps a seed at its position when a discovered entry collides with it', () => {
+    // The collision must drop the duplicate, never relocate the seed.
+    const merged = mergeBoards(
+      [
+        { token: 'stripe', company: 'Stripe' },
+        { token: 'ramp', company: 'Ramp' },
+      ],
+      [
+        { token: 'figure', company: 'Figure' },
+        { token: 'STRIPE', company: 'Stripe Inc (drifted)' },
+      ],
+      key,
+    );
+    expect(merged).toEqual([
+      { token: 'stripe', company: 'Stripe' },
+      { token: 'ramp', company: 'Ramp' },
+      { token: 'figure', company: 'Figure' },
     ]);
   });
 

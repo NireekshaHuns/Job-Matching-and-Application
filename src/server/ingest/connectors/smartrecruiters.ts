@@ -8,6 +8,7 @@
 import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
+import { looksLikeSwe } from '@/server/enrich/steps/swe-title';
 
 export interface SmartRecruitersBoard {
   /** Company identifier from api.smartrecruiters.com/v1/companies/{identifier}. */
@@ -48,6 +49,18 @@ const PUBLIC_BASE = 'https://jobs.smartrecruiters.com';
 const PAGE_SIZE = 100;
 /** Safety cap on pages per board so a bad `totalFound` can't loop forever. */
 const MAX_PAGES = 20;
+
+/**
+ * Ceiling on JD detail fetches per run.
+ *
+ * The JD needs one extra sequential HTTP request PER POSTING, and this whole
+ * connector runs inside a single Inngest step capped at 300s. Visa alone lists
+ * well over a thousand roles, so an uncapped run could not finish, would retry
+ * from scratch, and contributed nothing. Past the cap a posting is still emitted
+ * with an empty `jdText` — the same thing the Simplify connector does, and
+ * enrichment handles it (sponsorship falls back to USCIS history).
+ */
+const MAX_DETAIL_FETCHES = 120;
 
 /** "City, Region" (+ " · Remote"), or null when nothing is known. */
 function postingLocation(loc: SmartRecruitersLocation | undefined): string | null {
@@ -91,6 +104,7 @@ export function smartRecruitersConnector(
     source: SOURCE,
     async fetch(): Promise<RawPosting[]> {
       const postings: RawPosting[] = [];
+      let detailFetches = 0;
 
       for (const board of boards) {
         for (let page = 0; page < MAX_PAGES; page++) {
@@ -110,6 +124,13 @@ export function smartRecruitersConnector(
             if (!title || !p.id) continue;
             const location = postingLocation(p.location);
 
+            // Spend the JD budget only on titles enrichment would keep. These
+            // boards list every open role at the company — sales, ops, support —
+            // and buying a description for a posting that is filtered out moments
+            // later is the whole reason this step used to run out of time.
+            const wantJd = looksLikeSwe(title) && detailFetches < MAX_DETAIL_FETCHES;
+            if (wantJd) detailFetches++;
+
             postings.push({
               source: SOURCE,
               sourceJobId: p.id,
@@ -117,7 +138,7 @@ export function smartRecruitersConnector(
               title,
               location,
               url: `${PUBLIC_BASE}/${board.identifier}/${p.id}`,
-              jdText: await fetchJd(board.identifier, p.id),
+              jdText: wantJd ? await fetchJd(board.identifier, p.id) : '',
               postedAt: toPostedAt(p.releasedDate),
               fingerprint: postingFingerprint(board.company, title, location),
               raw: p,

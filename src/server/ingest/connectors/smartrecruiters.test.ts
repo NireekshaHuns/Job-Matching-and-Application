@@ -48,6 +48,65 @@ describe('smartRecruitersConnector', () => {
     expect(second.jdText).toContain('Build UIs in React');
   });
 
+  it('buys a JD only for software titles', async () => {
+    // Each JD is a separate sequential request inside one 300s step, and these
+    // boards list every open role at the company. Spending that budget on a
+    // posting enrichment drops moments later is what made this step time out.
+    const detailUrls: string[] = [];
+    const list = {
+      content: [
+        { id: '1', name: 'Software Engineer', location: { city: 'NYC' } },
+        { id: '2', name: 'Warehouse Associate', location: { city: 'NYC' } },
+        { id: '3', name: 'Account Executive', location: { city: 'NYC' } },
+      ],
+      totalFound: 3,
+    };
+    const fetcher: Fetcher = async (url) => {
+      const detail = url.match(/\/postings\/([^?]+)$/);
+      if (detail) {
+        detailUrls.push(detail[1]);
+        return new Response(JSON.stringify({ jobAd: { sections: {} } }), { status: 200 });
+      }
+      return new Response(JSON.stringify(list), { status: 200 });
+    };
+
+    const connector = smartRecruitersConnector([{ identifier: 'Acme', company: 'Acme' }], fetcher);
+    const postings = await connector.fetch();
+
+    // Every posting is still emitted — only the JD purchase is rationed.
+    expect(postings.map((p) => p.title)).toEqual([
+      'Software Engineer',
+      'Warehouse Associate',
+      'Account Executive',
+    ]);
+    expect(detailUrls).toEqual(['1']);
+    expect(postings[1].jdText).toBe('');
+  });
+
+  it('stops buying JDs once the per-run budget is spent', async () => {
+    let detailFetches = 0;
+    const content = Array.from({ length: 200 }, (_, i) => ({
+      id: String(i),
+      name: 'Software Engineer',
+      location: { city: 'NYC' },
+    }));
+    const fetcher: Fetcher = async (url) => {
+      if (/\/postings\/[^?]+$/.test(url)) {
+        detailFetches++;
+        return new Response(JSON.stringify({ jobAd: { sections: {} } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ content, totalFound: 200 }), { status: 200 });
+    };
+
+    const connector = smartRecruitersConnector([{ identifier: 'Acme', company: 'Acme' }], fetcher);
+    const postings = await connector.fetch();
+
+    expect(postings).toHaveLength(200);
+    expect(detailFetches).toBe(120);
+    // Past the budget the posting still arrives, just without a description.
+    expect(postings[199].jdText).toBe('');
+  });
+
   it('yields an empty JD when the detail fetch fails (best-effort)', async () => {
     const connector = smartRecruitersConnector(
       [{ identifier: 'Acme', company: 'Acme' }],

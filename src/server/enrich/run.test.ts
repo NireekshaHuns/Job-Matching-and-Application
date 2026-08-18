@@ -286,4 +286,52 @@ describe('planEnrichmentBatch', () => {
   it('handles an empty fetch', () => {
     expect(planEnrichmentBatch([], new Set(), 10)).toEqual({ toEnrich: [], deferred: 0 });
   });
+
+  it('spends the cap on postings that can become rows, not on ones it will drop', () => {
+    // The regression this fixes: non-candidates used to consume cap slots, get
+    // dropped later by the title filter, never be inserted, and therefore never
+    // join `existing` — so the next run met the same rows and spent the same
+    // slots on them again, forever. Here the head of the feed is all non-SWE,
+    // so the OLD behaviour enriched nothing at all under a cap of 2.
+    const titled = (fingerprint: string, title: string) => ({ fingerprint, title }) as RawPosting;
+    const feed = [
+      titled('n1', 'Registered Nurse'),
+      titled('n2', 'Account Executive'),
+      titled('s1', 'Software Engineer'),
+      titled('n3', 'Mechanical Engineer'),
+      titled('s2', 'Backend Engineer'),
+      titled('s3', 'Platform Engineer'),
+    ];
+    const isSwe = (p: RawPosting) => p.title !== 'Mechanical Engineer' && /engineer/i.test(p.title);
+
+    const { toEnrich, deferred } = planEnrichmentBatch(feed, new Set(), 2, isSwe);
+    expect(toEnrich.map((p) => p.fingerprint)).toEqual(['s1', 's2']);
+    // Only s3 is left over; the four non-candidates are not "deferred work".
+    expect(deferred).toBe(1);
+  });
+
+  it('advances past non-candidates on the next run instead of restarting', () => {
+    const titled = (fingerprint: string, title: string) => ({ fingerprint, title }) as RawPosting;
+    const feed = [
+      ...['n1', 'n2', 'n3', 'n4'].map((f) => titled(f, 'Sales Executive')),
+      ...['s1', 's2', 's3'].map((f, i) => titled(f, `Software Engineer ${i}`)),
+    ];
+    const isSwe = (p: RawPosting) => p.title.startsWith('Software');
+
+    const first = planEnrichmentBatch(feed, new Set(), 2, isSwe);
+    expect(first.toEnrich.map((p) => p.fingerprint)).toEqual(['s1', 's2']);
+    expect(first.deferred).toBe(1);
+
+    // Second run, with the first run's output now on record: the only work left
+    // is s3. Nothing needs deferring, so the whole fetch passes through for
+    // `enrichPostings` to filter — the point is that s3 is reachable at all.
+    const second = planEnrichmentBatch(feed, new Set(['s1', 's2']), 2, isSwe);
+    expect(second.deferred).toBe(0);
+    expect(second.toEnrich.map((p) => p.fingerprint)).toContain('s3');
+  });
+
+  it('counts everything when no predicate is given', () => {
+    const { toEnrich } = planEnrichmentBatch(all, new Set(), 2);
+    expect(toEnrich.map((p) => p.fingerprint)).toEqual(['a', 'b']);
+  });
 });

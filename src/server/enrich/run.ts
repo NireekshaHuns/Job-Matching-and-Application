@@ -12,6 +12,7 @@ import type { SponsorHistory } from '@/lib/sponsorship';
 import type { RawPosting } from '@/server/ingest/types';
 import { enrichPostings, type EnrichResult } from './enrich';
 import { buildSponsorResolver, type DiscoveredAlias } from './steps/resolver';
+import { looksLikeSwe } from './steps/swe-title';
 import type { ChatClient, Embedder } from './types';
 
 /** All fingerprints already in `jobs` — the cross-run dedup / cost gate. */
@@ -241,16 +242,30 @@ const DEFAULT_FLUSH_EVERY = 100;
  * genuinely new ones count against `maxNew`. When nothing needs deferring the
  * full list is passed straight through, so the uncapped path is unchanged.
  * Pure.
+ *
+ * THE CAP MUST COUNT ONLY WHAT WILL ACTUALLY BE ENRICHED. `enrichPostings` drops
+ * non-software titles AFTER this split, and a dropped posting is never inserted,
+ * so it never joins `existing` and is still "fresh" on the next run. Counting
+ * those against the cap therefore burned the window on the same rows forever:
+ * a source whose feed is 20% software advanced ~20 rows per run out of a
+ * 100-row budget, and the remaining 80 slots re-scanned the identical head of
+ * the list every time. Measured on the live board, that is why "Find new jobs"
+ * returned a handful of postings against feeds holding thousands.
+ *
+ * `isCandidate` mirrors that later filter so the budget is spent on real work.
+ * It defaults to "everything counts", preserving the old behaviour for callers
+ * (scripts, tests) that enrich an already-filtered list.
  */
 export function planEnrichmentBatch(
   postings: RawPosting[],
   existing: ReadonlySet<string>,
   maxNew?: number,
+  isCandidate: (posting: RawPosting) => boolean = () => true,
 ): { toEnrich: RawPosting[]; deferred: number } {
   const cap = maxNew ?? Infinity;
   if (cap === Infinity) return { toEnrich: postings, deferred: 0 };
 
-  const fresh = postings.filter((p) => !existing.has(p.fingerprint));
+  const fresh = postings.filter((p) => !existing.has(p.fingerprint) && isCandidate(p));
   const deferred = Math.max(0, fresh.length - cap);
   return { toEnrich: deferred > 0 ? fresh.slice(0, cap) : postings, deferred };
 }
@@ -276,7 +291,11 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
     confirmedAliases,
   });
 
-  const { toEnrich, deferred } = planEnrichmentBatch(args.postings, existing, args.maxNew);
+  // Same predicate `enrichPostings` applies, so the cap is spent on postings
+  // that can actually become rows.
+  const { toEnrich, deferred } = planEnrichmentBatch(args.postings, existing, args.maxNew, (p) =>
+    looksLikeSwe(p.title),
+  );
 
   // Persist as we go. A long backfill that only writes at the very end loses
   // everything to one rate-limit or network blip; flushing keeps completed

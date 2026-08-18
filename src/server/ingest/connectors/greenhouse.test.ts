@@ -65,4 +65,35 @@ describe('greenhouseConnector', () => {
     );
     expect(await connector.fetch()).toHaveLength(0);
   });
+
+  it('reports dead boards instead of swallowing them', async () => {
+    // ATS tokens churn 20-40% a year. A bare console.warn meant a board could
+    // go dead and the run still looked completely healthy.
+    const fetcher: Fetcher = async (url) =>
+      url.includes('/gone/')
+        ? new Response('not found', { status: 404 })
+        : new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+
+    const connector = greenhouseConnector(
+      [
+        { token: 'alive', company: 'Alive' },
+        { token: 'gone', company: 'Gone' },
+      ],
+      fetcher,
+    );
+    await connector.fetch();
+
+    const report = connector.lastReport?.();
+    expect(report?.attempted).toBe(2);
+    expect(report?.failed).toBe(1);
+    expect(report?.failures).toEqual(['gone -> HTTP 404']);
+  });
+
+  it('starts each fetch from a clean report', async () => {
+    const fetcher: Fetcher = async () => new Response('nope', { status: 500 });
+    const connector = greenhouseConnector([{ token: 'a', company: 'A' }], fetcher);
+    await connector.fetch();
+    await connector.fetch();
+    expect(connector.lastReport?.()).toMatchObject({ attempted: 1, failed: 1 });
+  });
 });

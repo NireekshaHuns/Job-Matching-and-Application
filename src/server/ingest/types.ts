@@ -6,6 +6,7 @@
  * scores, or filters by sponsorship / employment type (that is enrichment).
  * See the `add-job-source` skill.
  */
+import type { FetchReport } from './report';
 
 /** A single normalized posting, ready to be deduped and enriched. */
 export interface RawPosting {
@@ -35,4 +36,10 @@ export interface JobConnector {
   readonly source: string;
   /** Pull new postings and map each to the normalized `RawPosting` shape. */
   fetch(): Promise<RawPosting[]>;
+  /**
+   * Per-board outcomes from the most recent `fetch()`, for sources that walk a
+   * list of boards. Optional: a single-endpoint connector has nothing to report,
+   * and a dead board there fails the whole fetch loudly anyway.
+   */
+  lastReport?(): FetchReport | null;
 }

@@ -56,11 +56,23 @@ export function loadDiscoveredBoards(file: string = LOCAL_FILE): Partial<Discove
  * collision: they are the curated, code-reviewed source of truth, whereas the
  * discovered file is machine-generated and its `company` label can drift (which
  * would change job fingerprints). Discovery only *adds* boards, never overrides.
+ *
+ * ORDER MATTERS, not just membership. A capped run walks this list from the
+ * front, so whatever sits at the back is effectively invisible. Building the map
+ * discovered-first put the curated H1B sponsors (stripe, databricks, airbnb,
+ * anthropic) at indices 154-158 of the merged Greenhouse list — the boards most
+ * worth fetching were the ones a stalled window never reached. Seeds are
+ * inserted first so they are fetched first; a colliding discovered entry is
+ * still dropped in favour of the seed, which is what the seed-wins rule means.
  */
 export function mergeBoards<T>(seed: T[], discovered: T[] | undefined, key: (b: T) => string): T[] {
   const byKey = new Map<string, T>();
-  // Discovered first, then seed, so seed entries overwrite on collision.
-  for (const b of [...(discovered ?? []), ...seed]) byKey.set(key(b).toLowerCase(), b);
+  // Seeds first — both for precedence AND for position. `Map.set` on an existing
+  // key updates the value in place without moving it, so a discovered duplicate
+  // can neither displace a seed nor push it down the list.
+  for (const b of seed) byKey.set(key(b).toLowerCase(), b);
+  for (const b of discovered ?? [])
+    if (!byKey.has(key(b).toLowerCase())) byKey.set(key(b).toLowerCase(), b);
   return [...byKey.values()];
 }
 

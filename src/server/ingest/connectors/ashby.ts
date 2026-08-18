@@ -6,6 +6,7 @@
 import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
+import { emptyReport, recordAttempt, recordFailure } from '../report';
 
 export interface AshbyBoard {
   /** Board name from jobs.ashbyhq.com/{board}. */
@@ -39,14 +40,19 @@ export function ashbyConnector(
   boards: AshbyBoard[],
   fetcher: Fetcher = globalThis.fetch,
 ): JobConnector {
+  // Reset per fetch, so a report never mixes two runs.
+  let report = emptyReport();
   return {
     source: SOURCE,
+    lastReport: () => report,
     async fetch(): Promise<RawPosting[]> {
+      report = emptyReport();
       const postings: RawPosting[] = [];
       for (const board of boards) {
+        recordAttempt(report);
         const res = await fetcher(`${API_BASE}/${board.board}?includeCompensation=true`);
         if (!res.ok) {
-          console.warn(`[ashby] ${board.board} -> HTTP ${res.status}`);
+          recordFailure(report, board.board, `HTTP ${res.status}`);
           continue;
         }
         const data = (await res.json()) as { jobs?: AshbyJob[] };
