@@ -335,3 +335,34 @@ describe('planEnrichmentBatch', () => {
     expect(toEnrich.map((p) => p.fingerprint)).toEqual(['a', 'b']);
   });
 });
+
+describe('runEnrichment hydration', () => {
+  it('hydrates the selected slice, not the head of the feed', async () => {
+    // Documented here because the failure is invisible and permanent: a source
+    // that buys JDs during fetch() spends the budget on postings the cap defers,
+    // so from run 2 onward enriched jobs have no JD — and `Excluded` comes from
+    // JD text alone, on a row that is never re-analyzed.
+    const posting = (fingerprint: string, title: string) =>
+      ({ fingerprint, title, jdText: '' }) as RawPosting;
+    const feed = Array.from({ length: 10 }, (_, i) => posting(`fp-${i}`, 'Software Engineer'));
+
+    const handedTo: string[][] = [];
+    const hydrate = async (ps: RawPosting[]) => {
+      handedTo.push(ps.map((p) => p.fingerprint));
+      return ps.map((p) => ({ ...p, jdText: 'hydrated' }));
+    };
+
+    // Stand in for the planner + hydrate contract without a DB: the slice the
+    // planner returns is exactly what hydrate must receive.
+    const { toEnrich } = planEnrichmentBatch(
+      feed,
+      new Set(['fp-0', 'fp-1', 'fp-2']),
+      3,
+      () => true,
+    );
+    const hydrated = await hydrate(toEnrich);
+
+    expect(handedTo).toEqual([['fp-3', 'fp-4', 'fp-5']]);
+    expect(hydrated.every((p) => p.jdText === 'hydrated')).toBe(true);
+  });
+});

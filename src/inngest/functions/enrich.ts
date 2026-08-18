@@ -114,6 +114,7 @@ export const enrichJobs = inngest.createFunction(
         const schema = await import('@/server/db/schema');
         const { buildConnectors: build } = await import('@/server/ingest/registry');
         const { runEnrichment } = await import('@/server/enrich/run');
+        type JobConnector = Awaited<ReturnType<typeof build>>[number];
         const { buildEnrichmentClients } = await import('@/server/enrich/clients');
         const { installDbTimeout } = await import('@/server/db/http-timeout');
         installDbTimeout();
@@ -123,6 +124,7 @@ export const enrichJobs = inngest.createFunction(
 
         let postings;
         let boardsFailed = 0;
+        let hydrator: JobConnector['hydrate'];
         if (prefetched) {
           // Step output round-trips through JSON, so `postedAt` arrives as a
           // string. Revive it — `jobs.posted_date` and the board's "5h ago"
@@ -136,6 +138,7 @@ export const enrichJobs = inngest.createFunction(
           if (!connector)
             return { fingerprints: [], fetched: 0, inserted: 0, deferred: 0, boardsFailed: 0 };
           postings = await connector.fetch();
+          hydrator = connector.hydrate?.bind(connector);
           // Dead ATS tokens used to vanish into a console.warn — the run looked
           // healthy while a board quietly contributed nothing. Carry the count out.
           const report = connector.lastReport?.();
@@ -153,6 +156,9 @@ export const enrichJobs = inngest.createFunction(
           postings,
           chat: clients.chat,
           embedder: clients.embedder,
+          // Sources that charge a request per description fill them in after the
+          // cap has chosen, so the budget lands on postings that get enriched.
+          hydrate: hydrator,
           // Reconcile once at the end, over every source — doing it here would
           // close every other source's jobs.
           reconcile: false,

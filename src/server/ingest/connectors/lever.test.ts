@@ -47,4 +47,26 @@ describe('leverConnector', () => {
     const connector = leverConnector([{ token: 'empty', company: 'Empty' }], fetcherReturning([]));
     expect(await connector.fetch()).toHaveLength(0);
   });
+
+  it('reports a dead board rather than swallowing it', async () => {
+    const fetcher: Fetcher = async (url) =>
+      url.includes('gone')
+        ? new Response('not found', { status: 404 })
+        : new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+
+    const connector = leverConnector(
+      [
+        { token: 'alive', company: 'Alive' },
+        { token: 'gone', company: 'Gone' },
+      ],
+      fetcher,
+    );
+    await connector.fetch();
+
+    expect(connector.lastReport?.()).toMatchObject({
+      attempted: 2,
+      failed: 1,
+      failures: ['gone -> HTTP 404'],
+    });
+  });
 });

@@ -223,6 +223,13 @@ export interface RunEnrichmentArgs {
    * call has to fit inside one function invocation.
    */
   maxNew?: number;
+  /**
+   * Fill in `jdText` for the postings that survived the cap, for sources that
+   * charge a request per description. Runs AFTER selection on purpose — see
+   * `JobConnector.hydrate`. Best-effort: a failure here leaves the JD empty
+   * rather than losing the posting.
+   */
+  hydrate?: (postings: RawPosting[]) => Promise<RawPosting[]>;
   /** Insert completed rows every N postings; 0 disables progressive flushing. */
   flushEvery?: number;
   /** Called after each flush with the running insert total (for CLI progress). */
@@ -253,8 +260,9 @@ const DEFAULT_FLUSH_EVERY = 100;
  * returned a handful of postings against feeds holding thousands.
  *
  * `isCandidate` mirrors that later filter so the budget is spent on real work.
- * It defaults to "everything counts", preserving the old behaviour for callers
- * (scripts, tests) that enrich an already-filtered list.
+ * It defaults to "everything counts", for tests and any future caller handing in
+ * an already-filtered list. (`runEnrichment` always passes the real predicate,
+ * and an uncapped call returns above before the predicate is ever consulted.)
  */
 export function planEnrichmentBatch(
   postings: RawPosting[],
@@ -297,12 +305,18 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
     looksLikeSwe(p.title),
   );
 
+  // Buy descriptions only for what we just selected. A source that charges per
+  // JD must not spend that budget on the head of the feed while the cap has
+  // already moved past it — an enriched job is never re-analyzed, so a missing
+  // JD permanently mis-tiers its sponsorship.
+  const selected = args.hydrate ? await args.hydrate(toEnrich) : toEnrich;
+
   // Persist as we go. A long backfill that only writes at the very end loses
   // everything to one rate-limit or network blip; flushing keeps completed
   // (already paid for) work safe and lets a re-run skip it via the dedup.
   let inserted = 0;
   const result = await enrichPostings(
-    toEnrich,
+    selected,
     existing,
     { chat: args.chat, embedder: args.embedder, resolve },
     {
