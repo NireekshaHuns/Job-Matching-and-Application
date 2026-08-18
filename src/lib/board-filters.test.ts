@@ -18,6 +18,10 @@ async function freshStore() {
 }
 
 describe('DEFAULT_FILTERS', () => {
+  it('applies no pay floor — most postings state no salary at all', () => {
+    expect(DEFAULT_FILTERS.minSalary).toBe(0);
+  });
+
   it('shows jobs of any age', () => {
     // The whole point of the fix: a non-zero default hides newly ingested jobs
     // whose posted_at is older than the window.
@@ -36,6 +40,7 @@ describe('parseStoredFilters', () => {
     const filters: BoardFilters = {
       sort: 'recent',
       within: 3,
+      minSalary: 100_000,
       remoteOnly: true,
       includeSenior: true,
       includeExcluded: false,
@@ -46,6 +51,23 @@ describe('parseStoredFilters', () => {
 
   it('keeps a stored "Past week" choice — the default changed, the choice is still valid', () => {
     expect(parseStoredFilters('{"within":7}').within).toBe(7);
+  });
+
+  it('keeps a stored pay floor and rejects one that is not an offered step', () => {
+    expect(parseStoredFilters('{"minSalary":150000}').minSalary).toBe(150_000);
+    // A hand-edited or stale value must not reach the query as-is.
+    expect(parseStoredFilters('{"minSalary":95000}').minSalary).toBe(DEFAULT_FILTERS.minSalary);
+    expect(parseStoredFilters('{"minSalary":"100000"}').minSalary).toBe(DEFAULT_FILTERS.minSalary);
+  });
+
+  it('reads a v1 entry written before the pay filter existed', () => {
+    // Same key, older shape: the missing field must default, not break parsing.
+    expect(parseStoredFilters('{"sort":"recent","within":7,"remoteOnly":true}')).toEqual({
+      ...DEFAULT_FILTERS,
+      sort: 'recent',
+      within: 7,
+      remoteOnly: true,
+    });
   });
 
   it('survives corrupt storage rather than breaking the board', () => {

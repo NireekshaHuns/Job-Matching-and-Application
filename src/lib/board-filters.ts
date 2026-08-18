@@ -15,10 +15,13 @@
 export type Sort = 'combined' | 'fit' | 'recent';
 /** Posted-age window in days; 0 means "any age". */
 export type Within = 1 | 3 | 7 | 0;
+/** Minimum annualized USD pay; 0 means "any pay". */
+export type MinSalary = 0 | 80_000 | 100_000 | 120_000 | 150_000;
 
 export interface BoardFilters {
   sort: Sort;
   within: Within;
+  minSalary: MinSalary;
   remoteOnly: boolean;
   includeSenior: boolean;
   includeExcluded: boolean;
@@ -27,6 +30,7 @@ export interface BoardFilters {
 
 const SORTS: Sort[] = ['combined', 'fit', 'recent'];
 const WITHINS: Within[] = [1, 3, 7, 0];
+const MIN_SALARIES: MinSalary[] = [0, 80_000, 100_000, 120_000, 150_000];
 
 /**
  * `within: 0` ("Any time") is deliberate — see the file header. A newly
@@ -36,6 +40,9 @@ const WITHINS: Within[] = [1, 3, 7, 0];
 export const DEFAULT_FILTERS: BoardFilters = {
   sort: 'combined',
   within: 0,
+  // "Any pay" by default, for the same reason as `within`: most postings state
+  // no salary, so any non-zero default would quietly narrow the board.
+  minSalary: 0,
   remoteOnly: false,
   includeSenior: false,
   includeExcluded: false,
@@ -69,6 +76,11 @@ export function parseStoredFilters(raw: string | null | undefined): BoardFilters
   return {
     sort: SORTS.includes(v.sort as Sort) ? (v.sort as Sort) : DEFAULT_FILTERS.sort,
     within: WITHINS.includes(v.within as Within) ? (v.within as Within) : DEFAULT_FILTERS.within,
+    // Absent from a v1 entry written before this filter existed — falls back to
+    // the default like any unrecognized value, so no key bump is needed.
+    minSalary: MIN_SALARIES.includes(v.minSalary as MinSalary)
+      ? (v.minSalary as MinSalary)
+      : DEFAULT_FILTERS.minSalary,
     remoteOnly: bool(v.remoteOnly, DEFAULT_FILTERS.remoteOnly),
     includeSenior: bool(v.includeSenior, DEFAULT_FILTERS.includeSenior),
     includeExcluded: bool(v.includeExcluded, DEFAULT_FILTERS.includeExcluded),
