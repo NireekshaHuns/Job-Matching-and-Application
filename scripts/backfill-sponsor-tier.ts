@@ -13,15 +13,24 @@
  * Jobs enriched before either change keep their stale tier until this runs, and
  * `sponsor_tier` is what the board sorts and filters on.
  *
+ * Idempotent — every value is re-derived from `jobs` + `sponsors`, so a run that
+ * dies partway through is repaired by running it again. The batches are separate
+ * statements on purpose (65 of them over ~13k rows); the alternative is one
+ * transaction big enough to hold the whole table.
+ *
  * Usage: pnpm backfill:sponsor-tier [--dry-run]
  * Requires DATABASE_URL.
  */
 import 'dotenv/config';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { newHireStatus, scoreSponsorship } from '@/lib/sponsorship';
-import { loadConfirmedAliases, loadSponsorState } from '@/server/enrich/run';
+import {
+  loadConfirmedAliases,
+  loadSponsorState,
+  upsertDiscoveredAliases,
+} from '@/server/enrich/run';
 import { buildSponsorResolver } from '@/server/enrich/steps/resolver';
 import * as schema from '@/server/db/schema';
 
@@ -44,7 +53,7 @@ async function main() {
 
   const sponsorState = await loadSponsorState(db);
   const confirmedAliases = await loadConfirmedAliases(db, sponsorState.idByKey);
-  const { resolve } = buildSponsorResolver({
+  const { resolve, discovered } = buildSponsorResolver({
     historyByKey: sponsorState.historyByKey,
     confirmedAliases,
   });
@@ -132,7 +141,17 @@ async function main() {
     written += res.rowCount ?? 0;
     console.log(`  …${written}/${updates.length}`);
   }
+  if (written < updates.length) {
+    // Expected only if a row was deleted between the read and the write.
+    console.warn(`${updates.length - written} row(s) were not updated — deleted mid-run?`);
+  }
   console.log(`\nUpdated ${written} row(s).`);
+
+  // Keep the audit trail honest: `company_aliases` is the record of which USCIS
+  // employer each company name resolved to, and leaving it stale would have it
+  // disagree with the tiers just written.
+  const aliases = await upsertDiscoveredAliases(db, discovered.values(), sponsorState.idByKey);
+  console.log(`Recorded ${aliases} discovered alias(es).`);
 }
 
 main().catch((err) => {

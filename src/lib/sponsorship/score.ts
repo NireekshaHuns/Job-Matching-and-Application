@@ -71,14 +71,30 @@ const HEAVY_NEW_EMPLOYMENT = 25;
  */
 const ACTIVE_NEW_EMPLOYMENT_LAST_YEAR = 5;
 
-/** New-employment approvals in the most recently filed year, or null if unknown. */
-export function latestYearNewEmployment(
+/**
+ * The strongest new-employment year inside the recency window, or null.
+ *
+ * Deliberately the MAX over recent years rather than strictly the newest one.
+ * The newest fiscal year is often still being reported, so an employer that
+ * sponsored 20 new hires in the last complete year can show 2 for the current
+ * one — and reading only the newest number drops exactly the steady, mid-size
+ * sponsor this rule exists to catch, on a reporting artifact.
+ */
+export function bestRecentNewEmployment(
   history: SponsorHistory,
+  currentYear: number,
+  withinYears = RECENT_YEARS,
 ): { year: number; approvals: number } | null {
   const years = history.newEmploymentRecentYears;
   if (!years?.length) return null;
-  const latest = years.reduce((a, b) => (b.year > a.year ? b : a));
-  return { year: latest.year, approvals: latest.initialApprovals };
+  let best: { year: number; approvals: number } | null = null;
+  for (const entry of years) {
+    if (entry.year < currentYear - withinYears) continue;
+    if (!best || entry.initialApprovals > best.approvals) {
+      best = { year: entry.year, approvals: entry.initialApprovals };
+    }
+  }
+  return best;
 }
 
 /**
@@ -160,15 +176,13 @@ export function scoreSponsorship(input: ScoreInput, opts?: { currentYear?: numbe
 
     // An employer actively sponsoring new hires right now justifies High even
     // when the lifetime total is modest — see ACTIVE_NEW_EMPLOYMENT_LAST_YEAR.
-    const latest = latestYearNewEmployment(history);
-    if (
-      latest &&
-      latest.approvals >= ACTIVE_NEW_EMPLOYMENT_LAST_YEAR &&
-      latest.year >= currentYear - RECENT_YEARS
-    ) {
+    // `bestRecentNewEmployment` already bounds the year, so no separate recency
+    // check is needed here.
+    const recent = bestRecentNewEmployment(history, currentYear);
+    if (recent && recent.approvals >= ACTIVE_NEW_EMPLOYMENT_LAST_YEAR) {
       return {
         tier: 'High',
-        reason: `Sponsored ${latest.approvals} new hires in ${latest.year}; JD silent.`,
+        reason: `Sponsored ${recent.approvals} new hires in ${recent.year}; JD silent.`,
       };
     }
 

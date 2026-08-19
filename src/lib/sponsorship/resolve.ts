@@ -233,11 +233,22 @@ export function buildSponsorIndex(keys: Iterable<string>): SponsorIndex {
 export interface SponsorStrength {
   newEmploymentApprovals: number;
   sponsorCount: number;
+  /** Most recent fiscal year with new-employment approvals; null when none. */
+  newEmploymentLastYear: number | null;
 }
+
+/** A family member must have filed this recently to be preferred. */
+const FAMILY_RECENT_YEARS = 3;
 
 /**
  * New-employment approvals a same-family employer needs before it may override
  * the name-similarity winner.
+ *
+ * DELIBERATELY HIGHER than the tier rule's own 5-approval bar, because it
+ * answers a different question. The tier rule asks "does this employer sponsor?"
+ * The gate here asks "is this employer important enough to overrule what the
+ * name says?" — a much stronger claim, since the structure that makes the
+ * correction possible also produces false families.
  *
  * A gate, not a preference. Big corporate families file under many legal
  * entities, and picking by name similarity systematically picks the WRONG one —
@@ -248,15 +259,18 @@ export interface SponsorStrength {
  * (9,337); and an exact row short-circuited entirely — DELOITTE (2 filings) beat
  * DELOITTE CONSULTING (1,298).
  *
- * The gate exists because the same structure produces false families: "Gemini"
- * extends to GEMINI CONSULTING AND SERVICES, "Reliance" to RELIANCE GRANITE AND
- * MARBLE. Requiring real new-hire sponsorship before overriding keeps the
- * corrections (82 companies on the live board) and drops the junk — measured, it
- * removes every one of ICON DESIGNERS, LIQUID AI, HIVE FINANCIAL SYSTEMS and
- * CARIS MPI while keeping Deloitte, State Street, Motorola, Nordstrom and
- * Home Depot.
+ * Name similarity cannot do this job. "VISA" → "VISA U S A" and "GEMINI" →
+ * "GEMINI CONSULTING AND SERVICES" both score 0.55: a single-token brand plus
+ * three words, where Jaccard charges for every extra token. One is right and one
+ * is wrong, and no threshold separates them — so the filing record has to.
+ *
+ * At 10, measured against the live data, the corrections survive (Visa 42,
+ * Motorola 36, Home Depot 34, Nordstrom 16, State Street 11, Mastercard 10,
+ * Deloitte 310, Amazon 3,288, Qualcomm 198) and the false families do not
+ * (GEMINI CONSULTING AND SERVICES 5, ICON DESIGNERS 1, LIQUID AI 2, HIVE
+ * FINANCIAL SYSTEMS 2, RELIANCE GRANITE AND MARBLE 3).
  */
-const FAMILY_MIN_NEW_EMPLOYMENT = 5;
+const FAMILY_MIN_NEW_EMPLOYMENT = 10;
 
 /**
  * Is `cand` the same name plus extra words — "STATE STREET" → "STATE STREET BANK
@@ -281,8 +295,13 @@ function extendsName(compressedKey: string, cand: string): boolean {
 export function resolveEmployer(
   rawName: string | null | undefined,
   index: SponsorIndex,
-  strengthOf?: (key: string) => SponsorStrength | undefined,
+  opts: {
+    strengthOf?: (key: string) => SponsorStrength | undefined;
+    currentYear?: number;
+  } = {},
 ): ResolveResult {
+  const { strengthOf } = opts;
+  const currentYear = opts.currentYear ?? new Date().getUTCFullYear();
   const key = normalizeCompanyName(rawName);
   if (!key) return { key: null, confidence: 0, method: 'fuzzy' };
 
@@ -302,6 +321,16 @@ export function resolveEmployer(
       const strength = strengthOf(cand);
       if (!strength || strength.newEmploymentApprovals < FAMILY_MIN_NEW_EMPLOYMENT) continue;
       if (strength.newEmploymentApprovals <= incumbent) continue;
+      // Must still be filing. Ranking on the lifetime total alone lets a dormant
+      // entity with a big historical count beat a live sibling — and the tier
+      // rules then read that entity's stale years and score the job LOWER than
+      // before the correction, on exactly the names this override exists for.
+      if (
+        strength.newEmploymentLastYear == null ||
+        strength.newEmploymentLastYear < currentYear - FAMILY_RECENT_YEARS
+      ) {
+        continue;
+      }
       if (
         !bestStrength ||
         strength.newEmploymentApprovals > bestStrength.newEmploymentApprovals ||

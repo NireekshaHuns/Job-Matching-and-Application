@@ -228,18 +228,21 @@ describe('scoreSponsorship', () => {
       expect(score.tier).not.toBe('High');
     });
 
-    it('reads the latest year, not the largest', () => {
+    it('is not fooled by a fiscal year that is still being reported', () => {
+      // FY2026 shows 2 so far; FY2025 closed at 20. Reading only the newest
+      // number would drop a steady mid-size sponsor on a reporting artifact.
       const score = scoreSponsorship(
         {
           jdText: 'Build things.',
           history: history([
-            { year: 2024, initialApprovals: 90 },
-            { year: 2026, initialApprovals: 6 },
+            { year: 2026, initialApprovals: 2 },
+            { year: 2025, initialApprovals: 20 },
           ]),
         },
         { currentYear: 2026 },
       );
-      expect(score.reason).toContain('6 new hires in 2026');
+      expect(score.tier).toBe('High');
+      expect(score.reason).toContain('20 new hires in 2025');
     });
 
     it('never overrules a JD that refuses sponsorship', () => {
