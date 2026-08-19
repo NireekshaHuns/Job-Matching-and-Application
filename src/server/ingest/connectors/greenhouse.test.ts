@@ -96,4 +96,33 @@ describe('greenhouseConnector', () => {
     await connector.fetch();
     expect(connector.lastReport?.()).toMatchObject({ attempted: 1, failed: 1 });
   });
+
+  it('survives a board that drops the connection', async () => {
+    // The regression: connectors handled non-OK RESPONSES but not thrown
+    // network errors, so one ECONNRESET out of 159 Greenhouse boards aborted an
+    // entire refill — discarding every board already fetched. Transient TLS
+    // resets are ordinary at this fan-out.
+    const fetcher: Fetcher = async (url) => {
+      if (url.includes('/flaky/')) throw new TypeError('fetch failed');
+      return new Response(JSON.stringify(acmeFixture), { status: 200 });
+    };
+
+    const connector = greenhouseConnector(
+      [
+        { token: 'flaky', company: 'Flaky' },
+        { token: 'acme', company: 'Acme' },
+      ],
+      fetcher,
+    );
+    const postings = await connector.fetch();
+
+    // The healthy board after it still contributes.
+    expect(postings.length).toBeGreaterThan(0);
+    expect(postings.every((p) => p.company === 'Acme')).toBe(true);
+
+    const report = connector.lastReport?.();
+    expect(report?.attempted).toBe(2);
+    expect(report?.failed).toBe(1);
+    expect(report?.failures[0]).toContain('flaky -> fetch failed');
+  });
 });

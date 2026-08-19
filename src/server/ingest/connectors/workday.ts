@@ -20,7 +20,7 @@
  */
 import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
-import { emptyReport, recordAttempt, recordFailure } from '../report';
+import { emptyReport, fetchBoard } from '../report';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
 export interface WorkdayBoard {
@@ -176,14 +176,23 @@ export function workdayConnector(
   async function fetchDetail(board: WorkdayBoard, externalPath: string): Promise<WorkdayDetail> {
     // `externalPath` already begins with `/job/`; appending another one yields
     // `/Global/job/job/...`, which the API answers with a 406.
-    const res = await fetcher(`${cxsBase(board)}${externalPath}`, {
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) {
-      console.warn(`[workday] detail ${board.tenant}${externalPath} -> HTTP ${res.status}`);
+    //
+    // Best-effort throughout: a posting whose description cannot be fetched is
+    // still emitted, so neither a bad response nor a dropped connection may
+    // escape and take the whole run down.
+    try {
+      const res = await fetcher(`${cxsBase(board)}${externalPath}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) {
+        console.warn(`[workday] detail ${board.tenant}${externalPath} -> HTTP ${res.status}`);
+        return {};
+      }
+      return (await res.json()) as WorkdayDetail;
+    } catch (err) {
+      console.warn(`[workday] detail ${board.tenant}${externalPath} -> ${String(err)}`);
       return {};
     }
-    return (await res.json()) as WorkdayDetail;
   }
 
   return {
@@ -239,28 +248,26 @@ export function workdayConnector(
           for (let page = 0; page < MAX_PAGES; page++) {
             if (spent >= perBoard) break;
             spent++;
-            recordAttempt(report);
-            const res = await fetcher(`${cxsBase(board)}/jobs`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-              body: JSON.stringify({
-                appliedFacets: {},
-                limit: PAGE_SIZE,
-                offset: page * PAGE_SIZE,
-                searchText,
-              }),
-            });
-            if (!res.ok) {
-              // Stop this term rather than the board: one bad page must not cost
-              // us the other search terms, and reporting the offset makes a
-              // mid-pagination failure distinguishable from a short feed.
-              recordFailure(
-                report,
-                board.host,
-                `HTTP ${res.status} at "${searchText}" offset ${page * PAGE_SIZE}`,
-              );
-              break;
-            }
+            // Stop this term rather than the board on failure: one bad page must
+            // not cost us the other search terms, and reporting the offset makes
+            // a mid-pagination failure distinguishable from a short feed.
+            const res = await fetchBoard(
+              fetcher,
+              `${cxsBase(board)}/jobs`,
+              `${board.host} "${searchText}" offset ${page * PAGE_SIZE}`,
+              report,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({
+                  appliedFacets: {},
+                  limit: PAGE_SIZE,
+                  offset: page * PAGE_SIZE,
+                  searchText,
+                }),
+              },
+            );
+            if (!res) break;
 
             const data = (await res.json()) as {
               total?: number;
