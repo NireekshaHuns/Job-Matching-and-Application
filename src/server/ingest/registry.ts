@@ -15,6 +15,7 @@ import { leverConnector, type LeverBoard } from './connectors/lever';
 import { linkedInGuestConnector, type LinkedInSearch } from './connectors/linkedin';
 import { simplifyNewGradConnector } from './connectors/simplify';
 import { smartRecruitersConnector, type SmartRecruitersBoard } from './connectors/smartrecruiters';
+import { workdayConnector, type WorkdayBoard } from './connectors/workday';
 import type { DiscoveredBoards } from './discover';
 import type { Fetcher, JobConnector } from './types';
 
@@ -48,6 +49,14 @@ export function loadDiscoveredBoards(file: string = LOCAL_FILE): Partial<Discove
     greenhouse: mergeBoards(committed.greenhouse ?? [], local.greenhouse, (b) => b.token),
     lever: mergeBoards(committed.lever ?? [], local.lever, (b) => b.token),
     ashby: mergeBoards(committed.ashby ?? [], local.ashby, (b) => b.board),
+    // Keyed by host AND site, matching `discover.ts`: one tenant can publish
+    // several career sites and they hold different postings, so keying on host
+    // alone would silently throw one away.
+    workday: mergeBoards(
+      committed.workday ?? [],
+      local.workday,
+      (b) => `${b.host}/${b.site.toLowerCase()}`,
+    ),
   };
 }
 
@@ -106,6 +115,72 @@ export const ASHBY_BOARDS: AshbyBoard[] = [
   { board: 'notion', company: 'Notion' },
   { board: 'snowflake', company: 'Snowflake' },
   { board: 'baseten', company: 'Baseten' },
+];
+
+/**
+ * Workday boards, as `{host, tenant, site}`. Every entry below was validated
+ * against the live CXS API, and every one is a real H-1B sponsor with new-hire
+ * approvals on record — which is the whole reason to reach Workday at all. The
+ * counts are FY2026 new-employment approvals at the time of writing:
+ *
+ *   NVIDIA 353 · Salesforce 167 · Capital One 158 · PayPal 135 · Adobe 100 ·
+ *   CVS Health 100 · Workday 25 · State Street 11 · Mastercard 10 · Broadcom 5
+ *
+ * `site` is tenant-specific and not guessable — it is the segment after the
+ * tenant in the careers URL. Re-validate before relying on any single one; these
+ * churn like every other ATS token.
+ */
+export const WORKDAY_BOARDS: WorkdayBoard[] = [
+  {
+    host: 'statestreet.wd1.myworkdayjobs.com',
+    tenant: 'statestreet',
+    site: 'Global',
+    company: 'State Street',
+  },
+  {
+    host: 'nvidia.wd5.myworkdayjobs.com',
+    tenant: 'nvidia',
+    site: 'NVIDIAExternalCareerSite',
+    company: 'NVIDIA',
+  },
+  {
+    host: 'salesforce.wd12.myworkdayjobs.com',
+    tenant: 'salesforce',
+    site: 'External_Career_Site',
+    company: 'Salesforce',
+  },
+  {
+    host: 'capitalone.wd12.myworkdayjobs.com',
+    tenant: 'capitalone',
+    site: 'Capital_One',
+    company: 'Capital One',
+  },
+  { host: 'paypal.wd1.myworkdayjobs.com', tenant: 'paypal', site: 'jobs', company: 'PayPal' },
+  {
+    host: 'adobe.wd5.myworkdayjobs.com',
+    tenant: 'adobe',
+    site: 'external_experienced',
+    company: 'Adobe',
+  },
+  {
+    host: 'cvshealth.wd1.myworkdayjobs.com',
+    tenant: 'cvshealth',
+    site: 'CVS_Health_Careers',
+    company: 'CVS Health',
+  },
+  { host: 'workday.wd5.myworkdayjobs.com', tenant: 'workday', site: 'Workday', company: 'Workday' },
+  {
+    host: 'mastercard.wd1.myworkdayjobs.com',
+    tenant: 'mastercard',
+    site: 'CorporateCareers',
+    company: 'Mastercard',
+  },
+  {
+    host: 'broadcom.wd1.myworkdayjobs.com',
+    tenant: 'broadcom',
+    site: 'External_Career',
+    company: 'Broadcom',
+  },
 ];
 
 /**
@@ -209,6 +284,12 @@ export function buildConnectors(fetcher: Fetcher = globalThis.fetch): JobConnect
     greenhouseConnector(greenhouse, fetcher),
     leverConnector(lever, fetcher),
     ashbyConnector(ashby, fetcher),
+    // Ahead of the rest: these are the enterprise sponsors nothing else reaches,
+    // and the board's whole premise is ranking by real sponsorship history.
+    workdayConnector(
+      mergeBoards(WORKDAY_BOARDS, discovered.workday, (b) => `${b.host}/${b.site.toLowerCase()}`),
+      fetcher,
+    ),
     smartRecruitersConnector(SMARTRECRUITERS_BOARDS, fetcher),
     simplifyNewGradConnector({}, fetcher),
     // LAST on purpose, so LinkedIn only contributes jobs the official feeds
