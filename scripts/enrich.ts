@@ -1,9 +1,16 @@
 /**
  * Run the enrichment pipeline once against the live DB.
  *
- * Usage: pnpm enrich
- * Requires DATABASE_URL and OPENAI_API_KEY in .env. Fetches from all connectors,
- * enriches new postings (classify + embed via OpenAI), and inserts into `jobs`.
+ * Mirrors the Inngest orchestrator rather than shortcutting it: one connector at
+ * a time, each with its own `hydrate` pass and the same posting-age guard. Two
+ * things go wrong if you flatten every connector into one list instead —
+ * a source that fetches descriptions separately (Workday) has no `hydrate` to
+ * call and lands every posting with an empty JD and no date, which silently
+ * breaks both sponsorship tiering and the age filter; and without the age guard
+ * the run pays to classify an ATS feed's entire back catalogue.
+ *
+ * Usage: pnpm enrich [--max-age-days N]
+ * Requires DATABASE_URL and OPENAI_API_KEY in .env.
  */
 import 'dotenv/config';
 import { neon } from '@neondatabase/serverless';
@@ -12,11 +19,21 @@ import { installDbTimeout } from '@/server/db/http-timeout';
 import * as schema from '@/server/db/schema';
 import { buildEnrichmentClients, probeRateLimit } from '@/server/enrich/clients';
 import { describeRateLimit, isQuotaExhausted } from '@/server/enrich/ratelimit';
-import { runEnrichment } from '@/server/enrich/run';
+import { reconcileFreshness, runEnrichment } from '@/server/enrich/run';
 import { buildConnectors } from '@/server/ingest/registry';
 
 /** Below this much remaining daily quota, a bulk run is not worth starting. */
 const MIN_REQUESTS_TO_START = 200;
+
+/** Matches the scheduled path's default; override with --max-age-days. */
+const DEFAULT_MAX_POSTED_AGE_DAYS = 7;
+
+function maxPostedAgeDays(): number {
+  const i = process.argv.indexOf('--max-age-days');
+  if (i === -1) return DEFAULT_MAX_POSTED_AGE_DAYS;
+  const parsed = Number(process.argv[i + 1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_POSTED_AGE_DAYS;
+}
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -50,32 +67,46 @@ async function main() {
 
   const db = drizzle(neon(process.env.DATABASE_URL), { schema });
 
-  console.log('Fetching postings from connectors...');
-  const postings = (await Promise.all(buildConnectors().map((c) => c.fetch()))).flat();
-
-  console.log(`Fetched ${postings.length}. Enriching new postings...`);
-  // No cap and no reconcile override: the CLI is the un-timed path, used for
-  // bulk loads too large for the serverless per-step budget.
-  const result = await runEnrichment({
-    db,
-    postings,
-    chat: clients.chat,
-    embedder: clients.embedder,
-    // A backfill runs for hours; show it is alive and persisting.
-    onProgress: (inserted) => console.log(`  …inserted ${inserted} so far`),
-  });
-
+  const maxAge = maxPostedAgeDays();
   console.log(
-    `fetched ${result.stats.fetched}, unique ${result.stats.deduped}, non-SWE filtered ${result.stats.filtered}, ` +
-      `enriched ${result.stats.enriched}, failed ${result.stats.failed}, inserted ${result.inserted}.`,
+    `Skipping postings published more than ${maxAge} days ago (undated ones are kept).\n`,
   );
-  if (result.failures.length > 0) {
-    console.log('sample failures (skipped, not fatal):');
-    for (const f of result.failures) console.log(`  ${f}`);
+
+  // Every fingerprint seen across every source, for one reconcile at the end.
+  // Reconciling per source would close every OTHER source's jobs.
+  const seen: string[] = [];
+  let insertedTotal = 0;
+
+  for (const connector of buildConnectors()) {
+    const postings = await connector.fetch();
+    seen.push(...postings.map((p) => p.fingerprint));
+
+    const report = connector.lastReport?.();
+    const boards = report?.failed ? ` (${report.failed}/${report.attempted} boards failed)` : '';
+    process.stdout.write(`${connector.source.padEnd(24)} fetched ${postings.length}${boards}`);
+
+    // No cap: the CLI is the un-timed path, used for bulk loads too large for
+    // the serverless per-step budget.
+    const result = await runEnrichment({
+      db,
+      postings,
+      chat: clients.chat,
+      embedder: clients.embedder,
+      hydrate: connector.hydrate?.bind(connector),
+      maxPostedAgeDays: maxAge,
+      reconcile: false,
+    });
+    insertedTotal += result.inserted;
+
+    console.log(
+      ` → enriched ${result.stats.enriched}, failed ${result.stats.failed}, inserted ${result.inserted}`,
+    );
+    for (const f of result.failures) console.log(`    ${f}`);
   }
-  console.log(
-    `freshness: refreshed ${result.reconcile.refreshed}, closed ${result.reconcile.closed} stale; aliases upserted ${result.aliasesWritten}.`,
-  );
+
+  const reconcile = await reconcileFreshness(db, seen);
+  console.log(`\nInserted ${insertedTotal} new job(s).`);
+  console.log(`freshness: refreshed ${reconcile.refreshed}, closed ${reconcile.closed} stale.`);
 }
 
 main().catch((err) => {
