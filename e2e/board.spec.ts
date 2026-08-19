@@ -60,30 +60,40 @@ test.describe('Job board', () => {
 
   test.describe('date posted window', () => {
     /**
-     * The default is "Any time" on purpose. The age filter reads
-     * `coalesce(posted_at, first_seen_at)`, so a posting discovered today but
-     * published weeks ago is hidden the moment it arrives — which made "Find
-     * new jobs" look broken while it was working.
+     * The default is "Past 3 days", matching what ingestion now collects.
+     *
+     * It was "Any time" while the table held a long tail of postings published
+     * months earlier, where any window hid most of what a refresh found — the
+     * age filter reads `coalesce(posted_at, first_seen_at)`, so a posting
+     * discovered today but published weeks ago disappeared the moment it
+     * arrived. Ingestion now refuses anything over a week old, so that tail
+     * cannot form and the window is a view rather than a filter.
      */
-    test('defaults to Any time, so an old-but-newly-found posting is visible', async ({ page }) => {
+    test('defaults to the last three days', async ({ page }) => {
       await page.goto('/jobs');
-      await expect(page.getByRole('radio', { name: 'Any time' })).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'Past 3 days' })).toBeChecked();
+      await expect(page.getByText(SEED.old)).toHaveCount(0);
+    });
+
+    test('"Any time" still reaches a posting published weeks ago', async ({ page }) => {
+      await page.goto('/jobs');
+      await page.getByRole('radio', { name: 'Any time' }).check();
       await expect(page.getByText(SEED.old)).toBeVisible();
     });
 
     /**
      * The other direction of the hydration swap. Without this, the test above
      * passes on the pre-hydration paint alone — it cannot tell "the default is
-     * Any time" from "stored filters are never applied".
+     * three days" from "stored filters are never applied".
      */
     test('applies stored filters over the default on first paint', async ({ page }) => {
       await page.addInitScript(() => {
-        window.localStorage.setItem('h1b-board:filters:v1', JSON.stringify({ within: 7 }));
+        window.localStorage.setItem('h1b-board:filters:v1', JSON.stringify({ within: 0 }));
       });
       await page.goto('/jobs');
 
-      await expect(page.getByRole('radio', { name: 'Past week' })).toBeChecked();
-      await expect(page.getByText(SEED.old)).toHaveCount(0);
+      await expect(page.getByRole('radio', { name: 'Any time' })).toBeChecked();
+      await expect(page.getByText(SEED.old)).toBeVisible();
     });
 
     test('"Past week" narrows to recent postings', async ({ page }) => {
@@ -101,10 +111,12 @@ test.describe('Job board', () => {
      */
     test('a posting with no date is aged by when it was first seen', async ({ page }) => {
       await page.goto('/jobs');
-      // It is a real posting, so the default window shows it...
+      // It is a real posting, so an unbounded window shows it...
+      await page.getByRole('radio', { name: 'Any time' }).check();
       await expect(page.getByText(SEED.undatedOld)).toBeVisible();
 
-      // ...but first seen 20 days ago, so "Past week" must hide it.
+      // ...but first seen 20 days ago, so "Past week" must hide it. That is the
+      // regression: an undated posting used to match EVERY window forever.
       await page.getByRole('radio', { name: 'Past week' }).check();
       await expect(page.getByText(SEED.undatedOld)).toHaveCount(0);
     });
