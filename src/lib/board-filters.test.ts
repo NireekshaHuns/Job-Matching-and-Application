@@ -22,6 +22,12 @@ describe('DEFAULT_FILTERS', () => {
     expect(DEFAULT_FILTERS.minSalary).toBe(0);
   });
 
+  it("caps experience at 3 years, which is the board's whole scope", () => {
+    // Unlike the other filters this one defaults ON: the board exists to find
+    // roles a recent grad can get, and a posting that states nothing still shows.
+    expect(DEFAULT_FILTERS.maxYears).toBe(3);
+  });
+
   it('shows jobs of any age', () => {
     // The whole point of the fix: a non-zero default hides newly ingested jobs
     // whose posted_at is older than the window.
@@ -41,6 +47,7 @@ describe('parseStoredFilters', () => {
       sort: 'recent',
       within: 3,
       minSalary: 100_000,
+      maxYears: 5,
       remoteOnly: true,
       includeSenior: true,
       includeExcluded: false,
@@ -58,6 +65,12 @@ describe('parseStoredFilters', () => {
     // A hand-edited or stale value must not reach the query as-is.
     expect(parseStoredFilters('{"minSalary":95000}').minSalary).toBe(DEFAULT_FILTERS.minSalary);
     expect(parseStoredFilters('{"minSalary":"100000"}').minSalary).toBe(DEFAULT_FILTERS.minSalary);
+  });
+
+  it('keeps a stored experience choice and rejects one off the scale', () => {
+    expect(parseStoredFilters('{"maxYears":1}').maxYears).toBe(1);
+    expect(parseStoredFilters('{"maxYears":0}').maxYears).toBe(0);
+    expect(parseStoredFilters('{"maxYears":4}').maxYears).toBe(DEFAULT_FILTERS.maxYears);
   });
 
   it('reads a v1 entry written before the pay filter existed', () => {

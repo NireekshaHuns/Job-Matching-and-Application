@@ -36,6 +36,7 @@
     "backfill:seniority": "tsx scripts/backfill-seniority.ts",
     "backfill:salary": "tsx scripts/backfill-salary.ts",
     "backfill:sponsor-tier": "tsx scripts/backfill-sponsor-tier.ts",
+    "backfill:experience": "tsx scripts/backfill-experience.ts",
     "prune:simplify": "tsx scripts/prune-simplify-non-swe.ts",
     "texlive:serve": "tsx scripts/texlive-ondemand.ts",
     "verify:latex": "tsx scripts/verify-latex-compile.ts",

@@ -84,4 +84,53 @@ describe('looksLikeSwe', () => {
     expect(looksLikeSwe(null)).toBe(false);
     expect(looksLikeSwe(undefined)).toBe(false);
   });
+
+  it('keeps software roles that never say "software"', () => {
+    // All real titles from a live fetch of enterprise Workday boards, where 270
+    // of 1,373 titles were being dropped. A drop here is unrecoverable: the
+    // posting never reaches the DB, so it can never be re-examined.
+    const titles = [
+      'Data Architect, Charles River Development, Vice President',
+      'Solution Architect, VP II',
+      'Principal UI Architect, AVP',
+      'API Technical Lead, VP',
+      'Application Development / Maintenance, AVP',
+      'Java Development Associate',
+      'Systems Analyst, Officer',
+      'Technology Analyst',
+      'Applications Analyst',
+      'Technology Consultant, Senior Associate',
+      'Quality Assurance, Officer',
+      'Manager, CI/CD Infrastructure - Open Source Accelerated Computing',
+      'Database Administrator',
+      'Python Engineer, Trading Systems',
+      'React Developer',
+    ];
+    for (const title of titles) expect(looksLikeSwe(title), title).toBe(true);
+  });
+
+  it('still drops the non-software roles those boards are full of', () => {
+    const titles = [
+      'Named Account Executive, Federal Civilian',
+      'Customer Success Manager, Senior Manager - FinTech',
+      'Business Development Manager, Ecosystem GTM',
+      'Channel Development Manager',
+      'Sales Development Specialist - Nordics',
+      'Product Manager - Analytics, AI Private Markets',
+      'Executive Communications & Presentation Designer - Manager',
+      'Senior UI/UX Designer, AVP',
+      'Private Equity Senior Analyst',
+      'Business Analyst - Server Framework, hybrid, Officer',
+    ];
+    for (const title of titles) expect(looksLikeSwe(title), title).toBe(false);
+  });
+
+  it('does not let a widened pattern rescue a non-software compound', () => {
+    // "architect" is now a positive signal, and positives normally win — which
+    // is why these are checked ahead of everything else.
+    expect(looksLikeSwe('Landscape Architect')).toBe(false);
+    expect(looksLikeSwe('Naval Architect, Senior')).toBe(false);
+    expect(looksLikeSwe('Interior Architect')).toBe(false);
+    expect(looksLikeSwe('Data Entry Clerk')).toBe(false);
+  });
 });

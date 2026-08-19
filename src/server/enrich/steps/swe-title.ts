@@ -18,6 +18,17 @@
  * filter by classification" approach. Tune the arrays if real SWE roles get dropped.
  */
 
+/**
+ * Compounds that are never software however they read otherwise. Checked BEFORE
+ * the positive signals, which is the one place that ordering is needed: without
+ * it, widening "architect" to catch "Solution Architect" would also rescue
+ * "Landscape Architect".
+ */
+const NEVER_SWE_PATTERNS: RegExp[] = [
+  /\b(?:landscape|naval|interior|marine)\s+architect\b/i,
+  /\bdata\s+entry\b/i,
+];
+
 /** Clear non-software signals — if any matches, drop the posting. */
 const NON_SWE_PATTERNS: RegExp[] = [
   // Non-software engineering disciplines (still say "engineer", but not SWE).
@@ -50,6 +61,31 @@ const SWE_POSITIVE_PATTERNS: RegExp[] = [
   // Named-language roles are already covered by "developer" / generic "engineer";
   // "golang" is the one language token that isn't a common English word on its own.
   /\bgolang\b/i,
+
+  // --- Titles that are software work without ever saying "software" ---
+  //
+  // Measured against a live fetch of six enterprise Workday boards, 270 of 1,373
+  // titles were being dropped. Most were correctly dropped (account executives,
+  // customer success, channel sales), but the ones below were real software
+  // roles at exactly the large H1B sponsors this board exists to surface — and a
+  // drop here is unrecoverable, since the posting never reaches the DB.
+
+  // "Solution Architect", "Data Architect", "API Technical Lead". A bare
+  // "architect" is allowed because NEVER_SWE_PATTERNS above holds the
+  // non-software ones.
+  /\barchitect(?:ure)?\b/i,
+  // "Application Development / Maintenance", "Java Development Associate".
+  /\b(?:software|application|applications|platform|api|web|mobile|cloud|systems?|technology|product)\s+development\b/i,
+  // "Systems Analyst", "Technology Analyst" — but not "Private Equity Analyst".
+  /\b(?:systems?|technology|technical|applications?|data|software|it|security|qa|quality|integration)\s+analyst\b/i,
+  // "Quality Assurance, Officer".
+  /\bquality\s+assurance\b/i,
+  // "API Technical Lead", "Technology Consultant".
+  /\btech(?:nical|nology)?\s+(?:lead|consultant|specialist|architect)\b/i,
+  /\b(?:database|data)\s+(?:administrator|architect)\b/i,
+  /\bci\s?\/?\s?cd\b|\bkubernetes\b|\bterraform\b/i,
+  // A named language or runtime in a title is a software role whatever the noun.
+  /\b(?:java|python|javascript|typescript|dot\s?net|\.net|c\+\+|ruby|scala|kotlin|swift|rust|php|react|angular|node\.?js|spring boot)\b/i,
 ];
 
 /** Bare "engineer/engineering" — kept only after the non-software checks above. */
@@ -62,7 +98,10 @@ const GENERIC_ENGINEER = /\bengineer(?:ing)?\b/i;
  */
 export function looksLikeSwe(title: string | null | undefined): boolean {
   if (!title) return false;
-  // Software signal wins first, so a compound title with both a software term and
+  // Checked ahead of everything: these compounds must not be rescued by a
+  // positive signal the way "Software Sales Engineer" deliberately is.
+  if (NEVER_SWE_PATTERNS.some((re) => re.test(title))) return false;
+  // Software signal wins next, so a compound title with both a software term and
   // a disqualifier (e.g. "Software Sales Engineer") is kept, not dropped.
   if (SWE_POSITIVE_PATTERNS.some((re) => re.test(title))) return true;
   if (NON_SWE_PATTERNS.some((re) => re.test(title))) return false;

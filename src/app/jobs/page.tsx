@@ -29,6 +29,7 @@ import {
   subscribeFilters,
   writeFilters,
   type BoardFilters,
+  type MaxYears,
   type MinSalary,
   type Sort,
   type Within,
@@ -54,6 +55,18 @@ const MIN_SALARY_OPTIONS: { value: MinSalary; label: string }[] = [
   { value: 100_000, label: '$100k+' },
   { value: 120_000, label: '$120k+' },
   { value: 150_000, label: '$150k+' },
+];
+
+/**
+ * Experience ceiling. Defaults to 3 years — the board's whole scope — and a
+ * posting that states no requirement passes at every setting.
+ */
+const MAX_YEARS_OPTIONS: { value: MaxYears; label: string }[] = [
+  { value: 0, label: 'Any' },
+  { value: 1, label: '1 year or less' },
+  { value: 2, label: '2 years or less' },
+  { value: 3, label: '3 years or less' },
+  { value: 5, label: '5 years or less' },
 ];
 
 /** How often to re-check the pipeline while waiting for a refresh to land. */
@@ -82,8 +95,16 @@ export default function JobsPage() {
     getFiltersSnapshot,
     getServerFiltersSnapshot,
   );
-  const { sort, within, minSalary, remoteOnly, includeSenior, includeExcluded, includeClosed } =
-    filters;
+  const {
+    sort,
+    within,
+    minSalary,
+    maxYears,
+    remoteOnly,
+    includeSenior,
+    includeExcluded,
+    includeClosed,
+  } = filters;
 
   // Spread the STORE's snapshot, not the rendered `filters`. Two calls without
   // an intervening commit (a preset, a reset button, a transition) would
@@ -190,6 +211,7 @@ export default function JobsPage() {
     sort,
     postedWithinDays: within || undefined,
     minSalaryUsd: minSalary,
+    maxYearsExperience: maxYears,
     remoteOnly,
     includeSenior,
     includeExcluded,
@@ -278,6 +300,27 @@ export default function JobsPage() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="border-border border-t pt-4">
+              <div className="text-faint mb-2 text-xs font-medium tracking-wide uppercase">
+                Experience
+              </div>
+              <select
+                aria-label="Maximum years of experience"
+                value={maxYears}
+                onChange={(e) => setFilter('maxYears', Number(e.target.value) as MaxYears)}
+                className={`${inputCls} w-full`}
+              >
+                {MAX_YEARS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-faint mt-1.5 text-xs">
+                Jobs that don&rsquo;t state a requirement are still shown.
+              </p>
             </div>
 
             <div className="border-border border-t pt-4">
