@@ -23,6 +23,15 @@ describe('parseRequiredYears', () => {
     expect(parseRequiredYears(jd)).toBe(2);
   });
 
+  it('does not hang on a long whitespace run', () => {
+    // The years pattern has three `\\s*` runs separated by optional groups, so an
+    // un-normalized run that never reaches "years" split cubically — 96 seconds
+    // for one posting, inside a durable step that would then retry.
+    const started = Date.now();
+    expect(parseRequiredYears(`5${' '.repeat(8000)}`)).toBeNull();
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   it('ignores the company talking about itself', () => {
     expect(parseRequiredYears('Founded 10 years ago, we build tools.')).toBeNull();
     expect(parseRequiredYears('CRD has grown 135% over the last 5 years of operation.')).toBeNull();
@@ -32,6 +41,23 @@ describe('parseRequiredYears', () => {
         'Building on more than 30 years of investing experience, Point72 seeks to deliver returns.',
       ),
     ).toBeNull();
+    // "ago" can only FOLLOW the figure, so a guard tested against the preceding
+    // text never ran. These read as 12- and 10-year requirements.
+    expect(
+      parseRequiredYears('Our company was founded 12 years ago. Experience the difference.'),
+    ).toBeNull();
+    expect(
+      parseRequiredYears('Founded 10 years ago, we bring deep experience to every client.'),
+    ).toBeNull();
+    expect(parseRequiredYears('Join a team with 15 years of combined experience.')).toBeNull();
+  });
+
+  it('still counts a real requirement alongside a company blurb', () => {
+    expect(
+      parseRequiredYears(
+        'Our 100 years of experience speak for us. 7+ years of experience required.',
+      ),
+    ).toBe(7);
   });
 
   it('needs the figure to be about experience at all', () => {

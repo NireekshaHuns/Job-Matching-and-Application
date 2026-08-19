@@ -125,12 +125,35 @@ describe('looksLikeSwe', () => {
     for (const title of titles) expect(looksLikeSwe(title), title).toBe(false);
   });
 
-  it('does not let a widened pattern rescue a non-software compound', () => {
-    // "architect" is now a positive signal, and positives normally win — which
-    // is why these are checked ahead of everything else.
-    expect(looksLikeSwe('Landscape Architect')).toBe(false);
-    expect(looksLikeSwe('Naval Architect, Senior')).toBe(false);
-    expect(looksLikeSwe('Interior Architect')).toBe(false);
-    expect(looksLikeSwe('Data Entry Clerk')).toBe(false);
+  it('does not let a broad signal rescue a clearly non-software role', () => {
+    // The broad patterns are checked AFTER the denylist for exactly this reason.
+    // Each of these was kept when they were checked before it, and each costs a
+    // paid classify call.
+    const titles = [
+      'Landscape Architect',
+      'Naval Architect, Senior',
+      'Interior Architect',
+      'Data Entry Clerk',
+      'Quality Assurance Technician',
+      'Quality Assurance Nurse',
+      'Quality Assurance Auditor - Pharmaceutical',
+      'Truck Driver - Swift Transportation',
+      'Barista - Java House',
+      'Java City Cashier',
+      'Ruby Receptionist',
+      'Rust Prevention Technician',
+      'Angular Contour Machinist',
+      'Technical Specialist, Field Sales',
+    ];
+    for (const title of titles) expect(looksLikeSwe(title), title).toBe(false);
+  });
+
+  it('reads the languages whose punctuation broke the shared pattern', () => {
+    // Both sat inside a shared `\b(?:…)\b`, where the trailing boundary after
+    // "+" can never match — so the two entries added for punctuation-bearing
+    // languages were the two that did nothing.
+    expect(looksLikeSwe('C++ Application Support')).toBe(true);
+    expect(looksLikeSwe('Application Support - C++')).toBe(true);
+    expect(looksLikeSwe('.NET Application Support')).toBe(true);
   });
 });

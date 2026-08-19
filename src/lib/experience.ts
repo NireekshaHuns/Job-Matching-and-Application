@@ -55,17 +55,25 @@ const YEARS = new RegExp(
 const CONTEXT_CHARS = 90;
 
 /**
- * Phrasings that mean the years belong to the company, not the candidate —
- * "founded 10 years ago", "grown 135% over the last 5 years".
+ * Phrasings BEFORE the figure that mean the years belong to the company, not the
+ * candidate — "grown 135% over the last 5 years".
  */
-const NOT_A_REQUIREMENT = /\b(?:ago|last|past|next|over the|for the)\s*$/i;
+const NOT_A_REQUIREMENT_BEFORE = /\b(?:last|past|next|over the|for the|founded)\s*$/i;
+
+/**
+ * The same, AFTER the figure. "ago" can only ever follow it, so testing it
+ * against the preceding text — as this once did — made the guard unreachable:
+ * "Our company was founded 12 years ago. Experience the difference." read as a
+ * 12-year requirement and hid a new-grad posting.
+ */
+const NOT_A_REQUIREMENT_AFTER = /^\s*(?:ago\b|of\s+combined\b)/i;
 
 /**
  * A believable requirement. No software posting asks for more than this, so a
  * bigger figure is the company talking about itself — "Building on more than 30
  * years of investing experience, Point72 seeks…" is the exact line that gave a
- * *Quantitative Developer Intern* posting a 30-year requirement. Rejecting the
- * figure returns null, which the board keeps.
+ * *Quantitative Developer Intern* posting a 30-year requirement. The figure is
+ * skipped; any other figure in the posting still counts.
  */
 const MAX_YEARS = 20;
 
@@ -86,20 +94,33 @@ function toNumber(token: string): number | null {
 export function parseRequiredYears(jdText: string | null | undefined): number | null {
   if (!jdText) return null;
 
+  // Collapse whitespace FIRST, for two independent reasons. The obvious one is
+  // that the context windows below are raw character counts, and a run of blank
+  // lines could otherwise swallow the whole window and hide a real requirement.
+  // The serious one is that `YEARS` has three `\s*` runs separated by optional
+  // groups: against a long unbroken whitespace run that never reaches "years",
+  // the match splits cubically. Measured on the raw form, a figure followed by
+  // 8,000 spaces took 96 seconds — and Lever and Ashby hand us their
+  // `descriptionPlain` verbatim, uncapped, inside a durable step that would then
+  // retry. Normalized, the same input is instant.
+  const text = jdText.replace(/\s+/g, ' ');
+
   let lowest: number | null = null;
   YEARS.lastIndex = 0;
-  for (let m = YEARS.exec(jdText); m !== null; m = YEARS.exec(jdText)) {
+  for (let m = YEARS.exec(text); m !== null; m = YEARS.exec(text)) {
     const value = toNumber(m[1]);
     if (value == null || value > MAX_YEARS) continue;
 
-    // "over the last 5 years" is the employer talking about itself.
-    const before = jdText.slice(Math.max(0, m.index - 24), m.index + m[0].indexOf(m[1]));
-    if (NOT_A_REQUIREMENT.test(before)) continue;
+    const end = m.index + m[0].length;
+    const before = text.slice(Math.max(0, m.index - 24), m.index + m[0].indexOf(m[1]));
+    const after = text.slice(end, end + CONTEXT_CHARS);
+
+    // The employer talking about its own history, on either side of the figure.
+    if (NOT_A_REQUIREMENT_BEFORE.test(before)) continue;
+    if (NOT_A_REQUIREMENT_AFTER.test(after)) continue;
 
     // The figure only counts as a requirement if experience is being discussed.
-    const after = jdText.slice(m.index + m[0].length, m.index + m[0].length + CONTEXT_CHARS);
-    const window = `${before} ${after}`;
-    if (!/\bexperience|\bexp\b|\bbackground\b/i.test(window)) continue;
+    if (!/\bexperience|\bexp\b|\bbackground\b/i.test(`${before} ${after}`)) continue;
 
     if (lowest == null || value < lowest) lowest = value;
   }

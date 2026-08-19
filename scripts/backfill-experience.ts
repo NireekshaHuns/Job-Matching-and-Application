@@ -40,7 +40,7 @@ async function main() {
   const db = drizzle(neon(process.env.DATABASE_URL), { schema });
 
   const rows = await db
-    .select({ id: schema.jobs.id, title: schema.jobs.title, jdText: schema.jobs.jdText })
+    .select({ id: schema.jobs.id, jdText: schema.jobs.jdText })
     .from(schema.jobs);
 
   const updates = rows.map((r) => ({ id: r.id, years: parseRequiredYears(r.jdText) }));
