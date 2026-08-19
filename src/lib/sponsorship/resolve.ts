@@ -229,24 +229,110 @@ export function buildSponsorIndex(keys: Iterable<string>): SponsorIndex {
   };
 }
 
+/** What makes one USCIS employer a better answer than another with the same name. */
+export interface SponsorStrength {
+  newEmploymentApprovals: number;
+  sponsorCount: number;
+}
+
+/**
+ * New-employment approvals a same-family employer needs before it may override
+ * the name-similarity winner.
+ *
+ * A gate, not a preference. Big corporate families file under many legal
+ * entities, and picking by name similarity systematically picks the WRONG one —
+ * the shortest name wins, because every extra token costs Jaccard overlap.
+ * Measured on the live data: "State Street" resolved to STATE STREET FINANCIAL
+ * SERVICES (1 filing) over STATE STREET BANK AND TRUST (170, 11 new-hire) at
+ * 0.70 vs 0.64; "Amazon" to AMAZON ADVERTISING (62) over AMAZON COM SERVICES
+ * (9,337); and an exact row short-circuited entirely — DELOITTE (2 filings) beat
+ * DELOITTE CONSULTING (1,298).
+ *
+ * The gate exists because the same structure produces false families: "Gemini"
+ * extends to GEMINI CONSULTING AND SERVICES, "Reliance" to RELIANCE GRANITE AND
+ * MARBLE. Requiring real new-hire sponsorship before overriding keeps the
+ * corrections (82 companies on the live board) and drops the junk — measured, it
+ * removes every one of ICON DESIGNERS, LIQUID AI, HIVE FINANCIAL SYSTEMS and
+ * CARIS MPI while keeping Deloitte, State Street, Motorola, Nordstrom and
+ * Home Depot.
+ */
+const FAMILY_MIN_NEW_EMPLOYMENT = 5;
+
+/**
+ * Is `cand` the same name plus extra words — "STATE STREET" → "STATE STREET BANK
+ * AND TRUST"? Compared at token boundaries via the compressed form, so a spacing
+ * variant ("WALMART" → "WAL MART ASSOCIATES") counts too.
+ */
+function extendsName(compressedKey: string, cand: string): boolean {
+  if (!cand) return false;
+  const prefixes = tokenBoundaryPrefixes(cand);
+  return prefixes.includes(compressedKey) && prefixes[prefixes.length - 1] !== compressedKey;
+}
+
 /**
  * Resolve a raw company name to a sponsor key. Exact normalized hit → confidence
  * 1. Otherwise the best fuzzy candidate at/above `FUZZY_THRESHOLD`. Else null
  * (no confident match — the caller surfaces this as "No record"/"Unknown", never
  * a fabricated match).
+ *
+ * `strengthOf` enables the same-family correction described on
+ * `FAMILY_MIN_NEW_EMPLOYMENT`; omit it for pure name matching.
  */
 export function resolveEmployer(
   rawName: string | null | undefined,
   index: SponsorIndex,
+  strengthOf?: (key: string) => SponsorStrength | undefined,
 ): ResolveResult {
   const key = normalizeCompanyName(rawName);
   if (!key) return { key: null, confidence: 0, method: 'fuzzy' };
-  if (index.has(key)) return { key, confidence: 1, method: 'exact' };
 
   const tokens = key.split(' ').filter(Boolean);
+  const candidates = index.candidates(tokens);
+
+  // A genuinely-sponsoring employer whose name is this one plus extra words
+  // beats both the exact row and the similarity winner. See the constant above.
+  if (strengthOf) {
+    const compressed = tokens.join('');
+    const incumbent = index.has(key) ? (strengthOf(key)?.newEmploymentApprovals ?? 0) : 0;
+    let bestMember: string | null = null;
+    let bestStrength: SponsorStrength | null = null;
+
+    for (const cand of candidates) {
+      if (cand === key || !extendsName(compressed, cand)) continue;
+      const strength = strengthOf(cand);
+      if (!strength || strength.newEmploymentApprovals < FAMILY_MIN_NEW_EMPLOYMENT) continue;
+      if (strength.newEmploymentApprovals <= incumbent) continue;
+      if (
+        !bestStrength ||
+        strength.newEmploymentApprovals > bestStrength.newEmploymentApprovals ||
+        (strength.newEmploymentApprovals === bestStrength.newEmploymentApprovals &&
+          strength.sponsorCount > bestStrength.sponsorCount)
+      ) {
+        bestMember = cand;
+        bestStrength = strength;
+      }
+    }
+
+    if (bestMember) {
+      // Reported as `fuzzy`, not `exact`: the name did not match, the corporate
+      // family did. The confidence is the honest name similarity, so a card can
+      // still show how much of a leap this was.
+      return {
+        key: bestMember,
+        confidence: Math.min(
+          Math.round(similarity(key, bestMember) * 100) / 100,
+          FUZZY_CONFIDENCE_CAP,
+        ),
+        method: 'fuzzy',
+      };
+    }
+  }
+
+  if (index.has(key)) return { key, confidence: 1, method: 'exact' };
+
   let best: string | null = null;
   let bestScore = 0;
-  for (const cand of index.candidates(tokens)) {
+  for (const cand of candidates) {
     const score = similarity(key, cand);
     if (score > bestScore) {
       bestScore = score;

@@ -182,4 +182,94 @@ describe('scoreSponsorship', () => {
       expect(sponsorTierEnum.enumValues).toContain(result.tier);
     });
   });
+
+  describe('an employer actively sponsoring new hires', () => {
+    const history = (years: Array<{ year: number; initialApprovals: number }>) => ({
+      sponsorCount: 170,
+      approvalRate: 0.96,
+      lastFiledYear: 2026,
+      newEmploymentApprovals: 11,
+      newEmploymentLastYear: 2026,
+      newEmploymentRecentYears: years,
+    });
+
+    it('is High on a modest but current record', () => {
+      // State Street: 11 new-hire approvals in FY2026. Far below the lifetime
+      // HEAVY_NEW_EMPLOYMENT bar of 25, which is why it used to read Medium.
+      const score = scoreSponsorship(
+        { jdText: 'Build things.', history: history([{ year: 2026, initialApprovals: 11 }]) },
+        { currentYear: 2026 },
+      );
+      expect(score.tier).toBe('High');
+      expect(score.reason).toContain('11 new hires in 2026');
+    });
+
+    it('stays Medium below the bar', () => {
+      const score = scoreSponsorship(
+        { jdText: 'Build things.', history: history([{ year: 2026, initialApprovals: 4 }]) },
+        { currentYear: 2026 },
+      );
+      expect(score.tier).toBe('Medium');
+    });
+
+    it('is inclusive at the bar', () => {
+      const score = scoreSponsorship(
+        { jdText: 'Build things.', history: history([{ year: 2026, initialApprovals: 5 }]) },
+        { currentYear: 2026 },
+      );
+      expect(score.tier).toBe('High');
+    });
+
+    it('ignores a record that is no longer current', () => {
+      const score = scoreSponsorship(
+        { jdText: 'Build things.', history: history([{ year: 2018, initialApprovals: 40 }]) },
+        { currentYear: 2026 },
+      );
+      expect(score.tier).not.toBe('High');
+    });
+
+    it('reads the latest year, not the largest', () => {
+      const score = scoreSponsorship(
+        {
+          jdText: 'Build things.',
+          history: history([
+            { year: 2024, initialApprovals: 90 },
+            { year: 2026, initialApprovals: 6 },
+          ]),
+        },
+        { currentYear: 2026 },
+      );
+      expect(score.reason).toContain('6 new hires in 2026');
+    });
+
+    it('never overrules a JD that refuses sponsorship', () => {
+      // History is checked AFTER the disqualifiers on purpose: a posting that
+      // says no has told us the answer, whatever the employer files.
+      const score = scoreSponsorship(
+        {
+          jdText: 'We do not offer visa sponsorship for this role.',
+          history: history([{ year: 2026, initialApprovals: 3288 }]),
+        },
+        { currentYear: 2026 },
+      );
+      expect(score.tier).toBe('Excluded');
+    });
+
+    it('falls back to the lifetime rules when no per-year data is present', () => {
+      const score = scoreSponsorship(
+        {
+          jdText: 'Build things.',
+          history: {
+            sponsorCount: 170,
+            approvalRate: 0.96,
+            lastFiledYear: 2026,
+            newEmploymentApprovals: 11,
+            newEmploymentLastYear: 2026,
+          },
+        },
+        { currentYear: 2026 },
+      );
+      expect(score.tier).toBe('Medium');
+    });
+  });
 });

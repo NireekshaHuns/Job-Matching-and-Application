@@ -39,6 +39,9 @@ export async function loadSponsorState(db: DB): Promise<SponsorState> {
       lastFiledYear: sponsors.lastFiledYear,
       newEmploymentApprovals: sponsors.newEmploymentApprovals,
       newEmploymentLastYear: sponsors.newEmploymentLastYear,
+      // Written since the USCIS ingest landed but never read until the
+      // latest-year tier rule needed it.
+      newEmploymentRecentYears: sponsors.newEmploymentRecentYears,
     })
     .from(sponsors);
 
@@ -51,6 +54,7 @@ export async function loadSponsorState(db: DB): Promise<SponsorState> {
       lastFiledYear: r.lastFiledYear,
       newEmploymentApprovals: r.newEmploymentApprovals,
       newEmploymentLastYear: r.newEmploymentLastYear,
+      newEmploymentRecentYears: r.newEmploymentRecentYears,
     });
     idByKey.set(r.key, r.id);
   }

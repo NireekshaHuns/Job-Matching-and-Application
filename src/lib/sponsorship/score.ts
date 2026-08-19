@@ -26,6 +26,13 @@ export interface SponsorHistory {
   newEmploymentApprovals: number;
   /** Most recent fiscal year with any New Employment approvals; null when none. */
   newEmploymentLastYear: number | null;
+  /**
+   * New-employment approvals per fiscal year, newest first. Present so a rule can
+   * ask "how many people did this employer sponsor LAST YEAR" — the lifetime
+   * total above cannot distinguish an employer that sponsored 30 people a decade
+   * ago from one sponsoring 30 a year now.
+   */
+  newEmploymentRecentYears?: Array<{ year: number; initialApprovals: number }>;
 }
 
 export interface ScoreInput {
@@ -48,6 +55,31 @@ const RECENT_YEARS = 3;
  * transfer/continuation-heavy body shop can't reach `High` on history.
  */
 const HEAVY_NEW_EMPLOYMENT = 25;
+
+/**
+ * New-employment approvals in the LATEST filed year at/above which an employer
+ * is treated as an active sponsor, regardless of what the JD says.
+ *
+ * This is the board owner's own bar: an employer that sponsored this many people
+ * in the last year will plausibly sponsor again, so the job should surface. It
+ * sits below `HEAVY_NEW_EMPLOYMENT` deliberately — that threshold is a lifetime
+ * total and misses mid-size employers with a steady, recent record. State Street
+ * (11 new-hire approvals in FY2026) is the case that motivated it.
+ *
+ * Checked AFTER the explicit disqualifiers, so a JD that says "no sponsorship"
+ * still yields `Excluded` — history never overrules the posting's own words.
+ */
+const ACTIVE_NEW_EMPLOYMENT_LAST_YEAR = 5;
+
+/** New-employment approvals in the most recently filed year, or null if unknown. */
+export function latestYearNewEmployment(
+  history: SponsorHistory,
+): { year: number; approvals: number } | null {
+  const years = history.newEmploymentRecentYears;
+  if (!years?.length) return null;
+  const latest = years.reduce((a, b) => (b.year > a.year ? b : a));
+  return { year: latest.year, approvals: latest.initialApprovals };
+}
 
 /**
  * "This employer won't sponsor" phrasings. The negated forms use a windowed
@@ -125,6 +157,20 @@ export function scoreSponsorship(input: ScoreInput, opts?: { currentYear?: numbe
     const newRecent =
       history.newEmploymentLastYear != null &&
       history.newEmploymentLastYear >= currentYear - RECENT_YEARS;
+
+    // An employer actively sponsoring new hires right now justifies High even
+    // when the lifetime total is modest — see ACTIVE_NEW_EMPLOYMENT_LAST_YEAR.
+    const latest = latestYearNewEmployment(history);
+    if (
+      latest &&
+      latest.approvals >= ACTIVE_NEW_EMPLOYMENT_LAST_YEAR &&
+      latest.year >= currentYear - RECENT_YEARS
+    ) {
+      return {
+        tier: 'High',
+        reason: `Sponsored ${latest.approvals} new hires in ${latest.year}; JD silent.`,
+      };
+    }
 
     // Heavy, recent new-hire sponsorship justifies High on history alone.
     if (history.newEmploymentApprovals >= HEAVY_NEW_EMPLOYMENT && newRecent) {

@@ -168,3 +168,69 @@ describe('buildSponsorIndex', () => {
     expect(cands).not.toContain('SNOWFLAKE COMPUTING');
   });
 });
+
+describe('resolveEmployer — corporate families', () => {
+  /** Real rows from the USCIS data, trimmed to what the resolver reads. */
+  const SPONSORS: Record<string, { newEmploymentApprovals: number; sponsorCount: number }> = {
+    'STATE STREET BANK AND TRUST': { newEmploymentApprovals: 11, sponsorCount: 170 },
+    'STATE STREET FINANCIAL SERVICES': { newEmploymentApprovals: 0, sponsorCount: 1 },
+    'AMAZON COM SERVICES': { newEmploymentApprovals: 3288, sponsorCount: 9337 },
+    'AMAZON ADVERTISING': { newEmploymentApprovals: 25, sponsorCount: 62 },
+    DELOITTE: { newEmploymentApprovals: 1, sponsorCount: 2 },
+    'DELOITTE CONSULTING': { newEmploymentApprovals: 310, sponsorCount: 1298 },
+    QUALCOMM: { newEmploymentApprovals: 6, sponsorCount: 26 },
+    'QUALCOMM TECHNOLOGIES': { newEmploymentApprovals: 198, sponsorCount: 836 },
+    // A false family: the brand is a common word and the extension is unrelated.
+    'RELIANCE GRANITE AND MARBLE': { newEmploymentApprovals: 3, sponsorCount: 3 },
+    RELIANCE: { newEmploymentApprovals: 0, sponsorCount: 2 },
+    STRIPE: { newEmploymentApprovals: 40, sponsorCount: 120 },
+  };
+  const index = buildSponsorIndex(Object.keys(SPONSORS));
+  const strengthOf = (key: string) => SPONSORS[key];
+
+  it('prefers the entity that actually sponsors over the shorter name', () => {
+    // Name similarity scores FINANCIAL SERVICES higher (0.70 vs 0.64) purely
+    // because it has fewer extra tokens — which is how a company with 170
+    // filings and 11 new hires read as one with a single filing.
+    expect(resolveEmployer('State Street', index, strengthOf).key).toBe(
+      'STATE STREET BANK AND TRUST',
+    );
+    expect(resolveEmployer('Amazon', index, strengthOf).key).toBe('AMAZON COM SERVICES');
+  });
+
+  it('overrides even an exact row when it is a shell', () => {
+    // DELOITTE exists with 2 filings, so the exact hit short-circuited and the
+    // real employer — 1,298 filings — was never considered.
+    expect(resolveEmployer('Deloitte', index, strengthOf).key).toBe('DELOITTE CONSULTING');
+    expect(resolveEmployer('Qualcomm', index, strengthOf).key).toBe('QUALCOMM TECHNOLOGIES');
+  });
+
+  it('reports a family match as fuzzy, never as exact', () => {
+    // The name did not match; the corporate family did. Confidence stays the
+    // honest name similarity so a card can show how big a leap it was.
+    const r = resolveEmployer('Deloitte', index, strengthOf);
+    expect(r.method).toBe('fuzzy');
+    expect(r.confidence).toBeLessThan(1);
+  });
+
+  it('leaves a false family alone', () => {
+    // "Reliance" extends to RELIANCE GRANITE AND MARBLE, which is a different
+    // company. Three new-hire approvals is under the bar, so the exact row wins.
+    const r = resolveEmployer('Reliance', index, strengthOf);
+    expect(r.key).toBe('RELIANCE');
+    expect(r.method).toBe('exact');
+  });
+
+  it('leaves an unambiguous exact match exactly as it was', () => {
+    const r = resolveEmployer('Stripe', index, strengthOf);
+    expect(r).toEqual({ key: 'STRIPE', confidence: 1, method: 'exact' });
+  });
+
+  it('behaves exactly as before when given no strength lookup', () => {
+    // Name matching alone stops at the shell row and at the shortest extension:
+    // a single-token brand gets no help from the spacing measure, so "Amazon"
+    // lands on ADVERTISING (0.70) rather than COM SERVICES (0.60).
+    expect(resolveEmployer('Deloitte', index).key).toBe('DELOITTE');
+    expect(resolveEmployer('Amazon', index).key).toBe('AMAZON ADVERTISING');
+  });
+});
