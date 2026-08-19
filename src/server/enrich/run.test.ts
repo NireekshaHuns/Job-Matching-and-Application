@@ -3,9 +3,9 @@ import type { DB } from '@/server/db';
 import type { NewJob } from '@/server/db/schema';
 import type { RawPosting } from '@/server/ingest/types';
 import type { DiscoveredAlias } from './steps/resolver';
+import { isRecentEnough } from './recency';
 import {
   insertJobs,
-  isRecentEnough,
   loadSponsorState,
   planEnrichmentBatch,
   reconcileFreshness,
@@ -381,6 +381,14 @@ describe('isRecentEnough', () => {
   it('keeps everything when no limit is set', () => {
     expect(isRecentEnough(daysAgo(400), undefined, now)).toBe(true);
     expect(isRecentEnough(daysAgo(400), 0, now)).toBe(true);
+  });
+
+  it('treats an unusable limit as no limit, not as "drop everything"', () => {
+    // Configured from the environment, where `Number("7 days")` is NaN — which
+    // compares false against every dated posting and would turn a typo into a
+    // near-total ingestion blackout that still reports success.
+    expect(isRecentEnough(daysAgo(400), NaN, now)).toBe(true);
+    expect(isRecentEnough(daysAgo(400), -1, now)).toBe(true);
   });
 
   it('drops a posting past the window', () => {

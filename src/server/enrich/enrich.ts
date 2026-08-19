@@ -15,6 +15,7 @@ import { embedJd } from './steps/embed';
 import type { SponsorResolver } from './steps/resolver';
 import { matchSponsor } from './steps/sponsor-match';
 import { looksLikeSwe } from './steps/swe-title';
+import { isRecentEnough } from './recency';
 import type { ChatClient, Embedder } from './types';
 
 export interface EnrichDeps {
@@ -63,6 +64,14 @@ export interface EnrichBatchOptions {
   batchSize?: number;
   /** Postings classified in parallel. Keep modest — these are paid API calls. */
   concurrency?: number;
+  /**
+   * Skip postings published more than this many days ago. Applied HERE, next to
+   * the title filter, because this is the one place every caller passes through:
+   * the cap planner's predicate only shapes its output when the cap is actually
+   * exceeded, so a guard living only there does nothing in the ordinary case of
+   * a fetch that fits. Undated postings are kept.
+   */
+  maxPostedAgeDays?: number;
 }
 
 /**
@@ -94,9 +103,12 @@ export async function enrichPostings(
 ): Promise<EnrichResult> {
   const deduped = dedupPostings(postings);
   const fresh = deduped.filter((p) => !existingFingerprints.has(p.fingerprint));
-  // Drop obviously-non-software titles BEFORE the paid classify/embed loop, so a
-  // sales/technician/ops posting never costs an LLM call.
-  const swe = fresh.filter((p) => looksLikeSwe(p.title));
+  // Drop obviously-non-software titles and stale postings BEFORE the paid
+  // classify/embed loop, so a sales posting or a nine-month-old listing never
+  // costs an LLM call. ATS feeds return their whole back catalogue every fetch.
+  const swe = fresh.filter(
+    (p) => looksLikeSwe(p.title) && isRecentEnough(p.postedAt, opts.maxPostedAgeDays),
+  );
 
   const batchSize = opts.batchSize ?? 0;
   const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_CONCURRENCY);

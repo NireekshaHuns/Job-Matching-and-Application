@@ -29,6 +29,13 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
 
+async function countApplications(db: ReturnType<typeof drizzle>): Promise<number> {
+  const rows = await db
+    .execute(sql`select count(*)::int as n from applications`)
+    .then((r) => r.rows as Array<{ n: number }>);
+  return rows[0]?.n ?? 0;
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) {
     console.error('DATABASE_URL is not set (check .env).');
@@ -36,6 +43,15 @@ async function main() {
   }
   const confirmed = process.argv.includes('--yes');
   const db = drizzle(neon(process.env.DATABASE_URL), { schema });
+
+  // Say which database is about to be emptied. `pnpm reset:jobs --yes` in a
+  // shell that happens to have a production URL loaded is one keystroke away.
+  try {
+    const url = new URL(process.env.DATABASE_URL);
+    console.log(`Target: ${url.hostname}${url.pathname}\n`);
+  } catch {
+    console.log('Target: (unparseable DATABASE_URL)\n');
+  }
 
   /** Jobs the owner has touched, in any way we can detect. */
   const keptPredicate = sql`
@@ -78,8 +94,24 @@ async function main() {
     return;
   }
 
+  // The tracker is the one thing here that cannot be refetched, and
+  // `applications.job_id` cascades — so a hole in the predicate above would take
+  // it silently rather than raising a foreign-key error. The predicate is the
+  // only line of defence, so verify it held rather than trusting it.
+  const applicationsBefore = await countApplications(db);
+
   const res = await db.execute(sql`delete from jobs where not (${keptPredicate})`);
+  const applicationsAfter = await countApplications(db);
+
   console.log(`\nDeleted ${res.rowCount ?? 0} row(s). ${counts.kept} kept.`);
+  if (applicationsAfter !== applicationsBefore) {
+    console.error(
+      `\nAPPLICATIONS LOST: ${applicationsBefore} before, ${applicationsAfter} after. ` +
+        'The keep-predicate missed something — investigate before running this again.',
+    );
+    process.exit(1);
+  }
+  console.log(`Tracker intact: ${applicationsAfter} application(s).`);
 }
 
 main().catch((err) => {

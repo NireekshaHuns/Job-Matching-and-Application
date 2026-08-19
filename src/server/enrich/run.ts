@@ -13,6 +13,7 @@ import type { RawPosting } from '@/server/ingest/types';
 import { enrichPostings, type EnrichResult } from './enrich';
 import { buildSponsorResolver, type DiscoveredAlias } from './steps/resolver';
 import { looksLikeSwe } from './steps/swe-title';
+import { isRecentEnough } from './recency';
 import type { ChatClient, Embedder } from './types';
 
 /** All fingerprints already in `jobs` — the cross-run dedup / cost gate. */
@@ -257,24 +258,6 @@ export interface RunEnrichmentArgs {
 const DEFAULT_FLUSH_EVERY = 100;
 
 /**
- * Is a posting recent enough to be worth paying to classify?
- *
- * An unknown date passes. Several sources give us none at all — the Workday
- * connector fills `postedAt` in during hydration, which happens AFTER this runs
- * — and treating "we don't know" as "too old" would silently drop them.
- */
-export function isRecentEnough(
-  postedAt: Date | null,
-  maxAgeDays: number | undefined,
-  now: Date = new Date(),
-): boolean {
-  if (maxAgeDays == null || maxAgeDays <= 0) return true;
-  if (!postedAt) return true;
-  const ageMs = now.getTime() - postedAt.getTime();
-  return ageMs <= maxAgeDays * 24 * 60 * 60 * 1000;
-}
-
-/**
  * Split a fetch into "enrich now" and "leave for next run".
  *
  * Postings we already hold cost nothing (`enrichPostings` skips them), so only
@@ -355,6 +338,11 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
     existing,
     { chat: args.chat, embedder: args.embedder, resolve },
     {
+      // Checked twice on purpose. Once above, so a stale posting doesn't consume
+      // a cap slot; once here, after `hydrate`, because a source like Workday
+      // has no date until hydration has run — and by then we have already paid
+      // to fetch it, so it costs nothing to use.
+      maxPostedAgeDays: args.maxPostedAgeDays,
       batchSize: args.flushEvery ?? DEFAULT_FLUSH_EVERY,
       onBatch: async (rows) => {
         inserted += await insertJobs(args.db, rows);

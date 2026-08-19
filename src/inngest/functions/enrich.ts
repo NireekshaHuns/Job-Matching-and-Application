@@ -45,7 +45,13 @@ const MAX_NEW_PER_SOURCE = 100;
  * is what lets a scheduled run miss a day or two without permanently losing the
  * postings from that window. An undated posting is always kept.
  */
-const MAX_POSTED_AGE_DAYS = Number(process.env.INGEST_MAX_POSTED_AGE_DAYS ?? 7);
+const DEFAULT_MAX_POSTED_AGE_DAYS = 7;
+const MAX_POSTED_AGE_DAYS = (() => {
+  // Validated at the boundary and failing toward the default: an unparseable
+  // value must not be able to quietly turn ingestion off.
+  const parsed = Number(process.env.INGEST_MAX_POSTED_AGE_DAYS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_POSTED_AGE_DAYS;
+})();
 
 /**
  * Ceiling on chained continuation runs, so a source that somehow never drains
