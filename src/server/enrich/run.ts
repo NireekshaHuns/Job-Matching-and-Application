@@ -228,6 +228,16 @@ export interface RunEnrichmentArgs {
    */
   maxNew?: number;
   /**
+   * Skip postings published more than this many days ago, BEFORE they reach the
+   * paid classify step. Undated postings are kept — a source that gives us no
+   * date must not have its jobs silently dropped.
+   *
+   * The main cost lever for a frequently-scheduled run: an ATS feed returns its
+   * whole back catalogue every time, and paying to classify a nine-month-old
+   * posting once is wasteful, let alone every hour.
+   */
+  maxPostedAgeDays?: number;
+  /**
    * Fill in `jdText` for the postings that survived the cap, for sources that
    * charge a request per description. Runs AFTER selection on purpose — see
    * `JobConnector.hydrate`. Best-effort: a failure here leaves the JD empty
@@ -245,6 +255,24 @@ export interface RunEnrichmentArgs {
  * large enough that inserts stay batched.
  */
 const DEFAULT_FLUSH_EVERY = 100;
+
+/**
+ * Is a posting recent enough to be worth paying to classify?
+ *
+ * An unknown date passes. Several sources give us none at all — the Workday
+ * connector fills `postedAt` in during hydration, which happens AFTER this runs
+ * — and treating "we don't know" as "too old" would silently drop them.
+ */
+export function isRecentEnough(
+  postedAt: Date | null,
+  maxAgeDays: number | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (maxAgeDays == null || maxAgeDays <= 0) return true;
+  if (!postedAt) return true;
+  const ageMs = now.getTime() - postedAt.getTime();
+  return ageMs <= maxAgeDays * 24 * 60 * 60 * 1000;
+}
 
 /**
  * Split a fetch into "enrich now" and "leave for next run".
@@ -305,8 +333,11 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
 
   // Same predicate `enrichPostings` applies, so the cap is spent on postings
   // that can actually become rows.
-  const { toEnrich, deferred } = planEnrichmentBatch(args.postings, existing, args.maxNew, (p) =>
-    looksLikeSwe(p.title),
+  const { toEnrich, deferred } = planEnrichmentBatch(
+    args.postings,
+    existing,
+    args.maxNew,
+    (p) => looksLikeSwe(p.title) && isRecentEnough(p.postedAt, args.maxPostedAgeDays),
   );
 
   // Buy descriptions only for what we just selected. A source that charges per

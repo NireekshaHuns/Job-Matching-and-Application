@@ -5,6 +5,7 @@ import type { RawPosting } from '@/server/ingest/types';
 import type { DiscoveredAlias } from './steps/resolver';
 import {
   insertJobs,
+  isRecentEnough,
   loadSponsorState,
   planEnrichmentBatch,
   reconcileFreshness,
@@ -364,5 +365,30 @@ describe('runEnrichment hydration', () => {
 
     expect(handedTo).toEqual([['fp-3', 'fp-4', 'fp-5']]);
     expect(hydrated.every((p) => p.jdText === 'hydrated')).toBe(true);
+  });
+});
+
+describe('isRecentEnough', () => {
+  const now = new Date('2026-08-19T12:00:00Z');
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  it('keeps a posting with no date at all', () => {
+    // Several sources give us none, and the Workday connector fills its date in
+    // during hydration — which happens after this check runs.
+    expect(isRecentEnough(null, 7, now)).toBe(true);
+  });
+
+  it('keeps everything when no limit is set', () => {
+    expect(isRecentEnough(daysAgo(400), undefined, now)).toBe(true);
+    expect(isRecentEnough(daysAgo(400), 0, now)).toBe(true);
+  });
+
+  it('drops a posting past the window', () => {
+    expect(isRecentEnough(daysAgo(6), 7, now)).toBe(true);
+    expect(isRecentEnough(daysAgo(8), 7, now)).toBe(false);
+  });
+
+  it('keeps one posted in the future rather than treating it as stale', () => {
+    expect(isRecentEnough(daysAgo(-1), 7, now)).toBe(true);
   });
 });

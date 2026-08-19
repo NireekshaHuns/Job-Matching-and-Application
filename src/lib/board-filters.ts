@@ -37,13 +37,18 @@ const MIN_SALARIES: MinSalary[] = [0, 80_000, 100_000, 120_000, 150_000];
 const MAX_YEARS: MaxYears[] = [0, 1, 2, 3, 5];
 
 /**
- * `within: 0` ("Any time") is deliberate — see the file header. A newly
- * ingested job frequently has an old `posted_at`, so any non-zero default hides
- * part of what each refresh finds.
+ * `within: 3` matches what the pipeline now ingests.
+ *
+ * This used to be 0 ("Any time"), because the table held a long tail of postings
+ * whose `posted_at` was months old — a non-zero default hid most of what a
+ * refresh found. That is no longer the shape of the data: ingestion skips
+ * anything older than a week before it ever reaches the DB, so a 3-day window is
+ * a view onto fresh postings rather than a filter that hides the board. Undated
+ * postings fall back to when we first saw them, so they still appear.
  */
 export const DEFAULT_FILTERS: BoardFilters = {
   sort: 'combined',
-  within: 0,
+  within: 3,
   // "Any pay" by default, for the same reason as `within`: most postings state
   // no salary, so any non-zero default would quietly narrow the board.
   minSalary: 0,
