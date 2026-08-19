@@ -128,8 +128,9 @@ describe('workdayConnector', () => {
     const report = connector.lastReport?.();
     // One failure per search term — a bad page stops that term, not the board.
     expect(report?.failed).toBe(3);
-    expect(report?.failures[0]).toContain('statestreet.wd1.myworkdayjobs.com -> HTTP 503');
+    expect(report?.failures[0]).toContain('statestreet.wd1.myworkdayjobs.com');
     expect(report?.failures[0]).toContain('offset 0');
+    expect(report?.failures[0]).toContain('HTTP 503');
   });
 
   it('stops paging a term once a short page comes back', async () => {

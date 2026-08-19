@@ -124,7 +124,9 @@ describe('smartRecruitersConnector', () => {
 
     const report = connector.lastReport?.();
     expect(report?.failed).toBe(1);
-    expect(report?.failures[0]).toBe('Visa -> HTTP 500 at offset 0');
+    // The board label carries the pagination context, so a mid-board failure is
+    // distinguishable from a short feed.
+    expect(report?.failures[0]).toBe('Visa at offset 0 -> HTTP 500');
   });
 
   it('yields an empty JD when the detail fetch fails (best-effort)', async () => {

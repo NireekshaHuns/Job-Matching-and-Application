@@ -6,7 +6,7 @@
 import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
-import { emptyReport, recordAttempt, recordFailure } from '../report';
+import { emptyReport, fetchBoard } from '../report';
 
 export interface LeverBoard {
   /** Company slug from jobs.lever.co/{token}. */
@@ -41,12 +41,13 @@ export function leverConnector(
       report = emptyReport();
       const postings: RawPosting[] = [];
       for (const board of boards) {
-        recordAttempt(report);
-        const res = await fetcher(`${API_BASE}/${board.token}?mode=json`);
-        if (!res.ok) {
-          recordFailure(report, board.token, `HTTP ${res.status}`);
-          continue;
-        }
+        const res = await fetchBoard(
+          fetcher,
+          `${API_BASE}/${board.token}?mode=json`,
+          board.token,
+          report,
+        );
+        if (!res) continue;
         const data = (await res.json()) as LeverPosting[];
 
         for (const p of Array.isArray(data) ? data : []) {

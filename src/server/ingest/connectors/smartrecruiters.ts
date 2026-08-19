@@ -8,7 +8,7 @@
 import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
-import { emptyReport, recordAttempt, recordFailure } from '../report';
+import { emptyReport, fetchBoard } from '../report';
 
 export interface SmartRecruitersBoard {
   /** Company identifier from api.smartrecruiters.com/v1/companies/{identifier}. */
@@ -135,16 +135,15 @@ export function smartRecruitersConnector(
       for (const board of boards) {
         for (let page = 0; page < MAX_PAGES; page++) {
           const offset = page * PAGE_SIZE;
-          recordAttempt(report);
-          const res = await fetcher(
+          // A failure here also truncates pagination mid-board, so a 500 on page
+          // 3 looks exactly like "this company has 300 jobs". Say so.
+          const res = await fetchBoard(
+            fetcher,
             `${API_BASE}/${board.identifier}/postings?limit=${PAGE_SIZE}&offset=${offset}`,
+            `${board.identifier} at offset ${offset}`,
+            report,
           );
-          if (!res.ok) {
-            // `break` also truncates pagination mid-board, so a 500 on page 3
-            // looks exactly like "this company has 300 jobs". Say so.
-            recordFailure(report, board.identifier, `HTTP ${res.status} at offset ${offset}`);
-            break;
-          }
+          if (!res) break;
           const data = (await res.json()) as SmartRecruitersList;
           const content = Array.isArray(data.content) ? data.content : [];
 
