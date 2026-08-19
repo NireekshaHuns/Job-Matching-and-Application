@@ -26,6 +26,13 @@ export interface SponsorHistory {
   newEmploymentApprovals: number;
   /** Most recent fiscal year with any New Employment approvals; null when none. */
   newEmploymentLastYear: number | null;
+  /**
+   * New-employment approvals per fiscal year, newest first. Present so a rule can
+   * ask "how many people did this employer sponsor LAST YEAR" — the lifetime
+   * total above cannot distinguish an employer that sponsored 30 people a decade
+   * ago from one sponsoring 30 a year now.
+   */
+  newEmploymentRecentYears?: Array<{ year: number; initialApprovals: number }>;
 }
 
 export interface ScoreInput {
@@ -48,6 +55,47 @@ const RECENT_YEARS = 3;
  * transfer/continuation-heavy body shop can't reach `High` on history.
  */
 const HEAVY_NEW_EMPLOYMENT = 25;
+
+/**
+ * New-employment approvals in the LATEST filed year at/above which an employer
+ * is treated as an active sponsor, regardless of what the JD says.
+ *
+ * This is the board owner's own bar: an employer that sponsored this many people
+ * in the last year will plausibly sponsor again, so the job should surface. It
+ * sits below `HEAVY_NEW_EMPLOYMENT` deliberately — that threshold is a lifetime
+ * total and misses mid-size employers with a steady, recent record. State Street
+ * (11 new-hire approvals in FY2026) is the case that motivated it.
+ *
+ * Checked AFTER the explicit disqualifiers, so a JD that says "no sponsorship"
+ * still yields `Excluded` — history never overrules the posting's own words.
+ */
+const ACTIVE_NEW_EMPLOYMENT_LAST_YEAR = 5;
+
+/**
+ * The strongest new-employment year inside the recency window, or null.
+ *
+ * Deliberately the MAX over recent years rather than strictly the newest one.
+ * The newest fiscal year is often still being reported, so an employer that
+ * sponsored 20 new hires in the last complete year can show 2 for the current
+ * one — and reading only the newest number drops exactly the steady, mid-size
+ * sponsor this rule exists to catch, on a reporting artifact.
+ */
+export function bestRecentNewEmployment(
+  history: SponsorHistory,
+  currentYear: number,
+  withinYears = RECENT_YEARS,
+): { year: number; approvals: number } | null {
+  const years = history.newEmploymentRecentYears;
+  if (!years?.length) return null;
+  let best: { year: number; approvals: number } | null = null;
+  for (const entry of years) {
+    if (entry.year < currentYear - withinYears) continue;
+    if (!best || entry.initialApprovals > best.approvals) {
+      best = { year: entry.year, approvals: entry.initialApprovals };
+    }
+  }
+  return best;
+}
 
 /**
  * "This employer won't sponsor" phrasings. The negated forms use a windowed
@@ -125,6 +173,18 @@ export function scoreSponsorship(input: ScoreInput, opts?: { currentYear?: numbe
     const newRecent =
       history.newEmploymentLastYear != null &&
       history.newEmploymentLastYear >= currentYear - RECENT_YEARS;
+
+    // An employer actively sponsoring new hires right now justifies High even
+    // when the lifetime total is modest — see ACTIVE_NEW_EMPLOYMENT_LAST_YEAR.
+    // `bestRecentNewEmployment` already bounds the year, so no separate recency
+    // check is needed here.
+    const recent = bestRecentNewEmployment(history, currentYear);
+    if (recent && recent.approvals >= ACTIVE_NEW_EMPLOYMENT_LAST_YEAR) {
+      return {
+        tier: 'High',
+        reason: `Sponsored ${recent.approvals} new hires in ${recent.year}; JD silent.`,
+      };
+    }
 
     // Heavy, recent new-hire sponsorship justifies High on history alone.
     if (history.newEmploymentApprovals >= HEAVY_NEW_EMPLOYMENT && newRecent) {

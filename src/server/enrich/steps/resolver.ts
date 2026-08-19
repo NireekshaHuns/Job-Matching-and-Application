@@ -77,7 +77,12 @@ export function buildSponsorResolver(inputs: ResolverInputs): {
       };
     }
 
-    const r = resolveEmployer(company, index);
+    // The history map doubles as the strength lookup, so the resolver can prefer
+    // the family member that actually sponsors new hires over the one whose name
+    // happens to be shortest.
+    const r = resolveEmployer(company, index, {
+      strengthOf: (key) => inputs.historyByKey.get(key),
+    });
     if (r.key) {
       discovered.set(rawNorm, {
         rawName: company,

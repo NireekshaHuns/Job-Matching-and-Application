@@ -259,7 +259,7 @@ describe('workdayConnector', () => {
       if (init?.method !== 'POST') return new Response(JSON.stringify(detailFixture));
       const host = new URL(url).host;
       perHost.set(host, (perHost.get(host) ?? 0) + 1);
-      const page = Array.from({ length: 20 }, (_, i) => ({
+      const page = Array.from({ length: 20 }, () => ({
         title: `Software Engineer ${Math.random()}`,
         externalPath: `/job/Boston-MA/SWE_R-${Math.floor(Math.random() * 1e9)}`,
         locationsText: 'Boston, MA',

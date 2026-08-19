@@ -55,6 +55,8 @@ const HISTORY_COLUMNS = {
   lastFiledYear: sponsors.lastFiledYear,
   newEmploymentApprovals: sponsors.newEmploymentApprovals,
   newEmploymentLastYear: sponsors.newEmploymentLastYear,
+  /** Needed by the latest-year tier rule; a correction must re-tier the same way. */
+  newEmploymentRecentYears: sponsors.newEmploymentRecentYears,
 } as const;
 
 export const sponsorsRouter = createTRPCRouter({
