@@ -4,12 +4,16 @@
  * wiring.
  *
  * WHY THIS IS PERSISTED. The board used to hold filters in plain `useState`, so
- * every reload snapped back to "Past week". That default is also why "Find new
+ * every reload snapped back to "Past week". That default was also why "Find new
  * jobs" looked broken: the age filter reads `coalesce(posted_at, first_seen_at)`,
- * so a posting we *discovered* today but that was *published* three weeks ago is
- * hidden the moment it arrives. Measured on the live DB, the old default showed
- * 2,248 of 11,455 active jobs, and hid 4 of the 5 jobs the last refresh found.
- * So: default to "Any time", and remember whatever the owner picks instead.
+ * so a posting we *discovered* today but that was *published* three weeks ago was
+ * hidden the moment it arrived. Measured on the live DB at the time, the old
+ * default showed 2,248 of 11,455 active jobs and hid 4 of the 5 jobs the last
+ * refresh found — which is why the default became "Any time".
+ *
+ * Ingestion now refuses anything published more than a week ago, so that tail no
+ * longer exists and the default is a real window again (see `DEFAULT_FILTERS`).
+ * Whatever the owner picks is still remembered.
  */
 
 export type Sort = 'combined' | 'fit' | 'recent';
@@ -37,15 +41,26 @@ const MIN_SALARIES: MinSalary[] = [0, 80_000, 100_000, 120_000, 150_000];
 const MAX_YEARS: MaxYears[] = [0, 1, 2, 3, 5];
 
 /**
- * `within: 0` ("Any time") is deliberate — see the file header. A newly
- * ingested job frequently has an old `posted_at`, so any non-zero default hides
- * part of what each refresh finds.
+ * `within: 3` is narrower than what ingestion admits (a week), on purpose.
+ *
+ * The wider ingest window is resilience — it lets a scheduled run miss a day
+ * without permanently losing that day's postings — while the display window is
+ * preference. The gap means a posting published five days ago and discovered
+ * today is stored but not shown by default; it is one click away under
+ * "Past week". Widen this to 7 if that trade stops being worth it.
+ *
+ * This used to be 0 ("Any time"), because the table held a long tail of postings
+ * whose `posted_at` was months old — a non-zero default hid most of what a
+ * refresh found. That is no longer the shape of the data: ingestion skips
+ * anything older than a week before it ever reaches the DB, so a 3-day window is
+ * a view onto fresh postings rather than a filter that hides the board. Undated
+ * postings fall back to when we first saw them, so they still appear.
  */
 export const DEFAULT_FILTERS: BoardFilters = {
   sort: 'combined',
-  within: 0,
-  // "Any pay" by default, for the same reason as `within`: most postings state
-  // no salary, so any non-zero default would quietly narrow the board.
+  within: 3,
+  // "Any pay" by default: most postings state no salary at all, so a non-zero
+  // default would quietly narrow the board to the minority that do.
   minSalary: 0,
   // The board is scoped to roles a recent grad can get, and this is the filter
   // that actually enforces it — `seniority` reads the title, which cannot tell a

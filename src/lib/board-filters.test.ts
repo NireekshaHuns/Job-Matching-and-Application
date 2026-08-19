@@ -28,10 +28,11 @@ describe('DEFAULT_FILTERS', () => {
     expect(DEFAULT_FILTERS.maxYears).toBe(3);
   });
 
-  it('shows jobs of any age', () => {
-    // The whole point of the fix: a non-zero default hides newly ingested jobs
-    // whose posted_at is older than the window.
-    expect(DEFAULT_FILTERS.within).toBe(0);
+  it('shows the last three days, which is what ingestion now collects', () => {
+    // This was 0 while the table held postings months old, where any window hid
+    // most of a refresh. Ingestion now skips anything over a week before it
+    // reaches the DB, so the window is a view rather than a filter.
+    expect(DEFAULT_FILTERS.within).toBe(3);
   });
 });
 

@@ -91,6 +91,73 @@ describe('enrichPostings', () => {
   });
 });
 
+describe('enrichPostings posting-age guard', () => {
+  /** A chat client that records every call, so "was this paid for?" is testable. */
+  function countingDeps() {
+    let calls = 0;
+    const counting: EnrichDeps = {
+      ...deps,
+      chat: {
+        complete: async (...args) => {
+          calls++;
+          return deps.chat.complete(...args);
+        },
+      },
+    };
+    return { deps: counting, calls: () => calls };
+  }
+
+  const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+
+  it('never pays to classify a stale posting', async () => {
+    // The regression this covers: the guard used to live only in the cap
+    // planner, which returns the fetch untouched whenever nothing needs
+    // deferring — so an ordinary run classified every stale posting anyway.
+    // ATS feeds return their whole back catalogue on every fetch.
+    const { deps: counting, calls } = countingDeps();
+    const result = await enrichPostings(
+      [
+        posting('old-1', { postedAt: daysAgo(270) }),
+        posting('old-2', { postedAt: daysAgo(30) }),
+        posting('fresh', { postedAt: daysAgo(1) }),
+      ],
+      new Set(),
+      counting,
+      { maxPostedAgeDays: 7 },
+    );
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].fingerprint).toBe('fresh');
+    expect(calls()).toBe(1);
+  });
+
+  it('keeps a posting whose date we do not know', async () => {
+    // Several sources give us none, and Workday has no date until hydration.
+    const { deps: counting, calls } = countingDeps();
+    const result = await enrichPostings(
+      [posting('undated', { postedAt: null })],
+      new Set(),
+      counting,
+      {
+        maxPostedAgeDays: 7,
+      },
+    );
+    expect(result.rows).toHaveLength(1);
+    expect(calls()).toBe(1);
+  });
+
+  it('classifies everything when no limit is set', async () => {
+    const { deps: counting, calls } = countingDeps();
+    const result = await enrichPostings(
+      [posting('ancient', { postedAt: daysAgo(400) })],
+      new Set(),
+      counting,
+    );
+    expect(result.rows).toHaveLength(1);
+    expect(calls()).toBe(1);
+  });
+});
+
 describe('enrichPostings resilience', () => {
   const CLASSIFICATION = {
     employmentType: 'full_time',

@@ -13,6 +13,7 @@ import type { RawPosting } from '@/server/ingest/types';
 import { enrichPostings, type EnrichResult } from './enrich';
 import { buildSponsorResolver, type DiscoveredAlias } from './steps/resolver';
 import { looksLikeSwe } from './steps/swe-title';
+import { isRecentEnough } from './recency';
 import type { ChatClient, Embedder } from './types';
 
 /** All fingerprints already in `jobs` — the cross-run dedup / cost gate. */
@@ -228,6 +229,16 @@ export interface RunEnrichmentArgs {
    */
   maxNew?: number;
   /**
+   * Skip postings published more than this many days ago, BEFORE they reach the
+   * paid classify step. Undated postings are kept — a source that gives us no
+   * date must not have its jobs silently dropped.
+   *
+   * The main cost lever for a frequently-scheduled run: an ATS feed returns its
+   * whole back catalogue every time, and paying to classify a nine-month-old
+   * posting once is wasteful, let alone every hour.
+   */
+  maxPostedAgeDays?: number;
+  /**
    * Fill in `jdText` for the postings that survived the cap, for sources that
    * charge a request per description. Runs AFTER selection on purpose — see
    * `JobConnector.hydrate`. Best-effort: a failure here leaves the JD empty
@@ -305,8 +316,11 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
 
   // Same predicate `enrichPostings` applies, so the cap is spent on postings
   // that can actually become rows.
-  const { toEnrich, deferred } = planEnrichmentBatch(args.postings, existing, args.maxNew, (p) =>
-    looksLikeSwe(p.title),
+  const { toEnrich, deferred } = planEnrichmentBatch(
+    args.postings,
+    existing,
+    args.maxNew,
+    (p) => looksLikeSwe(p.title) && isRecentEnough(p.postedAt, args.maxPostedAgeDays),
   );
 
   // Buy descriptions only for what we just selected. A source that charges per
@@ -324,6 +338,11 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
     existing,
     { chat: args.chat, embedder: args.embedder, resolve },
     {
+      // Checked twice on purpose. Once above, so a stale posting doesn't consume
+      // a cap slot; once here, after `hydrate`, because a source like Workday
+      // has no date until hydration has run — and by then we have already paid
+      // to fetch it, so it costs nothing to use.
+      maxPostedAgeDays: args.maxPostedAgeDays,
       batchSize: args.flushEvery ?? DEFAULT_FLUSH_EVERY,
       onBatch: async (rows) => {
         inserted += await insertJobs(args.db, rows);

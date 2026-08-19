@@ -39,6 +39,21 @@ import { inngest } from '../client';
 const MAX_NEW_PER_SOURCE = 100;
 
 /**
+ * Postings older than this never reach the paid classify step.
+ *
+ * A week rather than the few days the board actually displays: the extra margin
+ * is what lets a scheduled run miss a day or two without permanently losing the
+ * postings from that window. An undated posting is always kept.
+ */
+const DEFAULT_MAX_POSTED_AGE_DAYS = 7;
+const MAX_POSTED_AGE_DAYS = (() => {
+  // Validated at the boundary and failing toward the default: an unparseable
+  // value must not be able to quietly turn ingestion off.
+  const parsed = Number(process.env.INGEST_MAX_POSTED_AGE_DAYS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_POSTED_AGE_DAYS;
+})();
+
+/**
  * Ceiling on chained continuation runs, so a source that somehow never drains
  * cannot loop forever. At 100 new postings per source per run this is ample for
  * any realistic backlog.
@@ -164,6 +179,7 @@ export const enrichJobs = inngest.createFunction(
           // Sources that charge a request per description fill them in after the
           // cap has chosen, so the budget lands on postings that get enriched.
           hydrate: hydrator,
+          maxPostedAgeDays: MAX_POSTED_AGE_DAYS,
           // Reconcile once at the end, over every source — doing it here would
           // close every other source's jobs.
           reconcile: false,
