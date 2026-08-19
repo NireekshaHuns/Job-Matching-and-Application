@@ -315,6 +315,15 @@ export const jobs = pgTable(
     newHireStatus: newHireStatusEnum('new_hire_status').notNull().default('unknown'),
     /** Confidence 0–1 of the company→USCIS employer match behind the sponsor data (null when unmatched). */
     sponsorMatchConfidence: real('sponsor_match_confidence'),
+    /**
+     * Years of experience the posting asks for, read from the description
+     * (see `@/lib/experience`). The BOTTOM of any stated range, and null when
+     * the posting never says — null means unknown, which the board keeps.
+     *
+     * Separate from `seniority`, which is inferred from the title and so cannot
+     * tell a "Software Engineer" wanting eight years from one wanting none.
+     */
+    requiredYearsExperience: integer('required_years_experience'),
     /** Best-effort pay range extracted from the JD (e.g. "$150k–$180k"); null when unstated. */
     salaryText: text('salary_text'),
     /**
@@ -337,6 +346,7 @@ export const jobs = pgTable(
     index('jobs_last_seen_at_idx').on(t.lastSeenAt),
     index('jobs_role_family_idx').on(t.roleFamily),
     index('jobs_salary_max_usd_idx').on(t.salaryMaxUsd),
+    index('jobs_required_years_idx').on(t.requiredYearsExperience),
     // Approximate nearest-neighbour index for resume↔job similarity search.
     index('jobs_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
   ],

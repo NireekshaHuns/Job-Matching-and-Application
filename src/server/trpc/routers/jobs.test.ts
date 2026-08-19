@@ -72,6 +72,12 @@ describe('resolveJobQueryPlan', () => {
     expect(plan({ minSalaryUsd: 0 }).minSalaryUsd).toBeNull();
   });
 
+  it('carries the experience ceiling and treats 0 as no filter', () => {
+    expect(plan().maxYearsExperience).toBeNull();
+    expect(plan({ maxYearsExperience: 3 }).maxYearsExperience).toBe(3);
+    expect(plan({ maxYearsExperience: 0 }).maxYearsExperience).toBeNull();
+  });
+
   it('hides non-US jobs by default, shows them only when the toggle is on', () => {
     expect(plan().hideNonUs).toBe(true);
     expect(plan({ includeNonUs: true }).hideNonUs).toBe(false);

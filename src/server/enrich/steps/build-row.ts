@@ -3,6 +3,7 @@
  * Pure — no DB. The two scores stay in separate places: `sponsorTier` here,
  * resume `relevanceScore` in a later job_scores step.
  */
+import { parseRequiredYears } from '@/lib/experience';
 import { parseSalaryRange } from '@/lib/salary';
 import type { NewJob } from '@/server/db/schema';
 import type { RawPosting } from '@/server/ingest/types';
@@ -52,6 +53,9 @@ export function buildJobRow(
     seniority: resolveSeniority(posting.title, classification.seniority),
     techKeywords: classification.skills,
     softKeywords: classification.softKeywords,
+    // Read from the description, not the title — `seniority` already covers the
+    // title, and the two disagree often enough to be worth storing separately.
+    requiredYearsExperience: parseRequiredYears(posting.jdText),
     salaryText: classification.salary ?? null,
     // Parsed here, once, so the board can filter on pay without re-reading the
     // display string on every query. Free and deterministic — no LLM involved.

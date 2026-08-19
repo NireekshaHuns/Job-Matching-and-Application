@@ -17,11 +17,14 @@ export type Sort = 'combined' | 'fit' | 'recent';
 export type Within = 1 | 3 | 7 | 0;
 /** Minimum annualized USD pay; 0 means "any pay". */
 export type MinSalary = 0 | 80_000 | 100_000 | 120_000 | 150_000;
+/** Most years of experience a posting may ask for; 0 means "any". */
+export type MaxYears = 0 | 1 | 2 | 3 | 5;
 
 export interface BoardFilters {
   sort: Sort;
   within: Within;
   minSalary: MinSalary;
+  maxYears: MaxYears;
   remoteOnly: boolean;
   includeSenior: boolean;
   includeExcluded: boolean;
@@ -31,6 +34,7 @@ export interface BoardFilters {
 const SORTS: Sort[] = ['combined', 'fit', 'recent'];
 const WITHINS: Within[] = [1, 3, 7, 0];
 const MIN_SALARIES: MinSalary[] = [0, 80_000, 100_000, 120_000, 150_000];
+const MAX_YEARS: MaxYears[] = [0, 1, 2, 3, 5];
 
 /**
  * `within: 0` ("Any time") is deliberate — see the file header. A newly
@@ -43,6 +47,10 @@ export const DEFAULT_FILTERS: BoardFilters = {
   // "Any pay" by default, for the same reason as `within`: most postings state
   // no salary, so any non-zero default would quietly narrow the board.
   minSalary: 0,
+  // The board is scoped to roles a recent grad can get, and this is the filter
+  // that actually enforces it — `seniority` reads the title, which cannot tell a
+  // "Software Engineer" wanting eight years from one wanting none.
+  maxYears: 3,
   remoteOnly: false,
   includeSenior: false,
   includeExcluded: false,
@@ -81,6 +89,9 @@ export function parseStoredFilters(raw: string | null | undefined): BoardFilters
     minSalary: MIN_SALARIES.includes(v.minSalary as MinSalary)
       ? (v.minSalary as MinSalary)
       : DEFAULT_FILTERS.minSalary,
+    maxYears: MAX_YEARS.includes(v.maxYears as MaxYears)
+      ? (v.maxYears as MaxYears)
+      : DEFAULT_FILTERS.maxYears,
     remoteOnly: bool(v.remoteOnly, DEFAULT_FILTERS.remoteOnly),
     includeSenior: bool(v.includeSenior, DEFAULT_FILTERS.includeSenior),
     includeExcluded: bool(v.includeExcluded, DEFAULT_FILTERS.includeExcluded),

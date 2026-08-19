@@ -53,6 +53,11 @@ export const jobListInput = z.object({
    * `meetsMinSalary`, which this query mirrors.
    */
   minSalaryUsd: z.number().int().min(0).max(1_000_000).default(0),
+  /**
+   * Hide postings that ask for MORE than this many years; 0/absent means no
+   * filter. Postings that state no requirement are KEPT — see `meetsMaxYears`.
+   */
+  maxYearsExperience: z.number().int().min(0).max(20).default(0),
   sort: z.enum(['combined', 'sponsor', 'fit', 'recent']).default('combined'),
   /** Apply-priority weights for the `combined` sort; absent/all-zero → defaults. */
   weights: z
@@ -89,6 +94,8 @@ export interface JobQueryPlan {
   location: string | null;
   /** Minimum annualized USD pay, or null when no pay filter is active. */
   minSalaryUsd: number | null;
+  /** Most years of experience a posting may ask for, or null when unfiltered. */
+  maxYearsExperience: number | null;
   /** Max posting age in days (null = any). */
   postedWithinDays: number | null;
   /** Hide jobs the user removed from the board. */
@@ -114,6 +121,7 @@ export function resolveJobQueryPlan(input: JobListInput): JobQueryPlan {
     search: input.search ? input.search : null,
     location: input.location ? input.location : null,
     minSalaryUsd: input.minSalaryUsd > 0 ? input.minSalaryUsd : null,
+    maxYearsExperience: input.maxYearsExperience > 0 ? input.maxYearsExperience : null,
     postedWithinDays: input.postedWithinDays ?? null,
     hideDismissed: !input.includeDismissed,
     sort: input.sort,
@@ -286,6 +294,14 @@ export const jobsRouter = createTRPCRouter({
         sql`(${jobs.salaryMaxUsd} is null or ${jobs.salaryMaxUsd} >= ${plan.minSalaryUsd})`,
       );
     }
+    // Experience ceiling. `is null` first, and for the same reason as the pay
+    // filter: a posting that never states a requirement is unknown, not senior,
+    // and roughly a third of them say nothing at all.
+    if (plan.maxYearsExperience != null) {
+      where.push(
+        sql`(${jobs.requiredYearsExperience} is null or ${jobs.requiredYearsExperience} <= ${plan.maxYearsExperience})`,
+      );
+    }
     // Age filter, measured from `now()` so "Past 24h" is a real 24 hours.
     //
     // Undated postings fall back to `first_seen_at` rather than being exempted.
@@ -336,6 +352,7 @@ export const jobsRouter = createTRPCRouter({
         /** Fallback for the card's age label when the feed gave us no post date. */
         firstSeenAt: jobs.firstSeenAt,
         salaryText: jobs.salaryText,
+        requiredYearsExperience: jobs.requiredYearsExperience,
         status: jobs.status,
         roleFamily: jobs.roleFamily,
         seniority: jobs.seniority,

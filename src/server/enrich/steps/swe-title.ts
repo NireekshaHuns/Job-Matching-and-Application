@@ -28,6 +28,8 @@ const NON_SWE_PATTERNS: RegExp[] = [
   /\b(?:product|program|project)\s+manager\b/i,
   /\bscrum master\b/i,
   /\bgraphic designer\b/i,
+  /\b(?:landscape|naval|interior|marine|building)\s+architect\b/i,
+  /\bdata\s+entry\b/i,
 ];
 
 /** Positive software signals — if any matches (and nothing above did), keep it. */
@@ -52,6 +54,43 @@ const SWE_POSITIVE_PATTERNS: RegExp[] = [
   /\bgolang\b/i,
 ];
 
+/**
+ * Softer signals: software work that never says "software". Checked AFTER the
+ * denylist, unlike the strong list above — these are broad enough that letting
+ * them win would keep a "Quality Assurance Nurse", a "Truck Driver - Swift
+ * Transportation" and a "Barista - Java House", each of which costs a paid
+ * classify call.
+ *
+ * Measured against a live fetch of six enterprise Workday boards, 270 of 1,373
+ * titles were being dropped. Most correctly — account executives, customer
+ * success, channel sales — but the ones these patterns rescue were real software
+ * roles at exactly the large H1B sponsors this board exists to surface, and a
+ * drop is unrecoverable: the posting never reaches the DB.
+ */
+const WEAK_SWE_PATTERNS: RegExp[] = [
+  // "Solution Architect", "Data Architect", "Principal UI Architect".
+  /\barchitect(?:ure)?\b/i,
+  // "Application Development / Maintenance", "Java Development Associate".
+  /\b(?:applications?|software|platform|api|web|mobile|cloud|systems?|technology)\s+development\b/i,
+  // "Systems Analyst", "Technology Analyst" — but not "Private Equity Analyst".
+  /\b(?:systems?|technology|technical|applications?|data|software|it|security|qa|quality|integration)\s+analyst\b/i,
+  // "Quality Assurance, Officer".
+  /\bquality\s+assurance\b/i,
+  // "API Technical Lead", "Technology Consultant".
+  /\btech(?:nical|nology)?\s+(?:lead|consultant|specialist|architect)\b/i,
+  /\b(?:database|data)\s+administrator\b/i,
+  /\bci\s?\/?\s?cd\b|\bkubernetes\b|\bterraform\b/i,
+  // A named language or runtime. DELIBERATELY excludes the ones that are also
+  // ordinary words or well-known non-tech brands — swift (a trucking company and
+  // the banking network) and ruby (a restaurant chain) both rescued clearly
+  // non-software titles.
+  /\b(?:java|python|javascript|typescript|kotlin|scala|php|react|angular|node\.?js|spring boot)\b/i,
+  // Kept separate: the trailing \b in a shared group can never match after "+",
+  // so both of these were dead alternatives inside the list above.
+  /(?<![a-z])c\+\+(?![+\w])/i,
+  /(?<![a-z])\.net\b/i,
+];
+
 /** Bare "engineer/engineering" — kept only after the non-software checks above. */
 const GENERIC_ENGINEER = /\bengineer(?:ing)?\b/i;
 
@@ -62,9 +101,11 @@ const GENERIC_ENGINEER = /\bengineer(?:ing)?\b/i;
  */
 export function looksLikeSwe(title: string | null | undefined): boolean {
   if (!title) return false;
-  // Software signal wins first, so a compound title with both a software term and
-  // a disqualifier (e.g. "Software Sales Engineer") is kept, not dropped.
+  // An unambiguous software signal wins first, so a compound title carrying both
+  // it and a disqualifier ("Software Sales Engineer") is kept, not dropped.
   if (SWE_POSITIVE_PATTERNS.some((re) => re.test(title))) return true;
   if (NON_SWE_PATTERNS.some((re) => re.test(title))) return false;
+  // The broad signals only get their say once the denylist has had its.
+  if (WEAK_SWE_PATTERNS.some((re) => re.test(title))) return true;
   return GENERIC_ENGINEER.test(title);
 }
