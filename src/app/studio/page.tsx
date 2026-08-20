@@ -8,12 +8,17 @@
  *     in a live split view (in-browser compile), then save it back to grow the
  *     corpus. Aggressive-but-coherent generation — see server/resume/tailor.ts.
  */
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { KeywordPicker } from '@/components/keyword-picker';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState } from '@/components/page-state';
 import { ResumeSplit } from '@/components/resume-split';
 import { TailoringReport } from '@/components/tailoring-report';
+import {
+  buildPickerGroups,
+  defaultKeywordSelection,
+  splitSelection,
+} from '@/lib/keyword-selection';
 import { ROLE_FAMILIES, type RoleFamily } from '@/lib/role-families';
 import { trpc } from '@/trpc/react';
 
@@ -81,6 +86,11 @@ export default function StudioPage() {
   const [roleFamily, setRoleFamily] = useState<RoleFamily | ''>('');
   const extractKw = trpc.resumes.extractJdKeywords.useMutation();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Evidence is graded through the role-family lens, so changing it after an
+  // extraction silently invalidates every grade on screen. Remember what the
+  // grades were computed against and say so — re-extracting is a paid call, so
+  // it stays the user's choice rather than a refetch.
+  const [gradedFor, setGradedFor] = useState<RoleFamily | ''>('');
 
   // Step 3 — generate + preview
   const tailor = trpc.resumes.tailorFromCorpus.useMutation();
@@ -190,12 +200,11 @@ export default function StudioPage() {
 
   function onExtract() {
     extractKw.mutate(
-      { jdText },
+      { jdText, jobTitle, roleFamily: roleFamily || undefined },
       {
         onSuccess: (data) => {
-          const sel = new Set<string>();
-          for (const k of [...data.tech, ...data.soft]) if (k.inCorpus) sel.add(k.keyword);
-          setSelected(sel);
+          setSelected(new Set(defaultKeywordSelection(data)));
+          setGradedFor(roleFamily);
         },
       },
     );
@@ -206,7 +215,8 @@ export default function StudioPage() {
       {
         jobTitle,
         company,
-        selectedKeywords: [...selected],
+        selectedKeywords: split.defensible,
+        adjacentKeywords: split.adjacentOnly,
         roleFamily: roleFamily || undefined,
       },
       {
@@ -235,6 +245,11 @@ export default function StudioPage() {
 
   const kwData = extractKw.data;
   const hasCorpus = (corpus.data?.resumes.length ?? 0) > 0 || (corpus.data?.bulletCount ?? 0) > 0;
+  const pickerGroups = useMemo(() => (kwData ? buildPickerGroups(kwData) : []), [kwData]);
+  // Not memoized: `selected` is a fresh Set on every tick, so there is nothing
+  // to cache, and `splitSelection` is a single pass over at most sixty items.
+  const split = splitSelection(selected, kwData?.keywords ?? []);
+  const staleGrades = kwData !== undefined && roleFamily !== gradedFor;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
@@ -401,7 +416,7 @@ export default function StudioPage() {
         <Section
           step={2}
           title="Job description → keywords"
-          hint="Paste the JD, then tick the tech + soft keywords to weave in."
+          hint="Paste the JD, then review what it actually asks for — and what you can back up."
         >
           <div className="flex flex-wrap gap-3">
             <label className="text-muted flex flex-col gap-1 text-xs">
@@ -461,15 +476,22 @@ export default function StudioPage() {
             )}
           </div>
 
+          {staleGrades && (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              Role family changed since these were graded — re-extract to re-check them against the
+              bullets a {roleFamily || 'generalist'} résumé would actually use.
+            </p>
+          )}
+
           {kwData && (
             <div className="mt-4">
               <KeywordPicker
-                groups={[
-                  { label: 'Technical', items: kwData.tech },
-                  { label: 'Soft', items: kwData.soft },
-                ]}
+                groups={pickerGroups}
                 selected={selected}
                 onToggle={toggleKeyword}
+                onReset={() => setSelected(new Set(defaultKeywordSelection(kwData)))}
+                onClear={() => setSelected(new Set())}
+                stats={kwData.stats}
               />
             </div>
           )}
@@ -490,7 +512,10 @@ export default function StudioPage() {
               <span className="text-muted text-xs">Upload at least one résumé first.</span>
             )}
             {selected.size > 0 && !tailor.isPending && (
-              <span className="text-muted text-xs">{selected.size} keyword(s) selected</span>
+              <span className="text-muted text-xs">
+                {split.defensible.length} evidenced
+                {split.adjacentOnly.length > 0 && ` · ${split.adjacentOnly.length} adjacent-only`}
+              </span>
             )}
           </div>
 
@@ -506,8 +531,9 @@ export default function StudioPage() {
                   : 'Draft ready from your base template.'}
               </span>
               <span className="text-muted text-xs">
-                {selected.size} keyword(s) woven in · {tailor.data.usedBullets} real bullet(s) drawn
-                on{tailor.data.report ? ` · ${tailor.data.report.lint.wordCount} words` : ''}
+                {split.defensible.length} keyword(s) woven in · {tailor.data.usedBullets} real
+                bullet(s) drawn on
+                {tailor.data.report ? ` · ${tailor.data.report.lint.wordCount} words` : ''}
               </span>
               {tailor.data.source === 'base' && (
                 <span className="text-xs text-amber-700 dark:text-amber-400">
@@ -533,7 +559,10 @@ export default function StudioPage() {
               {tailor.data?.report && (
                 <TailoringReport
                   latex={latex}
-                  keywords={tailor.data.report.selectedKeywords}
+                  keywords={[
+                    ...tailor.data.report.selectedKeywords,
+                    ...tailor.data.report.adjacentKeywords,
+                  ]}
                   masterSkills={tailor.data.report.masterSkills}
                 />
               )}
