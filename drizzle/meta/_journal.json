@@ -127,6 +127,13 @@
       "when": 1787102251991,
       "tag": "0017_deep_boomerang",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787185244505,
+      "tag": "0018_sparkling_brood",
+      "breakpoints": true
     }
   ]
 }

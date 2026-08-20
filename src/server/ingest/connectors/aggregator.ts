@@ -15,6 +15,7 @@
  */
 import { postingFingerprint } from '../fingerprint';
 import { htmlToText, toPostedAt } from '../html';
+import { emptyReport, recordAttempt } from '../report';
 import type { Fetcher, JobConnector, RawPosting } from '../types';
 
 /** Exported so the registry can mark this source metered without a literal. */
@@ -149,9 +150,15 @@ export function aggregatorConnector(
   const maxPagesPerQuery = opts.maxPagesPerQuery ?? DEFAULT_MAX_PAGES_PER_QUERY;
   const datePosted = opts.datePosted ?? DEFAULT_DATE_POSTED;
 
+  // Requests spent by the most recent fetch, so the caller can hold this
+  // source to a budget that outlives a single run. `attempted` is the count.
+  let report = emptyReport();
+
   return {
     source: SOURCE,
+    lastReport: () => report,
     async fetch(): Promise<RawPosting[]> {
+      report = emptyReport();
       const byJobId = new Map<string, RawPosting>();
       let requests = 0;
       let exhausted = false;
@@ -173,6 +180,7 @@ export function aggregatorConnector(
           let res: Response;
           try {
             requests++;
+            recordAttempt(report);
             res = await fetcher(`${API_BASE}?${params.toString()}`, {
               headers: { 'x-api-key': apiKey },
               // The Neon/Inngest steps have a wall-clock budget; a hung request

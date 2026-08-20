@@ -1,16 +1,16 @@
 /**
- * Durable enrichment function, triggered ON DEMAND ONLY: fetch from every
- * connector, enrich the new postings, write them to `jobs`, then reconcile
- * freshness.
+ * Durable enrichment function: fetch from every connector, enrich the new
+ * postings, write them to `jobs`, then reconcile freshness.
  *
- * NO SCHEDULE, deliberately. It used to also run on a 6-hour cron; the owner
- * wants ingestion to happen when they ask for it, not in the background. Two
- * consequences worth knowing:
- *   - `reconcileFreshness` only runs on a click too, so stale postings are
- *     closed when you refresh rather than on a timer. Nothing rots — the
- *     14-day cutoff is measured from `last_seen_at`, not from run count.
- *   - The longer between clicks, the bigger the delta, so a refresh after a
- *     quiet fortnight may need several continuation runs to drain.
+ * RUNS HOURLY, plus on demand. A postings feed is only worth what it costs to
+ * read, and the free ATS sources cost nothing per request — so the limiting
+ * factor is the LLM classify call, which the posting-age guard and the title
+ * filter already bound. Hourly means a job posted this morning is on the board
+ * this morning, instead of whenever the owner next remembers to click.
+ *
+ * The one source that DOES cost money per request is held to a separate budget;
+ * see `decideMeteredRun`. Without that, 720 scheduled runs a month against a
+ * 200-request plan would exhaust it inside a day.
  *
  * SHAPE OF THE WORK — this is why it is split into steps.
  * Each Inngest step is served by its own HTTP invocation, and on Vercel an
@@ -72,9 +72,14 @@ export const enrichJobs = inngest.createFunction(
     // postings (spending before the insert-conflict catches the dupes). Manual
     // `pnpm enrich` runs should likewise not overlap a scheduled run.
     concurrency: { limit: 1 },
-    // On demand only — the board's "Find new jobs" button (jobs.refresh →
-    // inngest.send), plus this function's own continuation events.
-    triggers: [{ event: 'jobs/refresh.requested' }],
+    triggers: [
+      // The board's "Find new jobs" button (jobs.refresh → inngest.send), plus
+      // this function's own continuation events.
+      { event: 'jobs/refresh.requested' },
+      // Hourly. `concurrency: 1` above means a tick that lands while the
+      // previous run is still draining queues rather than overlapping it.
+      { cron: '0 * * * *' },
+    ],
   },
   async ({ event, step }) => {
     const depth = (event?.data as RefreshEventData | undefined)?.continuation ?? 0;
@@ -117,9 +122,37 @@ export const enrichJobs = inngest.createFunction(
       // because the connector's request cap bounds how much it can return.
       const prefetched = metered
         ? await step.run(`fetch-${source}`, async () => {
+            const { neon } = await import('@neondatabase/serverless');
+            const { drizzle } = await import('drizzle-orm/neon-http');
+            const schema = await import('@/server/db/schema');
             const { buildConnectors: build } = await import('@/server/ingest/registry');
+            const { decideMeteredRun, recordMeteredRun } = await import('@/server/ingest/metering');
+            const { loadMeteredUsage, saveMeteredUsage } = await import('@/server/ingest/usage');
+            const { installDbTimeout } = await import('@/server/db/http-timeout');
+            installDbTimeout();
+            const db = drizzle(neon(process.env.DATABASE_URL ?? ''), { schema });
+
+            // The budget lives in the DB because it outlives a run. An hourly
+            // schedule against a ~200-request monthly plan would otherwise burn
+            // the quota inside a day, and an exhausted plan just answers 429.
+            const now = new Date();
+            const usage = await loadMeteredUsage(db, source);
+            const decision = decideMeteredRun(usage, now);
+            if (!decision.run) {
+              console.info(`[${source}] skipped — ${decision.reason}`);
+              return [];
+            }
+
             const connector = build().find((c) => c.source === source);
-            return connector ? await connector.fetch() : [];
+            if (!connector) return [];
+            const postings = await connector.fetch();
+
+            // Recorded even on a failed/partial fetch: the requests were spent
+            // either way, and forgetting them is how a budget gets overrun.
+            const spent = connector.lastReport?.()?.attempted ?? 0;
+            await saveMeteredUsage(db, source, recordMeteredRun(usage, spent, now));
+            console.info(`[${source}] spent ${spent} request(s); ${postings.length} posting(s).`);
+            return postings;
           })
         : null;
 

@@ -125,6 +125,25 @@ export const filingTypeEnum = pgEnum('filing_type', ['change_of_status', 'consul
 // ---------------------------------------------------------------------------
 
 /**
+ * Request usage for metered job sources, one row per source.
+ *
+ * Exists because the aggregator's budget outlives a single run: roughly 200
+ * requests a month, and ingestion now runs hourly. Without somewhere durable to
+ * count, every run would start from zero and the plan would be exhausted within
+ * a day — silently, since an exhausted plan just answers 429.
+ */
+export const meteredSourceUsage = pgTable('metered_source_usage', {
+  /** Connector id, e.g. `aggregator:jsearch`. */
+  source: text('source').primaryKey(),
+  /** `YYYY-MM`; a new month starts a fresh budget with no reset job. */
+  month: text('month').notNull(),
+  requestsUsed: integer('requests_used').notNull().default(0),
+  /** `YYYY-MM-DD` of the last fetch, for the once-a-day rule. */
+  lastRunDate: text('last_run_date'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Per-company H1B sponsorship history, aggregated from US government data
  * (DOL OFLC LCA + USCIS H-1B Employer Data Hub). `company_name_normalized`
  * is the join key against `jobs.company` (also normalized).
