@@ -222,9 +222,21 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Compiled boundary-aware matcher for one keyword, so "go" doesn't match
+ * "category". Exported separately from `containsKeyword` because the evidence
+ * grader scans many haystacks with the same needle and `new RegExp` per call
+ * dominates once it is keywords × aliases × bullets.
+ *
+ * Pass `global` to count occurrences rather than test for presence.
+ */
+export function keywordMatcher(keyword: string, opts: { global?: boolean } = {}): RegExp {
+  return new RegExp(`(?<![a-z0-9])${escapeRegExp(keyword)}(?![a-z0-9])`, opts.global ? 'gi' : 'i');
+}
+
 /** Whole-word (boundary-aware) presence, so "go" doesn't match "category". */
 export function containsKeyword(hay: string, keyword: string): boolean {
-  return new RegExp(`(?<![a-z0-9])${escapeRegExp(keyword)}(?![a-z0-9])`, 'i').test(hay);
+  return keywordMatcher(keyword).test(hay);
 }
 
 function computeCoverage(text: string, keywords: string[]): KeywordCoverage {
