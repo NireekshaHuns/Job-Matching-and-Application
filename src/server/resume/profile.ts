@@ -20,6 +20,15 @@ export interface ResumeProfileFacts {
   knownMetrics: string | null;
   /** Confirmed stack per role, so invented detail stays consistent with reality. */
   stackNotes: string | null;
+  /**
+   * Every course actually taken. Tailoring picks and orders from this pool; it
+   * is the one part of the EDUCATION block that changes per job, and the model
+   * may never add to it.
+   */
+  coursework: string[];
+  /** Project display name + link, so the template holds no hardcoded project. */
+  projectName: string | null;
+  projectUrl: string | null;
 }
 
 /**
@@ -58,6 +67,24 @@ export const DEFAULT_PROFILE_FACTS: ResumeProfileFacts = {
     '(https://github.com/NireekshaHuns/Job-Matching-and-Application).',
     'Do NOT claim Go, or monorepo tools (Turborepo/Nx), unless explicitly confirmed.',
   ].join(' '),
+  // The owner's real transcript, as given. Tailoring selects from this and
+  // nothing else — note there is no networking course here, so a networking
+  // posting leans on Cloud Computing, Distributed Systems and Operating Systems
+  // rather than claiming one.
+  coursework: [
+    'Cloud Computing',
+    'Data Structures & Algorithms',
+    'Object-Oriented Design',
+    'Database Design',
+    'Web Development',
+    'UI/UX Design and Tools',
+    'Design Patterns',
+    'Distributed Systems',
+    'Operating Systems',
+    'AI and Prompt Engineering',
+  ],
+  projectName: 'Job Matching & Application Platform',
+  projectUrl: 'https://github.com/NireekshaHuns/Job-Matching-and-Application',
 };
 
 /** Merge a stored (possibly partial) profile over the seed defaults. */
@@ -77,12 +104,38 @@ export function withProfileDefaults(row: Partial<ResumeProfileFacts> | null): Re
     certUrl: pick('certUrl'),
     knownMetrics: pick('knownMetrics'),
     stackNotes: pick('stackNotes'),
+    // Arrays need their own branch: `pick` treats '' as empty, which is never
+    // true of `[]`, so an empty pool would silently override the seed instead of
+    // falling back to it.
+    coursework:
+      Array.isArray(row?.coursework) && row.coursework.length > 0
+        ? row.coursework
+        : DEFAULT_PROFILE_FACTS.coursework,
+    projectName: pick('projectName'),
+    projectUrl: pick('projectUrl'),
   };
 }
 
 /** A "field: value" line, omitted entirely when the value is blank. */
 function line(label: string, value: string | null): string[] {
   return value && value.trim() ? [`${label}: ${value.trim()}`] : [];
+}
+
+/**
+ * The courses available, stated as a closed set.
+ *
+ * Worded as a pool the model chooses from rather than a line it may edit,
+ * because "reorder this line" and "pick the relevant ones" are different
+ * instructions and only the second produces a coursework line that means
+ * anything on a specific posting.
+ */
+function courseworkBlock(coursework: readonly string[]): string[] {
+  if (coursework.length === 0) return [];
+  return [
+    'COURSEWORK POOL (real courses taken — SELECT and ORDER the ones this job values.',
+    'Use each course exactly as written here. NEVER invent, rename, reword, or add one):',
+    ...coursework.map((c) => `- ${c}`),
+  ];
 }
 
 /**
@@ -109,6 +162,8 @@ export function formatProfileForPrompt(p: ResumeProfileFacts): string {
     '',
     'CONFIRMED STACK / DOMAIN (keep invented detail consistent with this):',
     p.stackNotes?.trim() || '(none provided)',
+    '',
+    ...courseworkBlock(p.coursework),
   ]
     .filter((l) => l !== '')
     .join('\n');

@@ -508,6 +508,16 @@ export const resumeProfile = pgTable('resume_profile', {
   knownMetrics: text('known_metrics'),
   /** Confirmed tech stack per role, so invented detail stays consistent with reality. */
   stackNotes: text('stack_notes'),
+  /**
+   * Every course actually taken. Tailoring SELECTS and ORDERS from this pool per
+   * job and may never invent one — the coursework line is the only part of the
+   * EDUCATION block that changes. `jsonb` to match `jobs.tech_keywords` and
+   * `resume_bullets.skills`; the repo has no `text[]` precedent.
+   */
+  coursework: jsonb('coursework').$type<string[]>().notNull().default([]),
+  /** The project's display name and link — previously hardcoded in the template. */
+  projectName: text('project_name'),
+  projectUrl: text('project_url'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

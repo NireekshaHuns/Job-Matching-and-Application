@@ -76,12 +76,16 @@ const PROFILE_FIELDS = [
   ['Graduation', 'gradDate', false],
   ['Certification text', 'certText', false],
   ['Certification URL', 'certUrl', false],
+  ['Project name', 'projectName', false],
+  ['Project URL', 'projectUrl', false],
   ['Real / verified metrics (preferred before inventing)', 'knownMetrics', true],
   ['Confirmed stack & domain notes', 'stackNotes', true],
 ] as const;
 
 type ProfileKey = (typeof PROFILE_FIELDS)[number][1];
 type ProfileValues = Record<ProfileKey, string>;
+/** Coursework is a list, not a text field, so it rides alongside `ProfileValues`. */
+type ProfileSave = ProfileValues & { coursework: string[] };
 
 function ProfileSection() {
   const utils = trpc.useUtils();
@@ -103,6 +107,7 @@ function ProfileSection() {
       ) : profile.data ? (
         <ProfileForm
           initial={profile.data}
+          initialCoursework={profile.data.coursework}
           saving={save.isPending}
           error={save.error?.message}
           onSave={(values) => save.mutate(values)}
@@ -116,18 +121,23 @@ function ProfileSection() {
 
 function ProfileForm({
   initial,
+  initialCoursework,
   onSave,
   saving,
   error,
 }: {
   initial: Record<ProfileKey, string | null>;
-  onSave: (values: ProfileValues) => void;
+  initialCoursework: string[];
+  onSave: (values: ProfileSave) => void;
   saving: boolean;
   error?: string;
 }) {
   const seed = () =>
     Object.fromEntries(PROFILE_FIELDS.map(([, key]) => [key, initial[key] ?? ''])) as ProfileValues;
   const [values, setValues] = useState<ProfileValues>(seed);
+  // One course per line. A chip editor would look better, but this matches how
+  // the metrics and stack notes are edited and it is the honest ten lines.
+  const [courses, setCourses] = useState(() => initialCoursework.join('\n'));
 
   return (
     <div className="flex flex-col gap-2">
@@ -154,8 +164,30 @@ function ProfileForm({
           </label>
         ))}
       </div>
+
+      <label className="text-muted flex flex-col gap-1 text-xs">
+        Coursework pool — every course you actually took, one per line
+        <textarea
+          className={`${inputCls} min-h-32`}
+          value={courses}
+          onChange={(e) => setCourses(e.target.value)}
+          placeholder={'Distributed Systems\nOperating Systems\nData Structures & Algorithms'}
+        />
+        <span className="text-faint">
+          Tailoring picks and orders the most relevant few of these per job and can never invent
+          one. The order here is only the fallback.
+        </span>
+      </label>
+
       <div className="flex items-center gap-2">
-        <button type="button" className={btnCls} onClick={() => onSave(values)} disabled={saving}>
+        <button
+          type="button"
+          className={btnCls}
+          onClick={() =>
+            onSave({ ...values, coursework: courses.split('\n').filter((c) => c.trim() !== '') })
+          }
+          disabled={saving}
+        >
           {saving ? 'Saving…' : 'Save profile'}
         </button>
         <MutationError message={error} />
