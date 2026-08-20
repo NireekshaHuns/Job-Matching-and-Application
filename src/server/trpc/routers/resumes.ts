@@ -17,6 +17,7 @@ import { resolveLlmEndpoint } from '@/server/enrich/endpoint';
 import type { ChatClient, Embedder } from '@/server/enrich/types';
 import { ingestResume, type IngestDeps } from '@/server/resume/corpus-ingest';
 import { extractJdKeywords } from '@/server/resume/jd-keywords';
+import { countByGrade, gradeKeywords, type EvidenceBullet } from '@/server/resume/keyword-evidence';
 import { withProfileDefaults } from '@/server/resume/profile';
 import { stripLatex } from '@/server/resume/quality';
 import { rankCorpusBullets, type CorpusBullet } from '@/server/resume/retrieve';
@@ -48,12 +49,23 @@ const idInput = z.object({ id: z.number().int() });
 
 // ---- Corpus Studio (upload-driven tailoring) ----
 
-export const extractJdKeywordsInput = z.object({ jdText: z.string().trim().min(1).max(20_000) });
+export const extractJdKeywordsInput = z.object({
+  jdText: z.string().trim().min(1).max(20_000),
+  /** Feeds the prompt and the title boost in `keywordImportance`. */
+  jobTitle: z.string().trim().max(200).default(''),
+  /**
+   * Evidence lens. Grading must use the same role filter retrieval will, or the
+   * picker shows strong evidence sitting in a bullet generation never sees.
+   */
+  roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
+});
 
 export const tailorFromCorpusInput = z.object({
   jobTitle: z.string().trim().min(1).max(200),
   company: z.string().trim().max(200).default(''),
   selectedKeywords: z.array(z.string().trim().min(1)).default([]),
+  /** Ticked without corpus evidence — gestured at, never claimed. */
+  adjacentKeywords: z.array(z.string().trim().min(1)).default([]),
   roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
   maxAttempts: z.number().int().min(1).max(5).optional(),
 });
@@ -308,11 +320,40 @@ export const resumesRouter = createTRPCRouter({
           message: 'Set OPENAI_API_KEY to extract JD keywords.',
         });
       }
-      const kws = await extractJdKeywords(input.jdText, chat);
-      const skills = await ctx.db.select({ skill: masterSkills.skill }).from(masterSkills);
-      const corpus = new Set(skills.map((s) => s.skill));
-      const flag = (list: string[]) => list.map((k) => ({ keyword: k, inCorpus: corpus.has(k) }));
-      return { tech: flag(kws.tech), soft: flag(kws.soft) };
+      const [analysis, skillRows, bulletRows] = await Promise.all([
+        extractJdKeywords({ jdText: input.jdText, jobTitle: input.jobTitle }, chat),
+        ctx.db.select({ skill: masterSkills.skill }).from(masterSkills),
+        ctx.db
+          .select({
+            id: resumeBullets.id,
+            text: resumeBullets.text,
+            skills: resumeBullets.skills,
+            roleFamily: resumeBullets.roleFamily,
+          })
+          .from(resumeBullets),
+      ]);
+
+      const bullets: EvidenceBullet[] = bulletRows.map((b) => ({
+        id: b.id,
+        text: b.text,
+        skills: b.skills ?? [],
+        roleFamily: b.roleFamily,
+      }));
+      const keywords = gradeKeywords(analysis.keywords, {
+        masterSkills: skillRows.map((r) => r.skill),
+        bullets,
+        roleFamily: input.roleFamily ?? null,
+      });
+
+      return {
+        keywords,
+        orGroups: analysis.orGroups,
+        stats: {
+          total: keywords.length,
+          dropped: analysis.dropped,
+          byGrade: countByGrade(keywords),
+        },
+      };
     }),
 
   /**
@@ -326,6 +367,12 @@ export const resumesRouter = createTRPCRouter({
     .input(tailorFromCorpusInput)
     .mutation(async ({ ctx, input }) => {
       const selected = normalizeSkillList(input.selectedKeywords);
+      // Disjoint even if the client sends overlap: a keyword the corpus backs is
+      // claimable, and being in both lists would tell the model two things.
+      const selectedSet = new Set(selected);
+      const adjacent = normalizeSkillList(input.adjacentKeywords).filter(
+        (k) => !selectedSet.has(k),
+      );
       const roleFamily = input.roleFamily ?? null;
 
       const [[profileRow], [base], bulletRows, skillRows] = await Promise.all([
@@ -358,13 +405,18 @@ export const resumesRouter = createTRPCRouter({
         embedding: r.embedding ?? null,
       }));
 
-      // Embed the selected keywords as the retrieval query (best-effort).
+      // Retrieval sees BOTH lists. An adjacent-only keyword still pulls the
+      // nearest real bullet, and that bullet is exactly the adjacent experience
+      // the generator has to write about instead of the technology.
+      const retrievalKeywords = [...selected, ...adjacent];
+
+      // Embed the keywords as the retrieval query (best-effort).
       let jdEmbedding: number[] | null = null;
-      if (selected.length > 0) {
+      if (retrievalKeywords.length > 0) {
         const embedder = await llmEmbedder();
         if (embedder) {
           try {
-            jdEmbedding = await embedder.embed(selected.join(', '));
+            jdEmbedding = await embedder.embed(retrievalKeywords.join(', '));
           } catch {
             jdEmbedding = null;
           }
@@ -374,7 +426,7 @@ export const resumesRouter = createTRPCRouter({
       const ranked = rankCorpusBullets({
         bullets: corpusBullets,
         jdEmbedding,
-        selectedKeywords: selected,
+        selectedKeywords: retrievalKeywords,
         roleFamily,
       });
       const sourceBullets: CorpusSourceBullet[] = ranked.map((r) => ({
@@ -390,6 +442,7 @@ export const resumesRouter = createTRPCRouter({
             { title: input.jobTitle, company: input.company },
             {
               selectedKeywords: selected,
+              adjacentKeywords: adjacent,
               bullets: sourceBullets,
               profile,
               masterSkills: skillRows.map((r) => r.skill),
