@@ -8,8 +8,14 @@
  */
 import type { ChatClient } from '@/server/enrich/types';
 import { formatProfileForPrompt, type ResumeProfileFacts } from './profile';
+import {
+  buildDefencePoints,
+  buildKeywordCoverage,
+  type DefencePoint,
+  type KeywordPlacement,
+} from './coverage';
 import { lintResume, type LintReport } from './quality';
-import { RESUME_RUBRIC_PROMPT } from './rubric';
+import { OWNER_TAILORING_METHOD, RESUME_RUBRIC_PROMPT } from './rubric';
 
 /** Strip accidental ```/```latex fences the model may add. */
 function stripFences(s: string): string {
@@ -42,6 +48,11 @@ export interface CorpusTailorInputs {
   bullets: CorpusSourceBullet[];
   /** Fixed candidate facts + preferred real metrics/stack. */
   profile: ResumeProfileFacts;
+  /**
+   * The user's truthful skill superset. Used only to flag, after generation,
+   * any technology the résumé now claims that this list does not support.
+   */
+  masterSkills?: string[];
 }
 
 /**
@@ -69,6 +80,12 @@ export function buildCorpusTailorMessages(
     RESUME_RUBRIC_PROMPT,
     '',
     CORPUS_INVENTION_STANCE,
+    '',
+    // Layered rather than merged, at the owner's request. The two sections
+    // overlap and occasionally give different specifics (word counts, bullet
+    // counts), so the precedence is stated outright — a model handed two rule
+    // sets without a tie-breaker picks arbitrarily.
+    OWNER_TAILORING_METHOD,
     '',
     'Use the LaTeX document below as the exact format (packages, header, section style, one page). Keep the',
     'header/identity and the employers, titles, dates, and education anchors; rewrite the EXPERIENCE, PROJECTS,',
@@ -106,6 +123,10 @@ export interface CorpusTailorReport {
   selectedKeywords: string[];
   attempts: number;
   lint: LintReport;
+  /** Where each selected keyword actually landed in the generated document. */
+  coverage: KeywordPlacement[];
+  /** Claims to check before submitting — see `buildDefencePoints`. */
+  defence: DefencePoint[];
 }
 
 export interface CorpusTailorResult {
@@ -148,6 +169,14 @@ export async function tailorFromCorpus(
   const chosen = best as { latex: string; lint: LintReport };
   return {
     latex: chosen.latex,
-    report: { selectedKeywords: inputs.selectedKeywords, attempts, lint: chosen.lint },
+    report: {
+      selectedKeywords: inputs.selectedKeywords,
+      attempts,
+      lint: chosen.lint,
+      // Read off the document we are actually returning, not the one the model
+      // says it wrote.
+      coverage: buildKeywordCoverage(chosen.latex, inputs.selectedKeywords),
+      defence: buildDefencePoints(chosen.latex, inputs.masterSkills ?? [], inputs.selectedKeywords),
+    },
   };
 }
