@@ -84,6 +84,12 @@ describe('parseStoredFilters', () => {
     });
   });
 
+  it('falls back to Recommended for a stored sort that no longer exists', () => {
+    // The migration path for anyone whose browser saved "Most fit" before
+    // résumé fit scoring was removed.
+    expect(parseStoredFilters('{"sort":"fit"}').sort).toBe('combined');
+  });
+
   it('survives corrupt storage rather than breaking the board', () => {
     expect(parseStoredFilters('not json')).toEqual(DEFAULT_FILTERS);
     expect(parseStoredFilters('null')).toEqual(DEFAULT_FILTERS);

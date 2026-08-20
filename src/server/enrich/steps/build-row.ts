@@ -1,7 +1,7 @@
 /**
  * Assemble a clean `jobs` insert row from a posting plus its enrichment results.
  * Pure — no DB. The two scores stay in separate places: `sponsorTier` here,
- * resume `relevanceScore` in a later job_scores step.
+ * sponsorship on the job; nothing else is scored and stored.
  */
 import { parseRequiredYears } from '@/lib/experience';
 import { parseSalaryRange } from '@/lib/salary';

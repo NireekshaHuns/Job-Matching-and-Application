@@ -169,42 +169,42 @@ describe('component scores', () => {
 describe('resolveWeights', () => {
   it('defaults when weights are missing or sum to zero', () => {
     expect(resolveWeights(undefined)).toEqual(DEFAULT_PRIORITY_WEIGHTS);
-    expect(resolveWeights({ tier: 0, fit: 0, freshness: 0 })).toEqual(DEFAULT_PRIORITY_WEIGHTS);
+    expect(resolveWeights({ tier: 0, freshness: 0 })).toEqual(DEFAULT_PRIORITY_WEIGHTS);
   });
 
   it('merges a partial override onto the defaults', () => {
-    expect(resolveWeights({ fit: 50 })).toEqual({ ...DEFAULT_PRIORITY_WEIGHTS, fit: 50 });
+    expect(resolveWeights({ freshness: 50 })).toEqual({
+      ...DEFAULT_PRIORITY_WEIGHTS,
+      freshness: 50,
+    });
   });
 });
 
 describe('computePriority', () => {
-  it('is a weighted average of the three 0..100 components', () => {
-    // tier=100, fit=40, freshness=100 with default {60,30,10}:
-    // (60*100 + 30*40 + 10*100) / 100 = (6000+1200+1000)/100 = 82
-    const b = computePriority({ tierRank: 3, fit: 40, ageDays: 0 });
+  it('is a weighted average of the two 0..100 components', () => {
+    // tier=100, freshness=100 with default {85,15}: (85*100 + 15*100)/100 = 100
+    const b = computePriority({ tierRank: 3, ageDays: 0 });
     expect(b.tier).toBe(100);
-    expect(b.fit).toBe(40);
     expect(b.freshness).toBe(100);
-    expect(b.priority).toBeCloseTo(82);
+    expect(b.priority).toBeCloseTo(100);
   });
 
   it('keeps tier dominant under the default mix', () => {
-    const high = computePriority({ tierRank: 3, fit: 50, ageDays: 5 }).priority;
-    const medium = computePriority({ tierRank: 2, fit: 50, ageDays: 5 }).priority;
-    // One tier step (33.3 pts) × the 0.6 tier weight ≈ 20 priority points.
-    expect(high - medium).toBeCloseTo((100 / 3) * 0.6, 1);
+    const high = computePriority({ tierRank: 3, ageDays: 5 }).priority;
+    const medium = computePriority({ tierRank: 2, ageDays: 5 }).priority;
+    // One tier step (33.3 pts) x the 0.85 tier weight.
+    expect(high - medium).toBeCloseTo((100 / 3) * 0.85, 1);
   });
 
-  it('honors custom weights (e.g. fit-first)', () => {
-    const fitFirst = { tier: 0, fit: 100, freshness: 0 };
-    expect(computePriority({ tierRank: 3, fit: 42, ageDays: 0 }, fitFirst).priority).toBe(42);
+  it('honors custom weights (e.g. freshness-first)', () => {
+    const freshFirst = { tier: 0, freshness: 100 };
+    expect(computePriority({ tierRank: 3, ageDays: 0 }, freshFirst).priority).toBe(100);
   });
 
   it('returns 0 priority when all weights are zero (no divide-by-zero)', () => {
-    expect(
-      computePriority({ tierRank: 3, fit: 100, ageDays: 0 }, { tier: 0, fit: 0, freshness: 0 })
-        .priority,
-    ).toBe(0);
+    expect(computePriority({ tierRank: 3, ageDays: 0 }, { tier: 0, freshness: 0 }).priority).toBe(
+      0,
+    );
   });
 });
 

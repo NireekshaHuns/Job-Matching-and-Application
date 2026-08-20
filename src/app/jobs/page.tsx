@@ -272,7 +272,6 @@ export default function JobsPage() {
             className={inputCls}
           >
             <option value="combined">Recommended</option>
-            <option value="fit">Most fit</option>
             <option value="recent">Most recent</option>
           </select>
         </label>
@@ -452,7 +451,7 @@ export default function JobsPage() {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span
                       className="bg-brand/10 text-brand-text rounded px-1.5 py-0.5 text-[11px] font-medium"
-                      title={`Sponsorship ${job.priorityTier} · fit ${job.priorityFit} · freshness ${job.priorityFreshness}`}
+                      title={`Sponsorship ${job.priorityTier} · freshness ${job.priorityFreshness}`}
                     >
                       ★ {job.priorityScore}
                     </span>

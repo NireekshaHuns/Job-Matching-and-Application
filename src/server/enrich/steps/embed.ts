@@ -3,7 +3,7 @@
  * behind an injected `Embedder`.
  *
  * OFF BY DEFAULT. `jobs.embedding` is written but never read: résumé relevance
- * uses interpretable keyword overlap (`server/resume/fit.ts`), and the Studio
+ * was removed entirely (#180), and the Studio
  * embeds the pasted JD fresh at tailor time rather than reading this column.
  * Passing no embedder skips the call entirely — which matters on a bulk load,
  * where it is one paid request per posting for a column nothing consumes. The
