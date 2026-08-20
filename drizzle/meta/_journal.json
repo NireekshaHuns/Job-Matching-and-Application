@@ -134,6 +134,13 @@
       "when": 1787185057014,
       "tag": "0018_optimal_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787186937987,
+      "tag": "0019_slim_toad",
+      "breakpoints": true
     }
   ]
 }
