@@ -12,7 +12,7 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { sql } from 'drizzle-orm';
 import * as schema from '../src/server/db/schema';
 
-const { jobs, jobScores, resumes } = schema;
+const { jobs, resumes } = schema;
 
 /** The URL of the throwaway e2e database. Required — no dev-DB fallback. */
 export function e2eDatabaseUrl(): string {
@@ -48,7 +48,6 @@ export const SEED = {
    * every window, which let stale rows crowd out fresh ones.
    */
   undatedOld: 'E2E Undated Older Engineer',
-  fitScore: 82,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -194,14 +193,4 @@ export async function resetAndSeed(): Promise<void> {
       },
     ])
     .returning({ id: jobs.id, fingerprint: jobs.fingerprint });
-
-  const highJob = inserted.find((j) => j.fingerprint === 'e2e-high');
-  if (highJob && resume) {
-    await db.insert(jobScores).values({
-      jobId: highJob.id,
-      resumeId: resume.id,
-      relevanceScore: SEED.fitScore,
-      skillGaps: ['Kafka', 'Go'],
-    });
-  }
 }

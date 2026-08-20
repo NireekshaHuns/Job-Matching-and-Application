@@ -19,7 +19,8 @@ import {
   resumes,
 } from '@/server/db/schema';
 import { draftOutreachEmail, templateOutreachEmail } from '@/server/outreach/email';
-import { computeFit, resumeSkillsFromBullets } from '@/server/resume/fit';
+import { resumeSkillsFromBullets } from '@/server/resume/bullets';
+import { coverableStrengths } from '@/server/resume/strengths';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
 /**
@@ -57,12 +58,11 @@ async function loadFitSkills(
   // Best-effort: an absent or unresolved resumeId falls back to the generalist
   // role family (sees all bullets) rather than throwing — this is a draft aid,
   // not the stricter résumé lookup in the resumes router.
-  const fit = computeFit({
-    jobKeywords: [...job.techKeywords, ...job.softKeywords],
-    resumeSkills: resumeSkillsFromBullets(bullets, resume[0]?.roleFamily ?? null),
-    masterSkills: skills.map((s) => s.skill),
-  });
-  const coverable = [...fit.matched, ...fit.missingAddable];
+  const coverable = coverableStrengths(
+    [...job.techKeywords, ...job.softKeywords],
+    resumeSkillsFromBullets(bullets, resume[0]?.roleFamily ?? null),
+    skills.map((s) => s.skill),
+  );
   return coverable.length > 0 ? coverable.slice(0, 6) : undefined;
 }
 

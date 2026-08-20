@@ -57,56 +57,6 @@ function writeCaller(returning: unknown[] = [{ id: 1 }]) {
   return { caller: createCaller({ db } as Context), ops };
 }
 
-describe('resumes.tailoringSuggestions', () => {
-  it('rejects non-integer ids', async () => {
-    await expect(
-      // @ts-expect-error — deliberately invalid input
-      caller([]).resumes.tailoringSuggestions({ jobId: 'x', resumeId: 1 }),
-    ).rejects.toThrow();
-  });
-
-  it('throws NOT_FOUND when the job is missing', async () => {
-    // job lookup → [], resume lookup → [row]
-    await expect(
-      caller([[], [{ roleFamily: 'backend' }]]).resumes.tailoringSuggestions({
-        jobId: 1,
-        resumeId: 1,
-      }),
-    ).rejects.toThrow(/Job not found/);
-  });
-
-  it('throws NOT_FOUND when the résumé is missing', async () => {
-    await expect(
-      caller([[{ techKeywords: ['go'], softKeywords: [] }], []]).resumes.tailoringSuggestions({
-        jobId: 1,
-        resumeId: 999,
-      }),
-    ).rejects.toThrow(/not found/i);
-  });
-
-  it('returns truthful suggestions on the happy path', async () => {
-    const res = await caller([
-      [{ techKeywords: ['go', 'rust'], softKeywords: [] }], // job
-      [{ roleFamily: 'backend' }], // resume
-      [{ skill: 'go' }], // master skills
-      [
-        {
-          id: 1,
-          text: 'Wrote Go services',
-          company: 'Acme',
-          skills: ['go'],
-          roleFamily: 'backend',
-        },
-      ], // bullets
-    ]).resumes.tailoringSuggestions({ jobId: 1, resumeId: 1 });
-
-    // "go" is matched via the bullet; "rust" is an honest gap (not in inventory).
-    expect(res.matched).toEqual(['go']);
-    expect(res.gaps).toEqual(['rust']);
-    expect(res.addable).toEqual([]);
-  });
-});
-
 describe('normalizeSkillList', () => {
   it('lowercases, trims, drops empties, and dedupes preserving order', () => {
     expect(normalizeSkillList([' Go ', 'KAFKA', 'go', '', '  ', 'Redis'])).toEqual([

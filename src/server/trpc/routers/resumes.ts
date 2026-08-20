@@ -1,6 +1,5 @@
 /**
- * Résumé queries for the board. `listBase` powers the "lens" selector — the
- * base résumés a job's fit is scored against. `tailoringSuggestions` surfaces
+ * Résumé queries for the Studio: the bullet corpus, JD keyword extraction, and
  * the CLI tailoring assist read-only in the app (spec §5.7): keyword-gap + the
  * user's real bullets to weave in (never fabricated).
  */
@@ -23,7 +22,6 @@ import { extractJdKeywords } from '@/server/resume/jd-keywords';
 import { withProfileDefaults } from '@/server/resume/profile';
 import { stripLatex } from '@/server/resume/quality';
 import { rankCorpusBullets, type CorpusBullet } from '@/server/resume/retrieve';
-import { buildTailoringSuggestions } from '@/server/resume/suggestions';
 import { tailorFromCorpus, type CorpusSourceBullet } from '@/server/resume/tailor';
 import { buildDefaultTemplate } from '@/server/resume/template';
 import { createTRPCRouter, publicProcedure } from '../trpc';
@@ -179,54 +177,6 @@ export function normalizeSkillList(skills: string[]): string[] {
 }
 
 export const resumesRouter = createTRPCRouter({
-  listBase: publicProcedure.query(async ({ ctx }) => {
-    return ctx.db
-      .select({ id: resumes.id, label: resumes.label, roleFamily: resumes.roleFamily })
-      .from(resumes)
-      .where(eq(resumes.kind, 'base'))
-      .orderBy(asc(resumes.label));
-  }),
-
-  /** Truthful tailoring suggestions for a job against a selected base résumé. */
-  tailoringSuggestions: publicProcedure
-    .input(z.object({ jobId: z.number().int(), resumeId: z.number().int() }))
-    .query(async ({ ctx, input }) => {
-      const [[job], [resume]] = await Promise.all([
-        ctx.db
-          .select({ techKeywords: jobs.techKeywords, softKeywords: jobs.softKeywords })
-          .from(jobs)
-          .where(eq(jobs.id, input.jobId))
-          .limit(1),
-        ctx.db
-          .select({ roleFamily: resumes.roleFamily })
-          .from(resumes)
-          .where(eq(resumes.id, input.resumeId))
-          .limit(1),
-      ]);
-      if (!job) throw new TRPCError({ code: 'NOT_FOUND', message: 'Job not found.' });
-      if (!resume) throw new TRPCError({ code: 'NOT_FOUND', message: 'Résumé not found.' });
-
-      const [skills, bullets] = await Promise.all([
-        ctx.db.select({ skill: masterSkills.skill }).from(masterSkills),
-        ctx.db
-          .select({
-            id: resumeBullets.id,
-            text: resumeBullets.text,
-            company: resumeBullets.company,
-            skills: resumeBullets.skills,
-            roleFamily: resumeBullets.roleFamily,
-          })
-          .from(resumeBullets),
-      ]);
-
-      return buildTailoringSuggestions({
-        jobKeywords: [...job.techKeywords, ...job.softKeywords],
-        resumeRoleFamily: resume.roleFamily,
-        masterSkills: skills.map((s) => s.skill),
-        bullets,
-      });
-    }),
-
   /** Skills + base résumé format for the settings page. */
   inventory: publicProcedure.query(async ({ ctx }) => {
     const [skills, baseResumes] = await Promise.all([

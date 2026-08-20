@@ -16,7 +16,11 @@
  * Whatever the owner picks is still remembered.
  */
 
-export type Sort = 'combined' | 'fit' | 'recent';
+/**
+ * "Most fit" is gone with résumé fit scoring — a stored `sort: "fit"` falls back
+ * to `combined`, because `parseStoredFilters` is total.
+ */
+export type Sort = 'combined' | 'recent';
 /** Posted-age window in days; 0 means "any age". */
 export type Within = 1 | 3 | 7 | 0;
 /** Minimum annualized USD pay; 0 means "any pay". */
@@ -35,7 +39,7 @@ export interface BoardFilters {
   includeClosed: boolean;
 }
 
-const SORTS: Sort[] = ['combined', 'fit', 'recent'];
+const SORTS: Sort[] = ['combined', 'recent'];
 const WITHINS: Within[] = [1, 3, 7, 0];
 const MIN_SALARIES: MinSalary[] = [0, 80_000, 100_000, 120_000, 150_000];
 const MAX_YEARS: MaxYears[] = [0, 1, 2, 3, 5];
