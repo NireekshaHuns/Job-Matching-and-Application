@@ -42,8 +42,17 @@ export interface CorpusSourceBullet {
 }
 
 export interface CorpusTailorInputs {
-  /** Tech + soft keywords the user ticked to include (lowercased). */
+  /**
+   * Keywords the user ticked AND the corpus backs, highest priority first. The
+   * résumé may claim these outright.
+   */
   selectedKeywords: string[];
+  /**
+   * Keywords the user ticked despite the corpus having no evidence for them.
+   * The résumé must gesture at the adjacent experience it really has, in the
+   * posting's own umbrella wording, and never claim the technology itself.
+   */
+  adjacentKeywords?: string[];
   /** Retrieved real bullets to synthesize from (not copy verbatim). */
   bullets: CorpusSourceBullet[];
   /** Fixed candidate facts + preferred real metrics/stack. */
@@ -69,6 +78,27 @@ export const CORPUS_INVENTION_STANCE = [
   'plausible and non-uniform (avoid suspiciously round or repeated figures). Never fabricate employers, job',
   'titles, dates, or degrees — those are fixed facts. The result must be strong AND sensible, never rubbishy.',
 ].join('\n');
+
+/**
+ * The instruction for keywords the posting asks for and the corpus cannot back.
+ *
+ * Named honestly to the model rather than quietly dropped, because the useful
+ * move is not silence: it is to surface the genuinely adjacent experience under
+ * the posting's own umbrella term. Claiming the tool itself is the one outcome
+ * that must not happen — see the OR-requirement rule in the method above.
+ */
+function adjacentBlock(adjacent: readonly string[]): string[] {
+  return [
+    '',
+    'ADJACENT ONLY — the posting asks for these and NOTHING in the material below supports them:',
+    ...adjacent.map((k) => `- ${k}`),
+    'Do NOT name these technologies and do NOT claim the candidate has used them. Instead surface the',
+    "genuinely adjacent experience the material DOES support, in the posting's own umbrella wording",
+    '(for "Kubernetes" with no Kubernetes bullet: the container orchestration and deployment automation',
+    'they really did). The concept must be real and defensible in an interview; the tool must not be',
+    'claimed. A keyword you cannot defend in an interview is worse than a missing one.',
+  ];
+}
 
 export function buildCorpusTailorMessages(
   job: CorpusTailorJob,
@@ -96,11 +126,15 @@ export function buildCorpusTailorMessages(
     inputs.bullets.map((b) => `- ${b.text}${b.company ? ` [${b.company}]` : ''}`).join('\n') ||
     '(no prior bullets — synthesize from the profile + stack notes)';
 
+  const adjacent = inputs.adjacentKeywords ?? [];
+
   const user = [
     formatProfileForPrompt(inputs.profile),
     '',
     `TARGET JOB: ${job.title} at ${job.company}`,
-    `KEYWORDS TO WORK IN (spread naturally, no stuffing): ${inputs.selectedKeywords.join(', ') || '(none)'}`,
+    'KEYWORDS TO WORK IN, IN PRIORITY ORDER (highest first — if they cannot all fit naturally, drop',
+    `from the END, never from the front; spread them, no stuffing): ${inputs.selectedKeywords.join(', ') || '(none)'}`,
+    ...(adjacent.length > 0 ? adjacentBlock(adjacent) : []),
     '',
     'REAL BULLETS FROM PAST RESUMES (raw material — synthesize and strengthen, do not copy verbatim):',
     bulletLines,
@@ -121,6 +155,14 @@ export function buildCorpusTailorMessages(
 
 export interface CorpusTailorReport {
   selectedKeywords: string[];
+  /** Ticked without corpus evidence — reported as honest gaps, never gated on. */
+  adjacentKeywords: string[];
+  /**
+   * Both lists, for the report panels. A single stable array rather than one
+   * the client concatenates: `TailoringReport` memoizes on this prop, and a
+   * fresh array every render re-reads the whole document on every keystroke.
+   */
+  reportKeywords: string[];
   attempts: number;
   lint: LintReport;
   /** Where each selected keyword actually landed in the generated document. */
@@ -154,6 +196,14 @@ export async function tailorFromCorpus(
   opts: { maxAttempts?: number } = {},
 ): Promise<CorpusTailorResult> {
   const maxAttempts = Math.max(1, opts.maxAttempts ?? 3);
+  const adjacent = inputs.adjacentKeywords ?? [];
+  // The coverage check must NOT see the adjacent-only keywords. Today
+  // `keyword-coverage` is warn-only, so nothing re-prompts on it — but the
+  // moment it is promoted to an error (the whole point of a coverage gate), a
+  // low ratio would re-prompt the model to work in the very keywords we just
+  // told it not to claim. Keeping the lists separate here is what makes that
+  // promotion safe. They are reported either way, never gated on.
+  const reportable = [...inputs.selectedKeywords, ...adjacent];
   let violations: string[] = [];
   let best: { latex: string; lint: LintReport } | undefined;
   let attempts = 0;
@@ -177,12 +227,16 @@ export async function tailorFromCorpus(
     latex: chosen.latex,
     report: {
       selectedKeywords: inputs.selectedKeywords,
+      adjacentKeywords: adjacent,
+      reportKeywords: reportable,
       attempts,
       lint: chosen.lint,
       // Read off the document we are actually returning, not the one the model
-      // says it wrote.
-      coverage: buildKeywordCoverage(chosen.latex, inputs.selectedKeywords),
-      defence: buildDefencePoints(chosen.latex, inputs.masterSkills ?? [], inputs.selectedKeywords),
+      // says it wrote. Both panels see the adjacent keywords too: coverage so
+      // you can tell what became of them, and defence so that if the model
+      // claimed one anyway it gets flagged before you send it.
+      coverage: buildKeywordCoverage(chosen.latex, reportable),
+      defence: buildDefencePoints(chosen.latex, inputs.masterSkills ?? [], reportable),
       masterSkills: inputs.masterSkills ?? [],
     },
   };

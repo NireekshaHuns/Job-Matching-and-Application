@@ -76,6 +76,57 @@ ${filler}
 \\end{itemize}
 \\end{document}`;
 
+describe('adjacent-only keywords', () => {
+  it('tells the model to gesture at them rather than claim them', () => {
+    const { user } = buildCorpusTailorMessages(
+      job,
+      {
+        ...inputs,
+        adjacentKeywords: ['kubernetes'],
+      },
+      TEMPLATE,
+    );
+    expect(user).toContain('ADJACENT ONLY');
+    expect(user).toContain('kubernetes');
+    expect(user).toContain('Do NOT name these technologies');
+  });
+
+  it('says nothing when there are none', () => {
+    const { user } = buildCorpusTailorMessages(job, inputs, TEMPLATE);
+    expect(user).not.toContain('ADJACENT ONLY');
+  });
+
+  it('states that the keyword list is in priority order', () => {
+    // The Studio hands them over sorted by importance, and the model is told to
+    // drop from the end — so the ordering has to be claimed explicitly.
+    const { user } = buildCorpusTailorMessages(job, inputs, TEMPLATE);
+    expect(user).toContain('IN PRIORITY ORDER');
+  });
+
+  it("keeps them out of the linter's coverage check but inside the report", async () => {
+    // Gating on a keyword we just told the model not to claim would re-prompt it
+    // to claim it. It belongs in the report, never in the retry signal.
+    const chat: ChatClient = { complete: async () => GOOD_RESUME };
+    const result = await tailorFromCorpus(
+      TEMPLATE,
+      job,
+      { ...inputs, selectedKeywords: ['kafka'], adjacentKeywords: ['bgp'] },
+      chat,
+      { maxAttempts: 1 },
+    );
+    // Assert on the coverage data itself, not just the message: `?? ''` would
+    // also pass if no coverage violation existed at all.
+    expect(result.report.lint.keywordCoverage?.matched).toEqual(['kafka']);
+    expect(result.report.lint.keywordCoverage?.missing ?? []).not.toContain('bgp');
+    const coverageMsg = result.report.lint.violations.find((v) => v.rule === 'keyword-coverage');
+    expect(coverageMsg?.message ?? '').not.toContain('bgp');
+    expect(result.report.adjacentKeywords).toEqual(['bgp']);
+    // Still reported, so you can see what became of it.
+    expect(result.report.coverage.map((c) => c.keyword)).toContain('bgp');
+    expect(result.report.reportKeywords).toEqual(['kafka', 'bgp']);
+  });
+});
+
 describe("the owner's tailoring method", () => {
   it('reaches the system prompt', () => {
     const { system } = buildCorpusTailorMessages(

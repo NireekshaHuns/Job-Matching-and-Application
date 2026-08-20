@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { DB } from '@/server/db';
 import type { Context } from '@/server/trpc/context';
 import { createCaller } from '@/server/trpc/root';
-import { addSkillInput, normalizeSkillList, upsertBaseResumeInput } from './resumes';
+import {
+  addSkillInput,
+  extractJdKeywordsInput,
+  normalizeSkillList,
+  tailorFromCorpusInput,
+  upsertBaseResumeInput,
+} from './resumes';
 
 /**
  * Fake db returning queued row-lists for each `.select().from().where().limit()`
@@ -72,6 +78,24 @@ describe('settings input schemas', () => {
     expect(() => addSkillInput.parse({ skill: '', kind: 'technical' })).toThrow();
     expect(() => addSkillInput.parse({ skill: 'go', kind: 'wizardry' })).toThrow();
     expect(addSkillInput.parse({ skill: 'go', kind: 'soft' })).toMatchObject({ kind: 'soft' });
+  });
+
+  it('extractJdKeywordsInput defaults the title and leaves the role family optional', () => {
+    const parsed = extractJdKeywordsInput.parse({ jdText: 'Build things.' });
+    expect(parsed.jobTitle).toBe('');
+    expect(parsed.roleFamily).toBeUndefined();
+    expect(extractJdKeywordsInput.parse({ jdText: 'x', roleFamily: 'backend' }).roleFamily).toBe(
+      'backend',
+    );
+    expect(extractJdKeywordsInput.safeParse({ jdText: '' }).success).toBe(false);
+  });
+
+  it('tailorFromCorpusInput defaults adjacentKeywords to empty', () => {
+    // The generator treats a missing list as "nothing to gesture at", so the
+    // default has to be the empty list and not undefined.
+    const parsed = tailorFromCorpusInput.parse({ jobTitle: 'SWE' });
+    expect(parsed.adjacentKeywords).toEqual([]);
+    expect(parsed.selectedKeywords).toEqual([]);
   });
 
   it('upsertBaseResumeInput requires label + content; id optional', () => {
