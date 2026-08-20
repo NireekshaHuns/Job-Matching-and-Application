@@ -112,10 +112,35 @@ describe('extractAtsBoards', () => {
     expect(workday.map((b) => b.site)).toEqual(['External', 'Campus']);
   });
 
-  it('does not read a Workday host out of a redirect parameter', () => {
-    const { workday } = extractAtsBoards([
+  it('does not read a board out of a redirect parameter', () => {
+    // Either shape: with a scheme the old `//` boundary matched, and the board
+    // was then registered under the REDIRECTOR's company name — which lands on
+    // every posting from it, and from there on the sponsor join key.
+    const redirects = [
       { url: 'https://evil.example/?u=acme.wd1.myworkdayjobs.com/External/job/x', company: 'Evil' },
+      {
+        url: 'https://evil.example/go?u=https://acme.wd1.myworkdayjobs.com/External/job/x',
+        company: 'Evil',
+      },
+      {
+        url: 'https://evil.example/go?u=https://boards.greenhouse.io/acme',
+        company: 'Evil',
+      },
+      { url: 'https://evil.example/go?u=https://jobs.lever.co/acme', company: 'Evil' },
+      { url: 'https://evil.example/go?u=https://jobs.ashbyhq.com/acme', company: 'Evil' },
+    ];
+    const found = extractAtsBoards(redirects);
+    expect(found.workday).toEqual([]);
+    expect(found.greenhouse).toEqual([]);
+    expect(found.lever).toEqual([]);
+    expect(found.ashby).toEqual([]);
+  });
+
+  it('still reads a scheme-less apply URL', () => {
+    // Not every feed gives a well-formed URL, and a bare host is still a signal.
+    const { greenhouse } = extractAtsBoards([
+      { url: 'boards.greenhouse.io/acme', company: 'Acme' },
     ]);
-    expect(workday).toEqual([]);
+    expect(greenhouse).toEqual([{ token: 'acme', company: 'Acme' }]);
   });
 });

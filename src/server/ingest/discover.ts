@@ -51,11 +51,38 @@ function workdayCoordinates(url: string): Omit<WorkdayBoard, 'company'> | undefi
   };
 }
 
-/** Greenhouse board token from an apply URL, handling both path and `embed` shapes. */
-function greenhouseToken(url: string): string | undefined {
-  const path = GREENHOUSE_PATH_RE.exec(url)?.[1];
+/**
+ * The URL an apply-link actually points at, as `host + path`.
+ *
+ * Parsed rather than pattern-matched, so a redirector cannot smuggle an ATS host
+ * through in a query parameter — `https://evil.example/go?u=https://jobs.lever.co/acme`
+ * used to register the Lever board under the REDIRECTOR's company name, which
+ * then landed on every posting from it and from there on the sponsor join key.
+ *
+ * The query string is deliberately dropped: it is exactly where a redirector
+ * carries its destination. Falls back to the raw string when it will not parse —
+ * a scheme-less `boards.greenhouse.io/acme` is still a usable signal, and the
+ * patterns anchor it themselves.
+ */
+function canonicalUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    return `${u.host}${u.pathname}`;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Greenhouse board token from an apply URL, handling both path and `embed`
+ * shapes. `canonical` is host+path (see `canonicalUrl`); `raw` is consulted ONLY
+ * for the `for=` parameter of an embed URL, and only once the canonical form has
+ * already proven this is a Greenhouse host.
+ */
+function greenhouseToken(canonical: string, raw: string): string | undefined {
+  const path = GREENHOUSE_PATH_RE.exec(canonical)?.[1];
   if (path === undefined) return undefined;
-  if (/^embed(?:\/|$)/i.test(path)) return GREENHOUSE_FOR_RE.exec(url)?.[1];
+  if (/^embed(?:\/|$)/i.test(path)) return GREENHOUSE_FOR_RE.exec(raw)?.[1];
   return /^([a-z0-9_-]+)/i.exec(path)?.[1];
 }
 
@@ -89,8 +116,11 @@ export function extractAtsBoards(postings: DiscoverablePosting[]): DiscoveredBoa
   };
 
   for (const p of postings) {
-    const url = p.url ?? '';
-    add(greenhouse, greenhouseToken(url), p.company);
+    const raw = p.url ?? '';
+    // Parsed, not pattern-matched: a redirector carrying an ATS URL in a query
+    // parameter would otherwise register the board under ITS company name.
+    const url = canonicalUrl(raw);
+    add(greenhouse, greenhouseToken(url, raw), p.company);
     add(lever, LEVER_RE.exec(url)?.[1], p.company);
     add(ashby, ASHBY_RE.exec(url)?.[1], p.company);
 
