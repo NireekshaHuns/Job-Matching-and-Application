@@ -19,7 +19,7 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from '@playwright/test';
 import { DEFAULT_PROFILE_FACTS } from '@/server/resume/profile';
-import { buildDefaultTemplate } from '@/server/resume/template';
+import { buildDefaultTemplate } from '@/server/resume/render';
 
 const PORT = 4478;
 const PUBLIC_DIR = join(resolve(process.cwd()), 'public');

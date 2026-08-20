@@ -22,7 +22,7 @@ import { withProfileDefaults } from '@/server/resume/profile';
 import { stripLatex } from '@/server/resume/quality';
 import { rankCorpusBullets, type CorpusBullet } from '@/server/resume/retrieve';
 import { tailorFromCorpus, type CorpusSourceBullet } from '@/server/resume/tailor';
-import { buildDefaultTemplate } from '@/server/resume/template';
+import { buildDefaultTemplate } from '@/server/resume/render';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
 /** Default models: quality tailoring on gpt-4.1, cheap structured work on mini. */
@@ -92,8 +92,25 @@ export const setResumeProfileInput = z.object({
   certUrl: nullableText(300),
   knownMetrics: nullableText(4000),
   stackNotes: nullableText(4000),
+  coursework: z.array(z.string().trim().min(1).max(120)).max(30).optional(),
+  projectName: nullableText(160),
+  projectUrl: nullableText(300),
 });
 type SetResumeProfileInput = z.infer<typeof setResumeProfileInput>;
+
+/** Trim, drop blanks, dedupe case-insensitively — but keep the owner's order. */
+export function normalizeCourseList(courses: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of courses) {
+    const course = c.trim().replace(/\s+/g, ' ');
+    const key = course.toLowerCase();
+    if (!course || seen.has(key)) continue;
+    seen.add(key);
+    out.push(course);
+  }
+  return out;
+}
 
 /** Normalize the profile input so every field is written (undefined → null). */
 function normalizeProfile(input: SetResumeProfileInput) {
@@ -108,6 +125,9 @@ function normalizeProfile(input: SetResumeProfileInput) {
     certUrl: input.certUrl ?? null,
     knownMetrics: input.knownMetrics ?? null,
     stackNotes: input.stackNotes ?? null,
+    coursework: normalizeCourseList(input.coursework ?? []),
+    projectName: input.projectName ?? null,
+    projectUrl: input.projectUrl ?? null,
   };
 }
 
