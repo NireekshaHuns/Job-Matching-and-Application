@@ -7,7 +7,13 @@
  */
 import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { DB } from '@/server/db';
-import { companyAliases, jobs, sponsors, type NewJob } from '@/server/db/schema';
+import {
+  companyAliases,
+  enrichmentFailures,
+  jobs,
+  sponsors,
+  type NewJob,
+} from '@/server/db/schema';
 import type { SponsorHistory } from '@/lib/sponsorship';
 import type { RawPosting } from '@/server/ingest/types';
 import { enrichPostings, type EnrichResult } from './enrich';
@@ -15,6 +21,57 @@ import { buildSponsorResolver, type DiscoveredAlias } from './steps/resolver';
 import { looksLikeSwe } from './steps/swe-title';
 import { isRecentEnough } from './recency';
 import type { ChatClient, Embedder } from './types';
+
+/**
+ * Attempts before a posting is stepped over. Three, matching the classifier's
+ * own retry count: a posting that has failed a full run three times is failing
+ * for a reason another attempt will not change.
+ */
+export const MAX_ENRICHMENT_ATTEMPTS = 3;
+
+/**
+ * Fingerprints that have failed enrichment at least `maxAttempts` times.
+ *
+ * Skipped like an already-held posting. A failure is never inserted, so it never
+ * becomes "seen" — and since the cap takes its slice off the HEAD of each feed,
+ * a few permanently-poisonous rows at the front of a list block everything
+ * behind them on every run. Bounded rather than permanent: clearing the row lets
+ * a source that fixed its data back in.
+ */
+export async function loadPoisonedFingerprints(
+  db: DB,
+  maxAttempts = MAX_ENRICHMENT_ATTEMPTS,
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ fingerprint: enrichmentFailures.fingerprint })
+    .from(enrichmentFailures)
+    .where(sql`${enrichmentFailures.attempts} >= ${maxAttempts}`);
+  return new Set(rows.map((r) => r.fingerprint));
+}
+
+/** Record a failed attempt per fingerprint, incrementing on repeat. */
+export async function recordEnrichmentFailures(
+  db: DB,
+  fingerprints: string[],
+  error: string,
+): Promise<void> {
+  if (fingerprints.length === 0) return;
+  const detail = error.slice(0, 500);
+  for (let i = 0; i < fingerprints.length; i += CHUNK_SIZE) {
+    const chunk = fingerprints.slice(i, i + CHUNK_SIZE);
+    await db
+      .insert(enrichmentFailures)
+      .values(chunk.map((fingerprint) => ({ fingerprint, lastError: detail })))
+      .onConflictDoUpdate({
+        target: enrichmentFailures.fingerprint,
+        set: {
+          attempts: sql`${enrichmentFailures.attempts} + 1`,
+          lastError: detail,
+          lastAttemptAt: new Date(),
+        },
+      });
+  }
+}
 
 /** All fingerprints already in `jobs` — the cross-run dedup / cost gate. */
 export async function loadExistingFingerprints(db: DB): Promise<Set<string>> {
@@ -303,8 +360,9 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
     deferred: number;
   }
 > {
-  const [existing, sponsorState] = await Promise.all([
+  const [existing, poisoned, sponsorState] = await Promise.all([
     loadExistingFingerprints(args.db),
+    loadPoisonedFingerprints(args.db),
     loadSponsorState(args.db),
   ]);
   const confirmedAliases = await loadConfirmedAliases(args.db, sponsorState.idByKey);
@@ -320,7 +378,10 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
     args.postings,
     existing,
     args.maxNew,
-    (p) => looksLikeSwe(p.title) && isRecentEnough(p.postedAt, args.maxPostedAgeDays),
+    (p) =>
+      looksLikeSwe(p.title) &&
+      isRecentEnough(p.postedAt, args.maxPostedAgeDays) &&
+      !poisoned.has(p.fingerprint),
   );
 
   // Buy descriptions only for what we just selected. A source that charges per
@@ -351,6 +412,12 @@ export async function runEnrichment(args: RunEnrichmentArgs): Promise<
     },
   );
   inserted += await insertJobs(args.db, result.rows);
+  // Recorded so a posting that keeps throwing stops occupying the cap window.
+  await recordEnrichmentFailures(
+    args.db,
+    result.failedFingerprints,
+    result.failures[0] ?? 'enrichment failed',
+  );
   const aliasesWritten = await upsertDiscoveredAliases(
     args.db,
     discovered.values(),

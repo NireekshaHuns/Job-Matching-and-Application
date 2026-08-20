@@ -158,6 +158,43 @@ describe('enrichPostings posting-age guard', () => {
   });
 });
 
+describe('enrichPostings failure reporting', () => {
+  it('reports which postings threw, so they can stop occupying the cap window', async () => {
+    // A failure is never inserted, so it never becomes "seen" — and because the
+    // cap slices off the head of each feed, a poisonous posting at the front
+    // blocks everything behind it on every run, forever.
+    const failing: EnrichDeps = {
+      ...deps,
+      chat: {
+        complete: async (msgs) => {
+          const text = JSON.stringify(msgs);
+          if (text.includes('POISON')) return 'not json at all';
+          return deps.chat.complete(msgs);
+        },
+      },
+    };
+    const result = await enrichPostings(
+      [
+        posting('good-1'),
+        posting('bad-1', { jdText: 'POISON' }),
+        posting('good-2'),
+        posting('bad-2', { jdText: 'POISON' }),
+      ],
+      new Set(),
+      failing,
+    );
+
+    expect(result.stats.failed).toBe(2);
+    expect(result.failedFingerprints.sort()).toEqual(['bad-1', 'bad-2']);
+    expect(result.rows.map((r) => r.fingerprint).sort()).toEqual(['good-1', 'good-2']);
+  });
+
+  it('reports nothing when everything succeeds', async () => {
+    const result = await enrichPostings([posting('a')], new Set(), deps);
+    expect(result.failedFingerprints).toEqual([]);
+  });
+});
+
 describe('enrichPostings resilience', () => {
   const CLASSIFICATION = {
     employmentType: 'full_time',

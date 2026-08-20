@@ -50,6 +50,12 @@ export interface EnrichResult {
   };
   /** First few failures, for the operator to eyeball. */
   failures: string[];
+  /**
+   * Fingerprints of every posting that threw, so the caller can record them.
+   * Without this they are invisible: never inserted, so never "seen", so they
+   * re-occupy the head of the cap window on every subsequent run.
+   */
+  failedFingerprints: string[];
 }
 
 /** How many failure messages to keep — enough to spot a pattern, not a flood. */
@@ -115,6 +121,7 @@ export async function enrichPostings(
   let rows: NewJob[] = [];
   let failed = 0;
   const failures: string[] = [];
+  const failedFingerprints: string[] = [];
 
   for (let i = 0; i < swe.length; i += concurrency) {
     const slice = swe.slice(i, i + concurrency);
@@ -127,6 +134,7 @@ export async function enrichPostings(
         continue;
       }
       failed++;
+      failedFingerprints.push(slice[j].fingerprint);
       if (failures.length < MAX_REPORTED_FAILURES) {
         const p = slice[j];
         failures.push(`${p.company} — ${p.title}: ${(outcome.reason as Error).message}`);
@@ -149,5 +157,6 @@ export async function enrichPostings(
       failed,
     },
     failures,
+    failedFingerprints,
   };
 }

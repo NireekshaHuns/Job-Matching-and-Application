@@ -124,6 +124,25 @@ export const filingTypeEnum = pgEnum('filing_type', ['change_of_status', 'consul
 // ---------------------------------------------------------------------------
 
 /**
+ * Postings whose enrichment keeps throwing.
+ *
+ * A posting that fails (malformed classifier JSON, an LLM 5xx that outlives its
+ * retries) is never inserted, so it never joins the seen-fingerprint set — and
+ * because the per-run cap takes its slice off the HEAD of each feed, a cluster
+ * of permanently-poisonous postings at the front of a list blocks everything
+ * behind it on every run. Recording attempts lets the planner step over them,
+ * and gives somewhere to look when a source quietly stops producing.
+ */
+export const enrichmentFailures = pgTable('enrichment_failures', {
+  /** Same fingerprint the `jobs` dedup uses, so a later success is recognisable. */
+  fingerprint: text('fingerprint').primaryKey(),
+  attempts: integer('attempts').notNull().default(1),
+  /** Most recent error, truncated — for diagnosis, not for logic. */
+  lastError: text('last_error'),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Request usage for metered job sources, one row per source.
  *
  * Exists because the aggregator's budget outlives a single run: roughly 200

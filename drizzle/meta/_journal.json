@@ -141,6 +141,13 @@
       "when": 1787186937987,
       "tag": "0019_slim_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787188354388,
+      "tag": "0020_daffy_vertigo",
+      "breakpoints": true
     }
   ]
 }
