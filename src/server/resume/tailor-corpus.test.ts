@@ -75,3 +75,28 @@ ${filler}
 \\item Automated deploys cutting release time by 2 hours
 \\end{itemize}
 \\end{document}`;
+
+describe("the owner's tailoring method", () => {
+  it('reaches the system prompt', () => {
+    const { system } = buildCorpusTailorMessages(
+      { title: 'Backend Engineer', company: 'Acme' },
+      { selectedKeywords: ['go'], bullets: [], profile: DEFAULT_PROFILE_FACTS },
+      '\\documentclass{article}',
+    );
+    expect(system).toContain('METHOD — follow these five steps');
+    expect(system).toContain('Bucket A');
+  });
+
+  it('states that the hard limits still win', () => {
+    // Without this the method pushes length upward ("two full lines", extra
+    // skills lines) while claiming to outrank the rubric — and the linter's
+    // word cap would fail every attempt, burning three LLM calls a generation
+    // for a report that can never pass.
+    const { system } = buildCorpusTailorMessages(
+      { title: 'Backend Engineer', company: 'Acme' },
+      { selectedKeywords: [], bullets: [], profile: DEFAULT_PROFILE_FACTS },
+      '\\documentclass{article}',
+    );
+    expect(system).toContain('which are hard and not negotiable');
+  });
+});

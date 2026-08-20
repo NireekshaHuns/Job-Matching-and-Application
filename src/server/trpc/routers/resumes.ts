@@ -328,7 +328,7 @@ export const resumesRouter = createTRPCRouter({
       const selected = normalizeSkillList(input.selectedKeywords);
       const roleFamily = input.roleFamily ?? null;
 
-      const [[profileRow], [base], bulletRows] = await Promise.all([
+      const [[profileRow], [base], bulletRows, skillRows] = await Promise.all([
         ctx.db.select().from(resumeProfile).orderBy(asc(resumeProfile.id)).limit(1),
         ctx.db
           .select({ content: resumes.content })
@@ -346,6 +346,9 @@ export const resumesRouter = createTRPCRouter({
             embedding: resumeBullets.embedding,
           })
           .from(resumeBullets),
+        // For the post-generation defence notes: anything the résumé claims
+        // that this list does not support is worth checking before submitting.
+        ctx.db.select({ skill: masterSkills.skill }).from(masterSkills),
       ]);
 
       const profile = withProfileDefaults(profileRow ?? null);
@@ -385,7 +388,12 @@ export const resumesRouter = createTRPCRouter({
           const result = await tailorFromCorpus(
             baseTemplate,
             { title: input.jobTitle, company: input.company },
-            { selectedKeywords: selected, bullets: sourceBullets, profile },
+            {
+              selectedKeywords: selected,
+              bullets: sourceBullets,
+              profile,
+              masterSkills: skillRows.map((r) => r.skill),
+            },
             chat,
             { maxAttempts: input.maxAttempts },
           );

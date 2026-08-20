@@ -13,6 +13,7 @@ import { KeywordPicker } from '@/components/keyword-picker';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState } from '@/components/page-state';
 import { ResumeSplit } from '@/components/resume-split';
+import { TailoringReport } from '@/components/tailoring-report';
 import { ROLE_FAMILIES, type RoleFamily } from '@/lib/role-families';
 import { trpc } from '@/trpc/react';
 
@@ -529,6 +530,13 @@ export default function StudioPage() {
                 saving={save.isPending}
                 saved={saved}
               />
+              {tailor.data?.report && (
+                <TailoringReport
+                  latex={latex}
+                  keywords={tailor.data.report.selectedKeywords}
+                  masterSkills={tailor.data.report.masterSkills}
+                />
+              )}
               {save.isError && (
                 <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">
                   Save failed: {save.error.message}
