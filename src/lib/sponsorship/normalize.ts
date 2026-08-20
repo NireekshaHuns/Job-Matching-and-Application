@@ -67,6 +67,19 @@ export function normalizeCompanyName(raw: string | null | undefined): string {
     tokens = tokens.slice(0, -1);
   }
 
+  // "&" was expanded to AND above, before suffixes were stripped — so
+  // "JPMorgan Chase & Co." became [JPMORGAN, CHASE, AND, CO], lost the CO, and
+  // kept a dangling AND that "JPMorgan Chase" can never match. It only misfires
+  // when the word after the "&" is itself strippable, which is why
+  // "Johnson & Johnson" was fine and 101 sponsor rows were not.
+  //
+  // Done after the loop rather than by reordering it: the expansion has to come
+  // first (a name may legitimately end "& CO" mid-string), and a conjunction is
+  // never the last word of a company name.
+  while (tokens.length > 1 && tokens[tokens.length - 1] === 'AND') {
+    tokens = tokens.slice(0, -1);
+  }
+
   return tokens.join(' ');
 }
 

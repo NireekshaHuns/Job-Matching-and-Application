@@ -301,7 +301,9 @@ export function linkedInGuestConnector(
 
       // --- Phase 1: list pages. Cheap, and the only phase that finds new jobs.
       const byJobId = new Map<string, LinkedInCard>();
-      for (const search of searches) {
+      /** Which search first surfaced each card, so the JD budget can be shared. */
+      const searchOfCard = new Map<string, number>();
+      for (const [searchIndex, search] of searches.entries()) {
         if (blocked) break;
         const label = `${search.keywords} @ ${search.location}`;
         for (let page = 0; page < maxPages; page++) {
@@ -319,7 +321,11 @@ export function linkedInGuestConnector(
             }
             break;
           }
-          for (const card of cards) if (!byJobId.has(card.jobId)) byJobId.set(card.jobId, card);
+          for (const card of cards) {
+            if (byJobId.has(card.jobId)) continue;
+            byJobId.set(card.jobId, card);
+            searchOfCard.set(card.jobId, searchIndex);
+          }
           if (cards.length < PAGE_SIZE) break;
         }
       }
@@ -330,12 +336,38 @@ export function linkedInGuestConnector(
       // connector has returned, so filtering there would not save the request.
       // Everything fetched is still emitted — this only decides who gets a JD.
       const cards = [...byJobId.values()];
-      const wanted = new Set(
-        cards
-          .filter((c) => looksLikeSwe(c.title))
-          .slice(0, maxDetailFetches)
-          .map((c) => c.jobId),
-      );
+      // SHARE THE BUDGET ACROSS SEARCHES, don't spend it front-to-back. The map
+      // is in search order, so taking the cap off the front gave the whole
+      // budget to the first search: with 4 searches x 3 pages x 25 cards against
+      // a cap of 40, "software engineer" alone produced far more than 40
+      // SWE-looking titles and the last search got ZERO JD fetches, every run.
+      // Those jobs are still ingested, just permanently JD-less — and a JD-less
+      // job cannot be Excluded by its own words, because cost control means an
+      // enriched job is never re-analysed.
+      //
+      // Round-robin instead: each search contributes its next candidate in turn
+      // until the budget runs out, so a search that found fewer jobs simply
+      // stops contributing rather than being starved by position.
+      const bySearch = new Map<number, LinkedInCard[]>();
+      for (const card of cards) {
+        if (!looksLikeSwe(card.title)) continue;
+        const idx = searchOfCard.get(card.jobId) ?? 0;
+        const list = bySearch.get(idx) ?? [];
+        list.push(card);
+        bySearch.set(idx, list);
+      }
+      const wanted = new Set<string>();
+      for (let round = 0; wanted.size < maxDetailFetches; round++) {
+        let addedThisRound = false;
+        for (const list of bySearch.values()) {
+          if (wanted.size >= maxDetailFetches) break;
+          const card = list[round];
+          if (!card) continue;
+          wanted.add(card.jobId);
+          addedThisRound = true;
+        }
+        if (!addedThisRound) break;
+      }
 
       const postings: RawPosting[] = [];
       let detailsFetched = 0;
