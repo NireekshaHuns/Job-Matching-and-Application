@@ -157,19 +157,20 @@ export function gradeKeyword(
   }
 
   let score = 0;
-  let matchedTerm: string | null = null;
-  let viaAlias = false;
+  /** What the master-skill list vouched for: the term, an alias, or nothing. */
+  let skillMatch: string | null = null;
+  /** What the bullets proved. */
+  let bulletMatch: string | null = null;
 
   // --- master skills -------------------------------------------------------
   if (skillSupports(index.skills, term)) {
     score += 2;
-    matchedTerm = term;
+    skillMatch = term;
   } else {
     const alias = keyword.aliases.find((a) => skillSupports(index.skills, a));
     if (alias) {
       score += 1;
-      matchedTerm = alias;
-      viaAlias = true;
+      skillMatch = alias;
     }
   }
 
@@ -179,8 +180,7 @@ export function gradeKeyword(
 
   if (directHits.length > 0) {
     score += directHits.length >= 2 ? 3 : 2;
-    matchedTerm = term;
-    viaAlias = false;
+    bulletMatch = term;
   } else {
     const aliasHits = new Map<number, IndexedBullet>();
     const aliasesThatHit: string[] = [];
@@ -188,17 +188,24 @@ export function gradeKeyword(
       const found = bulletHits(index.bullets, alias);
       if (found.length === 0) continue;
       aliasesThatHit.push(alias);
+      // Keyed by bullet id, so two aliases hitting the same bullet is one
+      // bullet's worth of evidence, not two.
       for (const b of found) aliasHits.set(b.id, b);
     }
     if (aliasesThatHit.length > 0) {
       score += aliasesThatHit.length >= 2 || aliasHits.size >= 2 ? 2 : 1;
       hits = [...aliasHits.values()];
-      matchedTerm ??= aliasesThatHit[0];
-      // Only an alias reached the bullets; the skill list may still have had the
-      // term itself, in which case `matchedTerm` already names it.
-      viaAlias = matchedTerm !== term;
+      bulletMatch = aliasesThatHit[0];
     }
   }
+
+  // If the keyword itself matched anywhere, that is the story: the candidate
+  // really does claim this thing, and "via <alias>" would be wrong even when
+  // only an alias reached a bullet. Otherwise prefer the alias that produced the
+  // quote over one that merely sat in the skill list — `matchedTerm` is printed
+  // next to `sample`, so the two have to describe the same evidence.
+  const matchedTerm =
+    skillMatch === term || bulletMatch === term ? term : (bulletMatch ?? skillMatch);
 
   const grade: EvidenceGrade =
     score >= 3 ? 'strong' : score === 2 ? 'moderate' : score === 1 ? 'weak' : 'missing';
@@ -207,7 +214,7 @@ export function gradeKeyword(
     grade,
     score,
     matchedTerm,
-    viaAlias,
+    viaAlias: matchedTerm !== null && matchedTerm !== term,
     bulletCount: hits.length,
     sample: hits.length > 0 ? truncate(hits[0].text) : null,
   };

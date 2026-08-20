@@ -114,6 +114,47 @@ describe('the multi-echo alias upgrade', () => {
   });
 });
 
+describe('when the skill list and the bullets disagree', () => {
+  it('reports the term, not the alias, when the term itself is a listed skill', () => {
+    const e = grade(
+      { term: 'kubernetes', aliases: ['container orchestration'] },
+      {
+        masterSkills: ['kubernetes'],
+        bullets: [bullet('Ran container orchestration in production')],
+      },
+    );
+    // The skill list vouches for the term; only an alias reached a bullet. The
+    // row is not "via" anything — the candidate really does list Kubernetes.
+    expect(e).toMatchObject({
+      score: 3,
+      grade: 'strong',
+      matchedTerm: 'kubernetes',
+      viaAlias: false,
+    });
+  });
+
+  it('names the alias that produced the quote, not one that only matched a skill', () => {
+    const e = grade(
+      { term: 'cloud network infrastructure', aliases: ['aws vpc', 'networking'] },
+      { masterSkills: ['aws vpc'], bullets: [bullet('Configured networking for prod')] },
+    );
+    // `matchedTerm` sits next to `sample` in the UI, so it has to describe the
+    // same evidence the quote does.
+    expect(e).toMatchObject({ grade: 'moderate', matchedTerm: 'networking', viaAlias: true });
+    expect(e.sample).toContain('networking');
+  });
+
+  it('counts one bullet once even when two aliases hit it', () => {
+    const e = grade(
+      { term: 'observability', aliases: ['metrics', 'tracing'] },
+      { bullets: [bullet('Added metrics and tracing to the ingest path')] },
+    );
+    expect(e.bulletCount).toBe(1);
+    // Two distinct aliases still earn the upgrade — that is the multi-echo rule.
+    expect(e).toMatchObject({ score: 2, grade: 'moderate' });
+  });
+});
+
 describe('matching rules', () => {
   it('lets a broader master skill cover a narrower keyword, but not the reverse', () => {
     expect(grade({ term: 'kafka' }, { masterSkills: ['apache kafka'] }).grade).toBe('moderate');
