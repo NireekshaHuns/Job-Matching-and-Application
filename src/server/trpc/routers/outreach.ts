@@ -19,7 +19,8 @@ import {
   resumes,
 } from '@/server/db/schema';
 import { draftOutreachEmail, templateOutreachEmail } from '@/server/outreach/email';
-import { computeFit, resumeSkillsFromBullets } from '@/server/resume/fit';
+import { resumeSkillsFromBullets } from '@/server/resume/bullets';
+import { coverableStrengths } from '@/server/resume/strengths';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
 /**
@@ -27,7 +28,7 @@ import { createTRPCRouter, publicProcedure } from '../trpc';
  * present), for a "why I'm a fit" line in outreach. Returns undefined when there
  * is no job context or nothing matches — never invents skills.
  */
-async function loadFitSkills(
+async function loadCoverableStrengths(
   db: DB,
   jobId?: number,
   resumeId?: number,
@@ -57,12 +58,11 @@ async function loadFitSkills(
   // Best-effort: an absent or unresolved resumeId falls back to the generalist
   // role family (sees all bullets) rather than throwing — this is a draft aid,
   // not the stricter résumé lookup in the resumes router.
-  const fit = computeFit({
-    jobKeywords: [...job.techKeywords, ...job.softKeywords],
-    resumeSkills: resumeSkillsFromBullets(bullets, resume[0]?.roleFamily ?? null),
-    masterSkills: skills.map((s) => s.skill),
-  });
-  const coverable = [...fit.matched, ...fit.missingAddable];
+  const coverable = coverableStrengths(
+    [...job.techKeywords, ...job.softKeywords],
+    resumeSkillsFromBullets(bullets, resume[0]?.roleFamily ?? null),
+    skills.map((s) => s.skill),
+  );
   return coverable.length > 0 ? coverable.slice(0, 6) : undefined;
 }
 
@@ -167,7 +167,7 @@ export const outreachRouter = createTRPCRouter({
    * and falls back to the deterministic template otherwise or on any failure.
    */
   draftEmail: publicProcedure.input(draftEmailInput).mutation(async ({ ctx, input }) => {
-    const fitSkills = await loadFitSkills(ctx.db, input.jobId, input.resumeId);
+    const fitSkills = await loadCoverableStrengths(ctx.db, input.jobId, input.resumeId);
     const req = { ...input, fitSkills };
     const key = process.env.OPENAI_API_KEY;
     if (key) {

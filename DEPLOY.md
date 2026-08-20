@@ -107,5 +107,4 @@ postings. Pick one:
 - **Skip it and refresh from your machine**, pointing the CLI at the same Neon DB:
   ```bash
   pnpm enrich          # fetch + classify + score new postings
-  pnpm score:fits      # re-score jobs × résumés
   ```

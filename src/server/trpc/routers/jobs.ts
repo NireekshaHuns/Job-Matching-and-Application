@@ -1,17 +1,19 @@
 /**
- * Job board queries. `list` returns enriched jobs with BOTH scores kept
- * separate: the H1B `sponsorTier` (on the job) and the resume `relevanceScore`
- * (left-joined from job_scores for a selected resume "lens"). The `combined`
- * sort is a display-only Apply Priority Score — a configurable weighted blend of
- * tier + fit + freshness — computed at read time; the two scores are never
- * merged into one stored value.
+ * Job board queries. `list` returns enriched jobs ranked by an Apply Priority
+ * Score — a display-only, configurable blend of sponsor tier and freshness,
+ * computed at read time and never stored.
+ *
+ * There used to be a second score here: résumé relevance, left-joined per
+ * selected résumé "lens". It is gone. Nothing ever populated it for the
+ * résumés actually in use — 0 of 4,654 board jobs were scored against any of
+ * the nine real résumés — so 30% of the ranking weight was silently always
+ * zero, and "Most fit" sorted by nothing.
  */
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   employmentTypeEnum,
-  jobScores,
   jobs,
   newHireStatusEnum,
   roleFamilyEnum,
@@ -24,8 +26,6 @@ import { createTRPCRouter, publicProcedure } from '../trpc';
 export { DEFAULT_PRIORITY_WEIGHTS, resolveWeights, type PriorityWeights } from '@/lib/priority';
 
 export const jobListInput = z.object({
-  /** Resume "lens": left-joins its fit score + skill gaps onto each job. */
-  resumeId: z.number().int().optional(),
   sponsorTiers: z.array(z.enum(sponsorTierEnum.enumValues)).optional(),
   /** New-hire badge filter (Sponsors new hires / Transfers only / …). */
   newHireStatuses: z.array(z.enum(newHireStatusEnum.enumValues)).optional(),
@@ -58,12 +58,11 @@ export const jobListInput = z.object({
    * filter. Postings that state no requirement are KEPT — see `meetsMaxYears`.
    */
   maxYearsExperience: z.number().int().min(0).max(20).default(0),
-  sort: z.enum(['combined', 'sponsor', 'fit', 'recent']).default('combined'),
+  sort: z.enum(['combined', 'recent']).default('combined'),
   /** Apply-priority weights for the `combined` sort; absent/all-zero → defaults. */
   weights: z
     .object({
       tier: z.number().int().min(0).max(100),
-      fit: z.number().int().min(0).max(100),
       freshness: z.number().int().min(0).max(100),
     })
     .partial()
@@ -161,7 +160,6 @@ export function locationMatchRegex(term: string): string {
  * new component + weight, no rewrite.
  *
  *   tier      — sponsorship possibility (High=100, Medium≈67, Low≈33, Excluded=0)
- *   fit       — resume relevance for the selected lens (0 when no lens/score)
  *   freshness — linear recency, 100 at 0 days old → 0 at the window edge
  */
 export const FRESHNESS_WINDOW_DAYS = 30;
@@ -181,32 +179,28 @@ export function freshnessScore(ageDays: number): number {
 export interface PriorityBreakdown {
   /** Component scores, each 0..100. */
   tier: number;
-  fit: number;
   freshness: number;
   /** Weighted blend, 0..100. */
   priority: number;
 }
 
 /**
- * Pure priority the SQL below mirrors. `fit` is 0..100 (pass 0 when there's no
- * lens/score); `tierRank` is 0..3; `ageDays` is whole days since posting.
+ * Pure priority the SQL below mirrors. `tierRank` is 0..3; `ageDays` is whole
+ * days since posting.
  */
 export function computePriority(
-  input: { tierRank: number; fit: number; ageDays: number },
+  input: { tierRank: number; ageDays: number },
   weights: PriorityWeights = DEFAULT_PRIORITY_WEIGHTS,
 ): PriorityBreakdown {
   const tier = tierScore(input.tierRank);
-  const fit = input.fit;
   const freshness = freshnessScore(input.ageDays);
-  const sum = weights.tier + weights.fit + weights.freshness;
-  const priority =
-    sum > 0 ? (weights.tier * tier + weights.fit * fit + weights.freshness * freshness) / sum : 0;
-  return { tier, fit, freshness, priority };
+  const sum = weights.tier + weights.freshness;
+  const priority = sum > 0 ? (weights.tier * tier + weights.freshness * freshness) / sum : 0;
+  return { tier, freshness, priority };
 }
 
 const TIER_RANK = sql<number>`case ${jobs.sponsorTier}
   when 'High' then 3 when 'Medium' then 2 when 'Low' then 1 else 0 end`;
-const FIT = sql`${jobScores.relevanceScore} desc nulls last`;
 const POSTED = sql`${jobs.postedAt} desc nulls last`;
 // Whole-day age from the posted calendar date (falling back to the ingest date),
 // anchored to UTC so it never depends on the DB session timezone. `posted_at` is
@@ -219,13 +213,12 @@ const CLAMPED_AGE = sql`least(greatest(${AGE_DAYS}, 0), ${FRESHNESS_WINDOW_DAYS}
 
 // The three 0..100 component expressions, mirroring the pure helpers above.
 const TIER_SCORE = sql`(${TIER_RANK}::float / 3 * 100)`;
-const FIT_SCORE = sql`coalesce(${jobScores.relevanceScore}, 0)`;
 const FRESH_SCORE = sql`(100 * (1 - ${CLAMPED_AGE}::float / ${FRESHNESS_WINDOW_DAYS}))`;
 
 /** Weighted priority SQL expression (weights interpolated as bound params). */
 function prioritySql(w: PriorityWeights) {
-  const sum = w.tier + w.fit + w.freshness;
-  return sql`((${w.tier} * ${TIER_SCORE} + ${w.fit} * ${FIT_SCORE} + ${w.freshness} * ${FRESH_SCORE}) / ${sum})`;
+  const sum = w.tier + w.freshness;
+  return sql`((${w.tier} * ${TIER_SCORE} + ${w.freshness} * ${FRESH_SCORE}) / ${sum})`;
 }
 
 /**
@@ -324,19 +317,9 @@ export const jobsRouter = createTRPCRouter({
     // Always end with a unique tiebreaker so limit/offset paging is stable.
     const tiebreak = desc(jobs.id);
     const orderBy =
-      plan.sort === 'fit'
-        ? [FIT, tiebreak]
-        : plan.sort === 'recent'
-          ? [POSTED, desc(jobs.createdAt), tiebreak]
-          : plan.sort === 'sponsor'
-            ? [desc(TIER_RANK), FIT, tiebreak]
-            : [sql`${priority} desc`, tiebreak]; // combined (apply priority)
-
-    // Left-join the lens's score only; with no lens, join on false so score is null.
-    const lensOn =
-      input.resumeId != null
-        ? and(eq(jobScores.jobId, jobs.id), eq(jobScores.resumeId, input.resumeId))
-        : sql`false`;
+      plan.sort === 'recent'
+        ? [POSTED, desc(jobs.createdAt), tiebreak]
+        : [sql`${priority} desc`, tiebreak]; // combined (apply priority)
 
     return ctx.db
       .select({
@@ -364,19 +347,15 @@ export const jobsRouter = createTRPCRouter({
         sponsorCount: jobs.sponsorCount,
         newHireStatus: jobs.newHireStatus,
         sponsorMatchConfidence: jobs.sponsorMatchConfidence,
-        relevanceScore: jobScores.relevanceScore,
-        skillGaps: jobScores.skillGaps,
         // Apply-priority score + its component breakdown (0..100 each), for the
         // "why this rank" display. ORDER BY uses the UNROUNDED priority above;
         // only the displayed value is rounded, so rows that show the same number
         // still order deterministically. Keep it that way.
         priorityScore: sql<number>`round(${priority})::int`,
         priorityTier: sql<number>`round(${TIER_SCORE})::int`,
-        priorityFit: sql<number>`round(${FIT_SCORE})::int`,
         priorityFreshness: sql<number>`round(${FRESH_SCORE})::int`,
       })
       .from(jobs)
-      .leftJoin(jobScores, lensOn)
       .where(where.length ? and(...where) : undefined)
       .orderBy(...orderBy)
       .limit(input.limit)

@@ -7,13 +7,12 @@
  * down by classification rather than by brittle title matching.
  *
  * Invariant: the two scores live in separate columns/tables — `jobs.sponsor_tier`
- * (H1B possibility) and `job_scores.relevance_score` (resume match). They are
+ * (H1B possibility) and the read-time Apply Priority blend. They are
  * never blended into one stored value. See CLAUDE.md → Domain rules.
  */
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
-  check,
   date,
   index,
   integer,
@@ -306,7 +305,7 @@ export const jobs = pgTable(
     techKeywords: jsonb('tech_keywords').$type<string[]>().notNull().default([]),
     /** Soft-skill keywords the JD emphasizes. */
     softKeywords: jsonb('soft_keywords').$type<string[]>().notNull().default([]),
-    // H1B possibility score — kept separate from relevance (see job_scores).
+    // H1B possibility score.
     sponsorTier: sponsorTierEnum('sponsor_tier').notNull(),
     sponsorReason: text('sponsor_reason'),
     /** Denormalized from `sponsors` at enrichment time for fast board reads. */
@@ -349,32 +348,6 @@ export const jobs = pgTable(
     index('jobs_required_years_idx').on(t.requiredYearsExperience),
     // Approximate nearest-neighbour index for resume↔job similarity search.
     index('jobs_embedding_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
-  ],
-);
-
-/**
- * Resume-relevance score, one row per (job × resume). Deliberately a separate
- * table from `jobs` so relevance can never be blended with the sponsor tier.
- */
-export const jobScores = pgTable(
-  'job_scores',
-  {
-    id: serial('id').primaryKey(),
-    jobId: integer('job_id')
-      .notNull()
-      .references(() => jobs.id, { onDelete: 'cascade' }),
-    resumeId: integer('resume_id')
-      .notNull()
-      .references(() => resumes.id, { onDelete: 'cascade' }),
-    /** 0–100 relevance of this job to this resume. */
-    relevanceScore: integer('relevance_score').notNull(),
-    /** Skills the JD requires that the resume is missing (e.g. ["Kafka", "Go"]). */
-    skillGaps: jsonb('skill_gaps').$type<string[]>().notNull().default([]),
-    scoredAt: timestamp('scored_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex('job_scores_job_resume_idx').on(t.jobId, t.resumeId),
-    check('job_scores_relevance_range', sql`${t.relevanceScore} between 0 and 100`),
   ],
 );
 
@@ -505,22 +478,12 @@ export const resumeProfile = pgTable('resume_profile', {
 // ---------------------------------------------------------------------------
 
 export const jobsRelations = relations(jobs, ({ many }) => ({
-  scores: many(jobScores),
   applications: many(applications),
   contacts: many(contacts),
 }));
 
 export const resumesRelations = relations(resumes, ({ many }) => ({
-  scores: many(jobScores),
   applications: many(applications),
-}));
-
-export const jobScoresRelations = relations(jobScores, ({ one }) => ({
-  job: one(jobs, { fields: [jobScores.jobId], references: [jobs.id] }),
-  resume: one(resumes, {
-    fields: [jobScores.resumeId],
-    references: [resumes.id],
-  }),
 }));
 
 export const applicationsRelations = relations(applications, ({ one }) => ({
@@ -572,8 +535,6 @@ export type Resume = typeof resumes.$inferSelect;
 export type NewResume = typeof resumes.$inferInsert;
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
-export type JobScore = typeof jobScores.$inferSelect;
-export type NewJobScore = typeof jobScores.$inferInsert;
 export type Application = typeof applications.$inferSelect;
 export type NewApplication = typeof applications.$inferInsert;
 export type Contact = typeof contacts.$inferSelect;

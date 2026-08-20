@@ -5,7 +5,7 @@
  * from. Pure and unit-testable — embeddings/DB are resolved by the caller and
  * passed in as plain rows.
  */
-import { bulletMatchesRole, type BulletLike } from './fit';
+import { bulletMatchesRole, type BulletLike } from './bullets';
 
 export interface CorpusBullet extends BulletLike {
   id: number;

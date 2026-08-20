@@ -30,7 +30,6 @@
     "outlook:reconcile": "tsx scripts/outlook-reconcile.ts",
     "enrich": "tsx scripts/enrich.ts",
     "eval:classify": "tsx scripts/eval-classify.ts",
-    "score:fits": "tsx scripts/score-fits.ts",
     "backfill:is-us": "tsx scripts/backfill-is-us.ts",
     "backfill:posted-at": "tsx scripts/backfill-posted-at.ts",
     "backfill:seniority": "tsx scripts/backfill-seniority.ts",
