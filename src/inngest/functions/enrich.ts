@@ -76,13 +76,20 @@ export const enrichJobs = inngest.createFunction(
       // The board's "Find new jobs" button (jobs.refresh → inngest.send), plus
       // this function's own continuation events.
       { event: 'jobs/refresh.requested' },
-      // Hourly. `concurrency: 1` above means a tick that lands while the
-      // previous run is still draining queues rather than overlapping it.
+      // Hourly. `concurrency: 1` above SERIALIZES rather than drops: a tick
+      // that fires mid-run is queued and will still execute its own full
+      // fan-out later. That is acceptable at this cadence because a run is
+      // minutes, not hours — but if runs ever outlast the interval the queue
+      // grows monotonically, and the fix is to drop stale ticks rather than
+      // bank them (a newer tick makes an older one worthless).
       { cron: '0 * * * *' },
     ],
   },
   async ({ event, step }) => {
     const depth = (event?.data as RefreshEventData | undefined)?.continuation ?? 0;
+    // Cron ticks and user clicks arrive at the same handler; only the metered
+    // source's daily rule cares which is which.
+    const scheduled = event?.name === 'inngest/scheduled.timer';
 
     const { buildConnectors, isMeteredSource, skipSourceOnRun } =
       await import('@/server/ingest/registry');
@@ -126,8 +133,10 @@ export const enrichJobs = inngest.createFunction(
             const { drizzle } = await import('drizzle-orm/neon-http');
             const schema = await import('@/server/db/schema');
             const { buildConnectors: build } = await import('@/server/ingest/registry');
-            const { decideMeteredRun, recordMeteredRun } = await import('@/server/ingest/metering');
-            const { loadMeteredUsage, saveMeteredUsage } = await import('@/server/ingest/usage');
+            const { decideMeteredRun, usageDate, usageMonth } =
+              await import('@/server/ingest/metering');
+            const { DEFAULT_MAX_REQUESTS } = await import('@/server/ingest/connectors/aggregator');
+            const { addMeteredRequests, loadMeteredUsage } = await import('@/server/ingest/usage');
             const { installDbTimeout } = await import('@/server/db/http-timeout');
             installDbTimeout();
             const db = drizzle(neon(process.env.DATABASE_URL ?? ''), { schema });
@@ -137,7 +146,10 @@ export const enrichJobs = inngest.createFunction(
             // the quota inside a day, and an exhausted plan just answers 429.
             const now = new Date();
             const usage = await loadMeteredUsage(db, source);
-            const decision = decideMeteredRun(usage, now);
+            // A user-triggered refresh may bypass the once-a-day rule: the cron
+            // claims the daily slot at 00:00 UTC, so the button would otherwise
+            // never reach this source. Budget and pacing still apply.
+            const decision = decideMeteredRun(usage, now, { ignoreDailyLimit: !scheduled });
             if (!decision.run) {
               console.info(`[${source}] skipped — ${decision.reason}`);
               return [];
@@ -145,12 +157,24 @@ export const enrichJobs = inngest.createFunction(
 
             const connector = build().find((c) => c.source === source);
             if (!connector) return [];
+
+            // RESERVE BEFORE SPENDING. `step.run` memoizes on return, so any
+            // throw between the requests going out and the write landing — a
+            // Neon timeout, the 300s invocation cap — retries the whole callback
+            // and buys the listings again. At 4 retries that is 60 requests, a
+            // third of the month, from a failure that has nothing to do with
+            // this API. Claiming the worst case first turns that into "lose one
+            // day's fetch", which is the right trade for money you cannot
+            // un-spend.
+            const month = usageMonth(now);
+            const runDate = usageDate(now);
+            await addMeteredRequests(db, source, month, DEFAULT_MAX_REQUESTS, runDate);
+
             const postings = await connector.fetch();
 
-            // Recorded even on a failed/partial fetch: the requests were spent
-            // either way, and forgetting them is how a budget gets overrun.
+            // Correct the reservation down to what was actually spent.
             const spent = connector.lastReport?.()?.attempted ?? 0;
-            await saveMeteredUsage(db, source, recordMeteredRun(usage, spent, now));
+            await addMeteredRequests(db, source, month, spent - DEFAULT_MAX_REQUESTS, runDate);
             console.info(`[${source}] spent ${spent} request(s); ${postings.length} posting(s).`);
             return postings;
           })

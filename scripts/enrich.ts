@@ -20,7 +20,7 @@ import * as schema from '@/server/db/schema';
 import { buildEnrichmentClients, probeRateLimit } from '@/server/enrich/clients';
 import { describeRateLimit, isQuotaExhausted } from '@/server/enrich/ratelimit';
 import { reconcileFreshness, runEnrichment } from '@/server/enrich/run';
-import { buildConnectors } from '@/server/ingest/registry';
+import { buildConnectors, isMeteredSource } from '@/server/ingest/registry';
 
 /** Below this much remaining daily quota, a bulk run is not worth starting. */
 const MIN_REQUESTS_TO_START = 200;
@@ -78,6 +78,15 @@ async function main() {
   let insertedTotal = 0;
 
   for (const connector of buildConnectors()) {
+    // Metered sources are skipped here on purpose. This script does not go
+    // through the durable budget the scheduled path keeps, so a manual run would
+    // spend requests the budget cannot see — and the whole safety margin is the
+    // 20-request gap between what we allow ourselves and what the plan permits.
+    if (isMeteredSource(connector.source)) {
+      console.log(`${connector.source.padEnd(24)} skipped (metered — runs on the schedule)`);
+      continue;
+    }
+
     const postings = await connector.fetch();
     seen.push(...postings.map((p) => p.fingerprint));
 

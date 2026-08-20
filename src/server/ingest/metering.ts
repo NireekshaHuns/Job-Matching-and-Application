@@ -45,6 +45,38 @@ export interface MeteredDecision {
   reason: string;
 }
 
+/** Days in the calendar month `now` falls in, UTC. */
+function daysInMonth(now: Date): number {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
+/**
+ * How much of the month's budget is fair to have spent by now.
+ *
+ * A flat "once a day" rule does NOT fit the budget: at up to 12 requests a run,
+ * 180 requests buys 15 days and the source then goes dark until the 1st. That is
+ * worse than it sounds — `reconcileFreshness` closes any job unseen for 14 days,
+ * so a two-week gap would auto-close every aggregator job and re-ingest it from
+ * scratch next month, paying to classify jobs already held.
+ *
+ * Pacing against the day of the month spreads the same budget across all of it.
+ */
+function allowanceByNow(now: Date, budget: number): number {
+  return (budget * now.getUTCDate()) / daysInMonth(now);
+}
+
+export interface MeteredOptions {
+  budget?: number;
+  /**
+   * Let a run through even if one already happened today. Set for user-triggered
+   * refreshes: the hourly cron claims the daily slot at 00:00 UTC — the evening
+   * before, in US terms — so without this the "Find new jobs" button would never
+   * reach the one source covering Indeed/Glassdoor/ZipRecruiter. The budget and
+   * the pacing still apply.
+   */
+  ignoreDailyLimit?: boolean;
+}
+
 /**
  * Should a metered source fetch on this run?
  *
@@ -55,21 +87,29 @@ export interface MeteredDecision {
 export function decideMeteredRun(
   usage: MeteredUsage | null,
   now: Date,
-  budget: number = MONTHLY_REQUEST_BUDGET,
+  opts: MeteredOptions = {},
 ): MeteredDecision {
+  const budget = opts.budget ?? MONTHLY_REQUEST_BUDGET;
   const month = usageMonth(now);
   const today = usageDate(now);
 
   // A row from a previous month is spent budget that no longer applies.
   const current = usage && usage.month === month ? usage : null;
+  const used = current?.requestsUsed ?? 0;
 
-  if (current && current.requestsUsed >= budget) {
+  if (used >= budget) {
+    return { run: false, reason: `monthly budget spent (${used}/${budget} requests in ${month})` };
+  }
+
+  const allowance = allowanceByNow(now, budget);
+  if (used >= allowance) {
     return {
       run: false,
-      reason: `monthly budget spent (${current.requestsUsed}/${budget} requests in ${month})`,
+      reason: `ahead of pace (${used} used, ${allowance.toFixed(0)} allowed by day ${now.getUTCDate()})`,
     };
   }
-  if (current?.lastRunDate === today) {
+
+  if (!opts.ignoreDailyLimit && current?.lastRunDate === today) {
     return { run: false, reason: `already fetched today (${today})` };
   }
   return { run: true, reason: '' };

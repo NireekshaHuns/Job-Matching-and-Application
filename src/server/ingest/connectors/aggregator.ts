@@ -28,7 +28,7 @@ const API_BASE = 'https://api.openwebninja.com/jsearch/search-v2';
  * well under a tenth of the free monthly allowance and the board stays usable
  * without a paid plan. Raising this is a spending decision, not a tuning one.
  */
-const DEFAULT_MAX_REQUESTS = 12;
+export const DEFAULT_MAX_REQUESTS = 12;
 
 /** Pages to walk per query before moving on, within the request ceiling. */
 const DEFAULT_MAX_PAGES_PER_QUERY = 2;

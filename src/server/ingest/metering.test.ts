@@ -28,6 +28,43 @@ describe('decideMeteredRun', () => {
     expect(decideMeteredRun(ranYesterday, NOW).run).toBe(true);
   });
 
+  it('paces spend across the month instead of front-loading it', () => {
+    // A flat once-a-day rule does not fit the budget: at up to 12 requests a
+    // run, 180 buys 15 days and the source goes dark until the 1st. Worse, the
+    // 14-day staleness reconcile would then auto-close every job from it.
+    const aheadOfPace = { month: '2026-08', requestsUsed: 150, lastRunDate: '2026-08-18' };
+    const decision = decideMeteredRun(aheadOfPace, NOW);
+    expect(decision.run).toBe(false);
+    expect(decision.reason).toContain('ahead of pace');
+  });
+
+  it('runs when spend is behind the pace for the day', () => {
+    // Day 19 of 31 allows ~110 of 180; 60 used is comfortably behind.
+    const behind = { month: '2026-08', requestsUsed: 60, lastRunDate: '2026-08-18' };
+    expect(decideMeteredRun(behind, NOW).run).toBe(true);
+  });
+
+  it('still has budget left at the end of the month', () => {
+    // The pacing exists so the source is never dark for weeks: on the last day,
+    // spend at pace is still under budget.
+    const lastDay = new Date('2026-08-31T12:00:00Z');
+    const atPace = { month: '2026-08', requestsUsed: 170, lastRunDate: '2026-08-30' };
+    expect(decideMeteredRun(atPace, lastDay).run).toBe(true);
+  });
+
+  it('lets a user-triggered refresh through on a day the cron already ran', () => {
+    // The hourly cron claims the daily slot at 00:00 UTC — the evening before,
+    // in US terms — so without this the "Find new jobs" button would never reach
+    // the one source covering Indeed/Glassdoor/ZipRecruiter.
+    const ranToday = { month: '2026-08', requestsUsed: 12, lastRunDate: '2026-08-19' };
+    expect(decideMeteredRun(ranToday, NOW, { ignoreDailyLimit: true }).run).toBe(true);
+  });
+
+  it('does not let a manual refresh escape the budget', () => {
+    const spent = { month: '2026-08', requestsUsed: 200, lastRunDate: '2026-08-19' };
+    expect(decideMeteredRun(spent, NOW, { ignoreDailyLimit: true }).run).toBe(false);
+  });
+
   it('stops once the month is spent', () => {
     const spent = {
       month: '2026-08',
