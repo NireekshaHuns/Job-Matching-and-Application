@@ -127,6 +127,12 @@ export interface CorpusTailorReport {
   coverage: KeywordPlacement[];
   /** Claims to check before submitting — see `buildDefencePoints`. */
   defence: DefencePoint[];
+  /**
+   * Echoed back so the Studio can recompute both panels from the LaTeX as the
+   * user edits it. A report frozen at generation time starts lying the moment a
+   * keyword is removed or a number corrected.
+   */
+  masterSkills: string[];
 }
 
 export interface CorpusTailorResult {
@@ -177,6 +183,7 @@ export async function tailorFromCorpus(
       // says it wrote.
       coverage: buildKeywordCoverage(chosen.latex, inputs.selectedKeywords),
       defence: buildDefencePoints(chosen.latex, inputs.masterSkills ?? [], inputs.selectedKeywords),
+      masterSkills: inputs.masterSkills ?? [],
     },
   };
 }

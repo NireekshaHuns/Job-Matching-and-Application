@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * What the tailoring run actually produced, next to the résumé itself: where
  * each JD keyword landed, and which claims to check before submitting.
@@ -8,7 +6,12 @@
  * so "covered" here means the word is genuinely in the text — see
  * `@/server/resume/coverage`.
  */
-import type { DefencePoint, KeywordPlacement } from '@/server/resume/coverage';
+import { useMemo } from 'react';
+import {
+  buildDefencePoints,
+  buildKeywordCoverage,
+  type KeywordPlacement,
+} from '@/server/resume/coverage';
 
 const STATUS_STYLE: Record<KeywordPlacement['status'], string> = {
   in: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
@@ -16,22 +19,28 @@ const STATUS_STYLE: Record<KeywordPlacement['status'], string> = {
   missing: 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
 };
 
-const STATUS_LABEL: Record<KeywordPlacement['status'], string> = {
-  in: 'in',
-  weak: 'weak',
-  missing: 'missing',
-};
-
 export function TailoringReport({
-  coverage,
-  defence,
+  latex,
+  keywords,
+  masterSkills,
 }: {
-  coverage: KeywordPlacement[];
-  defence: DefencePoint[];
+  latex: string;
+  keywords: string[];
+  masterSkills: string[];
 }) {
+  // Recomputed from the LaTeX in the editor, not frozen at generation time.
+  // The panel's whole claim is that it describes the actual document, and the
+  // document is editable — a frozen report starts lying the moment you remove a
+  // keyword or correct a number. Pure and cheap enough to run on every edit.
+  const coverage = useMemo(() => buildKeywordCoverage(latex, keywords), [latex, keywords]);
+  const defence = useMemo(
+    () => buildDefencePoints(latex, masterSkills, keywords),
+    [latex, masterSkills, keywords],
+  );
+
   if (coverage.length === 0 && defence.length === 0) return null;
 
-  const counts = coverage.reduce<Record<string, number>>((acc, k) => {
+  const counts = coverage.reduce<Partial<Record<KeywordPlacement['status'], number>>>((acc, k) => {
     acc[k.status] = (acc[k.status] ?? 0) + 1;
     return acc;
   }, {});
@@ -52,11 +61,11 @@ export function TailoringReport({
                 <span
                   className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${STATUS_STYLE[k.status]}`}
                 >
-                  {STATUS_LABEL[k.status]}
+                  {k.status}
                 </span>
                 <span className="text-fg">{k.keyword}</span>
                 {k.where.length > 0 && (
-                  <span className="text-faint truncate text-xs">{k.where.join(' · ')}</span>
+                  <span className="text-faint min-w-0 truncate text-xs">{k.where.join(' · ')}</span>
                 )}
               </li>
             ))}

@@ -149,7 +149,7 @@ export const RESUME_RUBRIC_PROMPT = [
  * instead of padding).
  */
 export const OWNER_TAILORING_METHOD = [
-  'METHOD — follow these five steps. Where they give a different specific than the rules above, these win.',
+  'METHOD — follow these five steps. Where they give a different specific than the rules above, these win — EXCEPT the length, bullet-count, bystander-verb and punctuation limits above, which are hard and not negotiable. Blowing the word limit fails the document.',
   '',
   'Step 1 — Extract the keywords from the job description.',
   'Read the ENTIRE posting and pull keywords from two places, because most postings hide half their keywords in prose:',
@@ -166,7 +166,7 @@ export const OWNER_TAILORING_METHOD = [
   'Step 2 — Map every keyword to a specific home, before writing a single bullet. This is the ATS step.',
   '- Give each important keyword a concrete placement: which role, and ideally which bullet.',
   '- Read the lean of the role and lead accordingly. If the languages and responsibilities are all backend/systems, lead with backend bullets and cut frontend. If it is a web/UI role, lead with the interface work. Drop whole dimensions the JD never asks for rather than forcing them in.',
-  '- Exploit OR-requirements. Never add a skill you do not have. If the JD says "Python, Java, or Golang", having Python and Java already satisfies it — do NOT add Golang, C++, Cassandra just because they appear. A keyword you cannot defend in an interview is worse than a missing one. If a listed keyword has no real evidence, say so and leave it out.',
+  '- Exploit OR-requirements. Never add a skill you do not have. If the JD says "Python, Java, or Golang", having Python and Java already satisfies it — do NOT add Golang, C++, Cassandra just because they appear. A keyword you cannot defend in an interview is worse than a missing one. A listed keyword with no real evidence is simply left out.',
   '- Balance the roles so one is not lopsided, and note if a key JD requirement has no home anywhere.',
   '',
   'Step 3 — Write the bullets.',
@@ -178,7 +178,7 @@ export const OWNER_TAILORING_METHOD = [
   '- Show Bucket B through context: leadership → "Led development of…", "Mentored 3 engineers and led code-review standards adopted team-wide"; collaboration → "partnering with cross-functional product and QA teams to deliver…"; quantitative → "profiling query performance", "analyzing throughput metrics to tune…"; interpersonal → "gathering requirements from product and design partners"; entrepreneurial → owned features end to end at an early-stage startup (shown, never the word); fast-paced → "in a fast-paced startup"; well-architected → "re-architected into…", clean well-structured services, continuous refactoring.',
   '- One coherent stack per role. Never put competing tools in one bullet — two rival frontend frameworks together looks fake. Pick the frontend and backend that tell one clean story.',
   '- Vary the verbs and the tool names across bullets. Repeat a core tool at most once per role.',
-  '- Real metrics only. If you need a number and none is given, ask rather than invent: did it change speed, reliability, cost, scale, or reach, and by how much, for how many people?',
+  '- Metrics must be plausible and specific — did it change speed, reliability, cost, scale, or reach, and by how much, for how many people? Whether you may supply a figure that is not in the source material is set by the stance above; do not contradict it here.',
   '- Be sensible — do not keyword-stuff.',
   '',
   'Step 4 — Build the skills section by mirroring the JD.',
@@ -190,7 +190,7 @@ export const OWNER_TAILORING_METHOD = [
   '',
   'Step 5 — Projects and other sections.',
   '- Any project should read like real, outcome-driven engineering with metrics and users, not a class assignment.',
-  '- Tailor the coursework/certs line to surface what this JD values (lead with algorithms and systems courses for a fundamentals-heavy role).',
+  '- You may REORDER an existing coursework/certs line to surface what this JD values (algorithms and systems courses first for a fundamentals-heavy role), but never add, remove or reword a course, certification, degree or institution. Education is a fixed fact, like employers and dates.',
   '',
   'Formatting: job title first, then employer; bold employer names and key terms. Consistent end-of-line punctuation. One page, no wasted whitespace, no objective/summary block unless asked. Preserve all existing hyperlinks. Keep the same clean font and template as the current résumé.',
 ].join('\n');

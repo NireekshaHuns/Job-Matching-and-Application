@@ -532,8 +532,9 @@ export default function StudioPage() {
               />
               {tailor.data?.report && (
                 <TailoringReport
-                  coverage={tailor.data.report.coverage}
-                  defence={tailor.data.report.defence}
+                  latex={latex}
+                  keywords={tailor.data.report.selectedKeywords}
+                  masterSkills={tailor.data.report.masterSkills}
                 />
               )}
               {save.isError && (

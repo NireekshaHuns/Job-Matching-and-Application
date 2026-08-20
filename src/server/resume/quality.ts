@@ -133,7 +133,7 @@ const BULLET_RE =
 // A metric is a percentage, a money amount, a number with a meaningful unit, or
 // a number introduced by by/to/from/under/over. Deliberately NOT a bare number
 // (years like "2024" and IDs/phone numbers are not achievements).
-const METRIC_RE = new RegExp(
+export const METRIC_RE = new RegExp(
   [
     String.raw`\d+(?:\.\d+)?\s?%`,
     String.raw`\$\s?\d`,
@@ -157,12 +157,19 @@ export function stripLatex(s: string): string {
  * backslashes but KEEP tech symbols like # + . / (so "c#", "c++", ".net",
  * "ci/cd" survive — including LaTeX-escaped "C\#" which becomes "C#").
  */
-function stripForMatch(s: string): string {
-  return s
-    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
-    .replace(/[{}\\]/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
+export function stripForMatch(s: string): string {
+  return (
+    s
+      // Unescape LaTeX-escaped punctuation FIRST. Stripping the backslash as
+      // part of the general cleanup below replaces it with a SPACE, so "C\#"
+      // became "C #" and neither this function nor the coverage check could
+      // find "c#" — exactly the symbols the comment above promises survive.
+      .replace(/\\([#%$&_{}])/g, '$1')
+      .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
+      .replace(/[{}\\]/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .trim()
+  );
 }
 
 function countWords(text: string): number {
@@ -216,7 +223,7 @@ function escapeRegExp(s: string): string {
 }
 
 /** Whole-word (boundary-aware) presence, so "go" doesn't match "category". */
-function containsKeyword(hay: string, keyword: string): boolean {
+export function containsKeyword(hay: string, keyword: string): boolean {
   return new RegExp(`(?<![a-z0-9])${escapeRegExp(keyword)}(?![a-z0-9])`, 'i').test(hay);
 }
 

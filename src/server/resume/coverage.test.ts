@@ -45,7 +45,60 @@ describe('buildKeywordCoverage', () => {
   });
 });
 
+describe('buildKeywordCoverage — the awkward documents', () => {
+  const TRICKY = String.raw`
+\section{\textbf{EXPERIENCE}}
+\resumeItem{Built a MongoDB-backed service in C\# handling 2M events; mentored 3 engineers.}
+\section{TECHNICAL SKILLS}
+Languages: Go, C\#, Java 17, CI/CD
+`;
+
+  it('does not let a substring hit pass as evidence', () => {
+    // "go" inside "MongoDB" reported the keyword as evidenced in a bullet, which
+    // flips weak → in — the exact distinction this panel exists to make.
+    const [go] = buildKeywordCoverage(TRICKY, ['go']);
+    expect(go.status).toBe('weak');
+    expect(go.where).toEqual(['TECHNICAL SKILLS']);
+  });
+
+  it('finds keywords carrying symbols', () => {
+    // "c#" was reported missing while present twice, because the strip helper
+    // turned LaTeX-escaped "C\#" into "C #".
+    const [csharp, cicd] = buildKeywordCoverage(TRICKY, ['c#', 'ci/cd']);
+    expect(csharp.status).toBe('in');
+    expect(csharp.where).toEqual(['EXPERIENCE', 'TECHNICAL SKILLS']);
+    expect(cicd.status).toBe('weak');
+  });
+
+  it('reports the section name without its LaTeX markup', () => {
+    const [c] = buildKeywordCoverage(TRICKY, ['mongodb']);
+    expect(c.where).toEqual(['EXPERIENCE']);
+  });
+
+  it('reads a document with no sections rather than calling everything missing', () => {
+    // Otherwise coverage and the defence notes disagree about the same résumé.
+    const [go] = buildKeywordCoverage('Built things with Go.', ['go']);
+    expect(go.status).toBe('in');
+  });
+});
+
 describe('buildDefencePoints', () => {
+  it('says nothing when the master skill list is empty', () => {
+    // Empty means "we do not know your skills", not "you have none" — and it is
+    // the live state until a résumé has been ingested. Flagging everything turns
+    // the panel into noise.
+    const keywordFlags = buildDefencePoints(LATEX, [], ['python', 'kafka']).filter(
+      (p) => !p.why.includes('number'),
+    );
+    expect(keywordFlags).toEqual([]);
+  });
+
+  it('matches master skills loosely, since they are not normalized', () => {
+    // "Apache Kafka" in the inventory should cover a JD asking for "kafka".
+    const points = buildDefencePoints(LATEX, ['Apache Kafka', 'Python'], ['kafka']);
+    expect(points.some((p) => p.claim === 'kafka')).toBe(false);
+  });
+
   it('flags a technology the résumé claims but the master skills do not support', () => {
     // The fastest way a tailored résumé becomes indefensible.
     const points = buildDefencePoints(LATEX, ['python', 'aws'], ['python', 'kafka']);
