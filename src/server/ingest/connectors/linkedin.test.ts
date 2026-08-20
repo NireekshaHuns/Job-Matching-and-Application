@@ -118,6 +118,54 @@ describe('linkedInGuestConnector', () => {
     expect(postings.filter((p) => p.jdText !== '')).toHaveLength(1);
   });
 
+  it('shares the JD budget across searches instead of front-loading it', async () => {
+    // The regression: candidates were taken off the front of a search-ordered
+    // map, so the FIRST search consumed the whole budget and the last searches
+    // got zero JD fetches on every run — permanently, since an enriched job is
+    // never re-analysed, and a JD-less job cannot be Excluded by its own words.
+    const seen: string[] = [];
+    const pages = new Map<string, string>();
+    // Two searches, four software cards each, distinguishable by id range.
+    const card = (id: string, title: string) =>
+      `<li><div class="base-card" data-entity-urn="urn:li:jobPosting:${id}">` +
+      `<h3 class="base-search-card__title">${title}</h3>` +
+      `<h4 class="base-search-card__subtitle"><a>Acme</a></h4>` +
+      `<span class="job-search-card__location">Boston, MA</span></li>`;
+    pages.set(
+      'alpha',
+      ['1001', '1002', '1003', '1004'].map((i) => card(i, 'Software Engineer')).join(''),
+    );
+    pages.set(
+      'beta',
+      ['2001', '2002', '2003', '2004'].map((i) => card(i, 'Backend Engineer')).join(''),
+    );
+
+    const fetcher: Fetcher = async (url) => {
+      seen.push(url);
+      if (url.includes('/jobPosting/')) return new Response('<html></html>', { status: 200 });
+      const which = url.includes('alpha') ? 'alpha' : 'beta';
+      // One page per search, then empty so pagination stops.
+      const first = !seen.some(
+        (u, i) => i < seen.length - 1 && u.includes(which) && !u.includes('jobPosting'),
+      );
+      return new Response(first ? pages.get(which)! : '', { status: 200 });
+    };
+
+    await linkedInGuestConnector(
+      [
+        { keywords: 'alpha', location: 'United States' },
+        { keywords: 'beta', location: 'United States' },
+      ],
+      fetcher,
+      { ...FAST, maxDetailFetches: 4 },
+    ).fetch();
+
+    const detailIds = seen.filter(isDetail).map((u) => u.split('/').pop()!);
+    // Two from each search, not four from the first.
+    expect(detailIds.filter((id) => id.startsWith('10'))).toHaveLength(2);
+    expect(detailIds.filter((id) => id.startsWith('20'))).toHaveLength(2);
+  });
+
   it('yields an empty JD when the detail fetch fails (best-effort)', async () => {
     const postings = await linkedInGuestConnector(
       SEARCHES,
