@@ -58,7 +58,7 @@ export const jobListInput = z.object({
    * filter. Postings that state no requirement are KEPT — see `meetsMaxYears`.
    */
   maxYearsExperience: z.number().int().min(0).max(20).default(0),
-  sort: z.enum(['combined', 'sponsor', 'recent']).default('combined'),
+  sort: z.enum(['combined', 'recent']).default('combined'),
   /** Apply-priority weights for the `combined` sort; absent/all-zero → defaults. */
   weights: z
     .object({
@@ -319,11 +319,7 @@ export const jobsRouter = createTRPCRouter({
     const orderBy =
       plan.sort === 'recent'
         ? [POSTED, desc(jobs.createdAt), tiebreak]
-        : plan.sort === 'sponsor'
-          ? // Freshest first within a tier, now that fit is no longer the
-            // secondary key.
-            [desc(TIER_RANK), POSTED, tiebreak]
-          : [sql`${priority} desc`, tiebreak]; // combined (apply priority)
+        : [sql`${priority} desc`, tiebreak]; // combined (apply priority)
 
     return ctx.db
       .select({

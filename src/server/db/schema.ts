@@ -13,7 +13,6 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
-  check,
   date,
   index,
   integer,

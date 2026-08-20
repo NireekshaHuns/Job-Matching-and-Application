@@ -28,7 +28,7 @@ import { createTRPCRouter, publicProcedure } from '../trpc';
  * present), for a "why I'm a fit" line in outreach. Returns undefined when there
  * is no job context or nothing matches — never invents skills.
  */
-async function loadFitSkills(
+async function loadCoverableStrengths(
   db: DB,
   jobId?: number,
   resumeId?: number,
@@ -167,7 +167,7 @@ export const outreachRouter = createTRPCRouter({
    * and falls back to the deterministic template otherwise or on any failure.
    */
   draftEmail: publicProcedure.input(draftEmailInput).mutation(async ({ ctx, input }) => {
-    const fitSkills = await loadFitSkills(ctx.db, input.jobId, input.resumeId);
+    const fitSkills = await loadCoverableStrengths(ctx.db, input.jobId, input.resumeId);
     const req = { ...input, fitSkills };
     const key = process.env.OPENAI_API_KEY;
     if (key) {

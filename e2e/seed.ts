@@ -1,7 +1,7 @@
 /**
  * Deterministic e2e seed. Wipes and repopulates a THROWAWAY test database with a
  * fixed set of jobs (across every tier + an excluded + a contract role), one base
- * résumé, and one fit score — enough to exercise every board/tracker/dashboard
+ * résumé — enough to exercise every board/tracker/dashboard
  * affordance without calling OpenAI.
  *
  * Safety: this TRUNCATEs tables, so it refuses to run unless `E2E_DATABASE_URL`
@@ -58,7 +58,7 @@ const TWENTY_DAYS_AGO = new Date(Date.now() - 20 * DAY_MS);
 export async function resetAndSeed(): Promise<void> {
   const db = drizzle(neon(e2eDatabaseUrl()), { schema });
 
-  // CASCADE clears dependents (job_scores, applications, contacts, outreach_log);
+  // CASCADE clears dependents (applications, contacts, outreach_log);
   // sponsors / profile are left untouched.
   await db.execute(sql`truncate table ${jobs}, ${resumes} restart identity cascade`);
 

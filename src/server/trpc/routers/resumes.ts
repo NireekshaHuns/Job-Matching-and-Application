@@ -1,13 +1,11 @@
 /**
  * Résumé queries for the Studio: the bullet corpus, JD keyword extraction, and
- * the CLI tailoring assist read-only in the app (spec §5.7): keyword-gap + the
- * user's real bullets to weave in (never fabricated).
+ * corpus-based tailoring.
  */
 import { TRPCError } from '@trpc/server';
 import { asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import {
-  jobs,
   masterSkills,
   resumeBullets,
   resumeProfile,
