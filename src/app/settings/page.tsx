@@ -298,8 +298,9 @@ function BaseResumeRow({ resume }: { resume: BaseResume }) {
   const [editing, setEditing] = useState(false);
 
   const confirmRemove = () => {
-    // Deleting a base résumé cascades its job relevance scores (job_scores).
-    if (window.confirm(`Delete "${resume.label}"? This also clears its fit scores.`)) {
+    if (
+      window.confirm(`Delete "${resume.label}"? This also removes its bullets from the corpus.`)
+    ) {
       remove.mutate({ id: resume.id });
     }
   };

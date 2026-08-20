@@ -1,5 +1,5 @@
 {
-  "id": "09f8c17e-3f53-436b-9964-d85f70a5cb12",
+  "id": "5cf46c20-7f34-46f1-a4fe-eb6c995af743",
   "prevId": "b6d68544-90c2-4e95-b3aa-1b10b64800b6",
   "version": "7",
   "dialect": "postgresql",
@@ -289,111 +289,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.job_scores": {
-      "name": "job_scores",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "job_id": {
-          "name": "job_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resume_id": {
-          "name": "resume_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "relevance_score": {
-          "name": "relevance_score",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "skill_gaps": {
-          "name": "skill_gaps",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "scored_at": {
-          "name": "scored_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "job_scores_job_resume_idx": {
-          "name": "job_scores_job_resume_idx",
-          "columns": [
-            {
-              "expression": "job_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "resume_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "job_scores_job_id_jobs_id_fk": {
-          "name": "job_scores_job_id_jobs_id_fk",
-          "tableFrom": "job_scores",
-          "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "job_scores_resume_id_resumes_id_fk": {
-          "name": "job_scores_resume_id_resumes_id_fk",
-          "tableFrom": "job_scores",
-          "tableTo": "resumes",
-          "columnsFrom": [
-            "resume_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "job_scores_relevance_range": {
-          "name": "job_scores_relevance_range",
-          "value": "\"job_scores\".\"relevance_score\" between 0 and 100"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.jobs": {
@@ -794,51 +689,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.metered_source_usage": {
-      "name": "metered_source_usage",
-      "schema": "",
-      "columns": {
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "month": {
-          "name": "month",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "requests_used": {
-          "name": "requests_used",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_run_date": {
-          "name": "last_run_date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

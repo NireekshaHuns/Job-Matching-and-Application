@@ -103,7 +103,6 @@ async function main() {
 
   let deleted = 0;
   for (const batch of chunk(deletable, CHUNK)) {
-    await db.delete(schema.jobScores).where(inArray(schema.jobScores.jobId, batch));
     const result = await db.delete(schema.jobs).where(inArray(schema.jobs.id, batch));
     deleted += result.rowCount ?? batch.length;
   }

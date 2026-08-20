@@ -15,7 +15,7 @@
  *  - jobs that were explicitly dismissed, because "never show me this again"
  *    must outlive a refill that would otherwise resurrect them.
  *
- * `job_scores` rows cascade with their job. Everything else in the schema
+ * Everything else in the schema
  * (sponsors, resumes, the corpus) is untouched.
  *
  * DESTRUCTIVE AND IRREVERSIBLE. Runs as a dry run unless `--yes` is passed.

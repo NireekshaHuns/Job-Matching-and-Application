@@ -1,8 +1,8 @@
 # CLAUDE.md — H1B Job Board
 
-Personal H1B-focused job board + application tracker, and a portfolio piece (code quality, tests, and clean git history matter). Aggregates SWE jobs from compliant sources, scores each employer's H1B sponsorship likelihood against real US government data, filters out contract/staffing roles, ranks jobs against my resume(s), and tracks applications + hiring-manager outreach.
+Personal H1B-focused job board + application tracker, and a portfolio piece (code quality, tests, and clean git history matter). Aggregates SWE jobs from compliant sources, scores each employer's H1B sponsorship likelihood against real US government data, filters out contract/staffing roles and roles wanting more experience than I have, and tracks applications + hiring-manager outreach.
 
-**Core principle:** H1B sponsorship is the organizing principle, ranked against government data — not a yes/no checkbox. Every job shows two independent scores: an H1B possibility tier and a relevance score vs. a selected resume.
+**Core principle:** H1B sponsorship is the organizing principle, ranked against government data — not a yes/no checkbox. Every job shows an H1B possibility tier with a short "why", derived from USCIS filing history and the JD's own words.
 
 ## Stack
 
@@ -10,27 +10,27 @@ Personal H1B-focused job board + application tracker, and a portfolio piece (cod
 - API: Next.js Server Actions + tRPC (no separate backend framework).
 - DB: PostgreSQL + pgvector on Neon, Drizzle ORM.
 - Pipeline: Inngest (scheduled, durable, retryable multi-step ingestion + enrichment).
-- AI: LLM API (OpenAI or Anthropic) for classify + skill extraction; embeddings for relevance; pgvector for similarity. Classifier built as small testable steps with a lightweight evals harness.
+- AI: LLM API for classify + skill extraction. Classifier built as small testable steps with a lightweight evals harness. Embeddings are used only for Studio bullet retrieval.
 - Integrations: Microsoft Graph (Outlook), GitHub API (job repos), public ATS feeds (Greenhouse/Lever/Ashby), one aggregator API (JSearch or FlyByAPIs).
 - Storage: AWS S3 (resume PDFs). Infra: Terraform. CI: GitHub Actions. Observability: Sentry + OpenTelemetry.
 - Hosting: Vercel + Neon + S3. Package manager: pnpm. Tests: Vitest. Lint/format: ESLint + Prettier.
 
 ## Architecture
 
-Five stages: gather → check sponsorship → filter junk → rank vs. resume → help apply & follow up.
+Five stages: gather → check sponsorship → filter junk → rank by sponsorship + freshness → help apply & follow up.
 
-1. Inngest fans out to one connector per source, **on demand only** — the board's "Find new jobs" button, no schedule. Each writes new postings to `raw_jobs`.
+1. Inngest fans out to one connector per source, **hourly and on demand** (the board's "Find new jobs" button). Connectors return `RawPosting[]` in memory — there is no `raw_jobs` table. Metered sources carry a durable per-month request budget (#182).
 2. Enrichment (durable, per-step retries): dedup by fingerprint → sponsor match → LLM classify (employment type + H1B tier + required skills) → embed JD → write clean row to `jobs`.
 3. PostgreSQL + pgvector is the single source of truth.
-4. Resume PDFs in S3; each resume embedded; relevance scored per job × resume into `job_scores`.
+4. Résumés live in the Studio corpus (bullets + master skills) and are tailored per job on demand.
 5. Next.js + tRPC app reads Postgres → board, tracker, outreach, dashboard. Outlook import via Graph; outreach helper opens a targeted hiring-manager search and logs a daily count.
 
 ## Data model
 
 - `sponsors` — per company: `company_name_normalized` (join key), `sponsor_count`, `approval_rate`, `last_filed_year`.
-- `resumes` — `id`, `label`, `s3_key`, `embedding`.
-- `jobs` — `id`, `fingerprint` (company + normalized title + location), `source`, `url`, `posted_date`, `company`, `title`, `location`, `jd_text`, `embedding`, `employment_type` (full_time | contract), `sponsor_tier` (High | Medium | Low | Excluded), `sponsor_reason`, `sponsor_count`.
-- `job_scores` — `job_id`, `resume_id`, `relevance_score` (0–100), `skill_gaps` (string[]).
+- `resumes` — `id`, `label`, `kind` (base | tailored), `content`, `role_family`; bullets + master skills live in `resume_bullets` / `master_skills`.
+- `jobs` — `id`, `fingerprint` (company + normalized title + location), `source`, `url`, `posted_at`, `company`, `title`, `location`, `jd_text`, `employment_type` (full_time | contract), `seniority`, `required_years_experience`, `salary_min_usd` / `salary_max_usd`, `sponsor_tier` (High | Medium | Low | Excluded), `sponsor_reason`, `sponsor_count`, `new_hire_status`.
+- `metered_source_usage` — per metered connector: `month`, `requests_used`, `last_run_date`.
 - `applications` — `id`, `job_id`, `resume_id`, `status`, `applied_at`, `source` (manual | outlook).
 - `contacts` — `id`, `job_id`, `name`, `title`, `linkedin_url`.
 - `outreach_log` — `id`, `contact_id`, `contacted_at`, `channel`.
@@ -40,8 +40,8 @@ Five stages: gather → check sponsorship → filter junk → rank vs. resume �
 - **Never discard unknown sponsorship.** Tier it: High (JD states sponsorship, or heavy sponsor history), Medium (company sponsored before, JD silent), Low (JD silent + little/no history). Only explicit disqualifiers ("no sponsorship", "must be authorized without sponsorship", "US citizen / GC only") → `Excluded`.
 - `Excluded` jobs are hidden by default but retained, with a UI toggle to view them (so the filter can be audited).
 - Employment filter: drop contract / staffing / C2C / 1099 / "W-2 contract"; keep full-time direct-hire.
-- Two independent scores stored and displayed per job card: H1B possibility (tier + short "why") and relevance (% vs selected resume + skill-gap chips). The board offers jobright-style sorts — **Recommended** (a tier-dominant blend, the default), **Most fit** (relevance), and **Most recent**; H1B tier is surfaced per card and governs the Excluded filter + the Recommended weighting. The blended "Recommended" score is computed at read time only — never blend the two scores into a single **stored** value (they live in separate columns/tables).
-- Multiple resumes ("lenses"): relevance is computed per job × resume. Jobs whose required skills exceed a resume are **not hidden** — they score lower and show the gap (e.g. "missing: Kafka, Go").
+- The sponsor tier is the ONLY score stored on a job. The board's **Recommended** sort is an Apply Priority blend of tier + freshness computed at read time and never persisted; **Most recent** is the alternative. Résumé fit scoring was removed (#180) — nothing ever populated it, so 30% of the ranking weight was permanently zero. Do not reintroduce it without a way to keep it filled.
+- Never discard unknown. A posting that states no salary, no experience requirement, or no sponsorship stance is KEPT and shown; only an explicit disqualifier hides it. Every filter follows this rule.
 - Cost control: run LLM classify/embed **once per new job** and cache; never re-analyze an already-processed job.
 - Sourcing: prefer public ATS endpoints and public GitHub repos.
 - Do NOT build application autofill (Simplify's extension handles the submit step).
@@ -71,7 +71,7 @@ Five stages: gather → check sponsorship → filter junk → rank vs. resume �
 The Stack/Architecture sections above describe the original intent; these pieces were deliberately dropped and are **not** pending work (don't reintroduce without asking):
 
 - ~~**Aggregator API connector**~~ — reinstated (#157). JSearch covers Indeed / Glassdoor / ZipRecruiter, which have no public API and block direct fetches. Metered: gated on `AGGREGATOR_API_KEY`, capped per run, stops on 429.
-- **Embedding / pgvector relevance** — relevance uses interpretable keyword overlap instead (`src/server/resume/fit.ts`). The `embedding` columns/indexes exist but don't feed scoring.
+- **Résumé relevance scoring** — removed entirely (#180). Job ranking is sponsorship tier + freshness. The Studio still tailors a résumé per job and reports keyword coverage, but no per-job score is computed or stored.
 - **S3 resume storage** — resumes are handled locally (PDF text extraction + LaTeX compile).
 - **Terraform** — no infra-as-code.
 - **Standalone `/outreach` route** — outreach lives in the tracker page as `OutreachPanel`.

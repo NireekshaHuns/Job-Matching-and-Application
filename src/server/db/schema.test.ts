@@ -5,7 +5,6 @@ import {
   companyAliases,
   EMBEDDING_DIMENSIONS,
   employmentTypeEnum,
-  jobScores,
   jobs,
   filingTypeEnum,
   jobStatusEnum,
@@ -92,19 +91,16 @@ describe('db schema', () => {
     });
   });
 
-  describe('two-score invariant', () => {
-    // The H1B tier and the resume-relevance score must never share a table,
-    // so they can never be collapsed into one stored value.
-    it('jobs carries the sponsor tier but not a relevance score', () => {
+  describe('score separation', () => {
+    // The sponsor tier is the only score stored on a job. Résumé relevance used
+    // to live in its own table so the two could never be collapsed into one
+    // value; that table is gone, and the Apply Priority blend is computed at
+    // read time and never written.
+    it('jobs carries the sponsor tier but no stored relevance score', () => {
       const cols = getTableColumns(jobs);
       expect(cols).toHaveProperty('sponsorTier');
       expect(cols).not.toHaveProperty('relevanceScore');
-    });
-
-    it('job_scores carries the relevance score but not a sponsor tier', () => {
-      const cols = getTableColumns(jobScores);
-      expect(cols).toHaveProperty('relevanceScore');
-      expect(cols).not.toHaveProperty('sponsorTier');
+      expect(cols).not.toHaveProperty('priorityScore');
     });
   });
 
