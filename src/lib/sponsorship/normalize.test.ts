@@ -66,4 +66,29 @@ describe('companyKeysMatch', () => {
     expect(companyKeysMatch('Limited', 'Limited Inc')).toBe(true);
     expect(companyKeysMatch('The Coca Cola Company', 'Coca Cola')).toBe(true);
   });
+
+  it('does not leave a conjunction dangling when the word after "&" is a suffix', () => {
+    // "&" is expanded to AND before trailing suffixes are stripped, so
+    // "X & Co." lost the CO and kept the AND — a key the same company spelled
+    // without the suffix could never match. 101 sponsor rows were affected,
+    // including JPMorgan Chase (2,112 filings) and Goldman Sachs (607).
+    expect(normalizeCompanyName('JPMorgan Chase & Co.')).toBe('JPMORGAN CHASE');
+    expect(normalizeCompanyName('JPMorgan Chase & Co.')).toBe(
+      normalizeCompanyName('JPMorgan Chase'),
+    );
+    expect(normalizeCompanyName('Deere & Company')).toBe('DEERE');
+    expect(normalizeCompanyName('Ernst & Young LLP')).toBe('ERNST AND YOUNG');
+  });
+
+  it('keeps a conjunction that joins two real name parts', () => {
+    // Only the dangling case is wrong; these were always fine and must stay so.
+    expect(normalizeCompanyName('Johnson & Johnson')).toBe('JOHNSON AND JOHNSON');
+    expect(normalizeCompanyName('Procter & Gamble Co.')).toBe('PROCTER AND GAMBLE');
+    expect(normalizeCompanyName('Marsh & McLennan Companies')).toBe('MARSH AND MCLENNAN COMPANIES');
+    expect(normalizeCompanyName('AT&T')).toBe('AT AND T');
+  });
+
+  it('never reduces a name to nothing', () => {
+    expect(normalizeCompanyName('& Co.')).not.toBe('');
+  });
 });
