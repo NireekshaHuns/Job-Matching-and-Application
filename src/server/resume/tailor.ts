@@ -157,6 +157,12 @@ export interface CorpusTailorReport {
   selectedKeywords: string[];
   /** Ticked without corpus evidence — reported as honest gaps, never gated on. */
   adjacentKeywords: string[];
+  /**
+   * Both lists, for the report panels. A single stable array rather than one
+   * the client concatenates: `TailoringReport` memoizes on this prop, and a
+   * fresh array every render re-reads the whole document on every keystroke.
+   */
+  reportKeywords: string[];
   attempts: number;
   lint: LintReport;
   /** Where each selected keyword actually landed in the generated document. */
@@ -191,9 +197,12 @@ export async function tailorFromCorpus(
 ): Promise<CorpusTailorResult> {
   const maxAttempts = Math.max(1, opts.maxAttempts ?? 3);
   const adjacent = inputs.adjacentKeywords ?? [];
-  // The coverage check must NOT see the adjacent-only keywords: a low ratio
-  // re-prompts the model to work them in, which is precisely what we just told
-  // it not to do. They are reported, never gated on.
+  // The coverage check must NOT see the adjacent-only keywords. Today
+  // `keyword-coverage` is warn-only, so nothing re-prompts on it — but the
+  // moment it is promoted to an error (the whole point of a coverage gate), a
+  // low ratio would re-prompt the model to work in the very keywords we just
+  // told it not to claim. Keeping the lists separate here is what makes that
+  // promotion safe. They are reported either way, never gated on.
   const reportable = [...inputs.selectedKeywords, ...adjacent];
   let violations: string[] = [];
   let best: { latex: string; lint: LintReport } | undefined;
@@ -219,6 +228,7 @@ export async function tailorFromCorpus(
     report: {
       selectedKeywords: inputs.selectedKeywords,
       adjacentKeywords: adjacent,
+      reportKeywords: reportable,
       attempts,
       lint: chosen.lint,
       // Read off the document we are actually returning, not the one the model

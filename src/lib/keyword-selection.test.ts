@@ -126,7 +126,7 @@ describe('buildPickerGroups', () => {
     expect(row.kind === 'orGroup' && row.satisfied).toBe(false);
   });
 
-  it('sorts singles by importance and omits an empty bucket', () => {
+  it('preserves the importance order it was handed, and omits an empty bucket', () => {
     const keywords = [
       kw('redis', 'strong', { importance: 3 }),
       kw('java', 'strong', { importance: 10 }),

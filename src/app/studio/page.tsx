@@ -478,8 +478,9 @@ export default function StudioPage() {
 
           {staleGrades && (
             <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              Role family changed since these were graded — re-extract to re-check them against the
-              bullets a {roleFamily || 'generalist'} résumé would actually use.
+              Role family changed since these were graded — re-extract before generating, so they
+              are checked against the bullets a {roleFamily || 'generalist'} résumé would actually
+              use.
             </p>
           )}
 
@@ -503,13 +504,19 @@ export default function StudioPage() {
             <button
               type="button"
               className={primaryBtn}
-              disabled={tailor.isPending || jobTitle.trim() === '' || !hasCorpus}
+              disabled={tailor.isPending || jobTitle.trim() === '' || !hasCorpus || staleGrades}
               onClick={onGenerate}
             >
               {tailor.isPending ? 'Tailoring your résumé…' : '✦ Generate résumé'}
             </button>
             {!hasCorpus && (
               <span className="text-muted text-xs">Upload at least one résumé first.</span>
+            )}
+            {staleGrades && (
+              <span className="text-xs text-amber-700 dark:text-amber-400">
+                Re-extract keywords first — the role family changed, so the evidence behind them was
+                measured against a different set of bullets.
+              </span>
             )}
             {selected.size > 0 && !tailor.isPending && (
               <span className="text-muted text-xs">
@@ -559,10 +566,7 @@ export default function StudioPage() {
               {tailor.data?.report && (
                 <TailoringReport
                   latex={latex}
-                  keywords={[
-                    ...tailor.data.report.selectedKeywords,
-                    ...tailor.data.report.adjacentKeywords,
-                  ]}
+                  keywords={tailor.data.report.reportKeywords}
                   masterSkills={tailor.data.report.masterSkills}
                 />
               )}

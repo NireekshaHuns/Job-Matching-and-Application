@@ -114,10 +114,16 @@ describe('adjacent-only keywords', () => {
       chat,
       { maxAttempts: 1 },
     );
+    // Assert on the coverage data itself, not just the message: `?? ''` would
+    // also pass if no coverage violation existed at all.
+    expect(result.report.lint.keywordCoverage?.matched).toEqual(['kafka']);
+    expect(result.report.lint.keywordCoverage?.missing ?? []).not.toContain('bgp');
     const coverageMsg = result.report.lint.violations.find((v) => v.rule === 'keyword-coverage');
     expect(coverageMsg?.message ?? '').not.toContain('bgp');
     expect(result.report.adjacentKeywords).toEqual(['bgp']);
+    // Still reported, so you can see what became of it.
     expect(result.report.coverage.map((c) => c.keyword)).toContain('bgp');
+    expect(result.report.reportKeywords).toEqual(['kafka', 'bgp']);
   });
 });
 
