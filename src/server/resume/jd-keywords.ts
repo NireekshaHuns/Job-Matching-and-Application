@@ -185,9 +185,15 @@ const rawOrGroupSchema = z.object({
   members: z.array(z.string()).catch([]),
 });
 
+/**
+ * Catch per ELEMENT, not per array. `z.array(x).catch([])` discards the whole
+ * list when a single item is malformed, so one bare string among fifty good
+ * objects — a model half-remembering the older two-array shape — would empty a
+ * call that has already been paid for.
+ */
 const analysisSchema = z.object({
-  keywords: z.array(rawKeywordSchema).catch([]),
-  orGroups: z.array(rawOrGroupSchema).catch([]),
+  keywords: z.array(rawKeywordSchema.nullable().catch(null)).catch([]),
+  orGroups: z.array(rawOrGroupSchema.nullable().catch(null)).catch([]),
   // Legacy `{tech, soft}` shape — see `upgradeLegacyShape`.
   tech: z.array(z.string()).catch([]),
   soft: z.array(z.string()).catch([]),
@@ -220,10 +226,24 @@ const MAX_OR_GROUPS = 8;
  * prompt already forbids it; this is the cheap deterministic backstop, and it
  * is why "book clubs" never has to be out-ranked — it never appears.
  */
-// The `s?` matters: `\bbook club\b` does not match "book clubs", which is how
-// a posting actually words it.
-const NOISE_RE =
-  /\b(401k|equity|pto|vacation|health insurance|dental|vision|happy hours?|book clubs?|snacks?|ping.?pong|equal opportunit|eeo|salary range|relocation|referral bonus|paid leave|parental leave)\b/i;
+/**
+ * Perk and boilerplate noise, in two kinds — because matching these as
+ * substrings is how you silently delete the most important keyword on a
+ * posting.
+ *
+ * `NOISE_WORDS` are innocuous inside a real keyword ("computer vision",
+ * "equity research", "vision transformers"), so they only count as noise when
+ * they are the ENTIRE term. `NOISE_PHRASES` are unambiguous wherever they
+ * appear. The `s?` matters: `book club` does not match "book clubs", which is
+ * how a posting actually words it.
+ */
+const NOISE_WORDS = /^(equity|vacation|dental|vision|relocation|perks?|benefits?)$/i;
+const NOISE_PHRASES =
+  /\b(401k|pto|paid time off|snacks?|health insurance|dental insurance|vision insurance|happy hours?|book clubs?|ping.?pong|equal opportunit|eeo|salary range|referral bonus|paid leave|parental leave|relocation (assistance|package)|equity (grant|compensation|package))\b/i;
+
+function isNoise(term: string): boolean {
+  return NOISE_WORDS.test(term) || NOISE_PHRASES.test(term);
+}
 
 // ---------------------------------------------------------------------------
 // Importance
@@ -276,12 +296,25 @@ export function countRepetitions(
   term: string,
   aliases: readonly string[],
 ): number {
-  let total = 0;
-  for (const needle of [term, ...aliases]) {
-    if (!needle) continue;
-    total += haystack.match(keywordMatcher(needle, { global: true }))?.length ?? 0;
+  // Longest needle first, and each match claims its span, so a phrase and an
+  // alias nested inside it count once. The prompt deliberately asks for umbrella
+  // and implementation aliases ("cloud network infrastructure" → "cloud
+  // networking"), so overlapping needles are the normal case: counting both
+  // would hand a keyword mentioned once the repetition bonus for two.
+  const needles = [...new Set([term, ...aliases])]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const claimed: [number, number][] = [];
+
+  for (const needle of needles) {
+    for (const m of haystack.matchAll(keywordMatcher(needle, { global: true }))) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (claimed.some(([s, e]) => start < e && end > s)) continue;
+      claimed.push([start, end]);
+    }
   }
-  return total;
+  return claimed.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,9 +327,7 @@ function normalizeTerm(s: string): string {
 
 /** A usable keyword: non-empty, not absurdly long, carries an alphanumeric, not noise. */
 function isUsableTerm(term: string): boolean {
-  return (
-    term.length > 0 && term.length <= MAX_TERM_LEN && /[a-z0-9]/.test(term) && !NOISE_RE.test(term)
-  );
+  return term.length > 0 && term.length <= MAX_TERM_LEN && /[a-z0-9]/.test(term) && !isNoise(term);
 }
 
 function normalizeAliases(aliases: readonly string[], term: string): string[] {
@@ -313,6 +344,11 @@ function normalizeAliases(aliases: readonly string[], term: string): string[] {
 }
 
 type RawKeyword = z.infer<typeof rawKeywordSchema>;
+
+/** Drop the nulls left by the per-element `.catch(null)` above. */
+function present<T>(items: readonly (T | null)[]): T[] {
+  return items.filter((i): i is T => i !== null);
+}
 
 /**
  * A model that has seen far more of the old two-array shape than of this one
@@ -373,18 +409,21 @@ function dedupe(raw: readonly RawKeyword[]): Deduped[] {
  */
 function applyCaps(sorted: readonly JdKeyword[]): { kept: JdKeyword[]; dropped: number } {
   const kept: JdKeyword[] = [];
-  const perSection = new Map<JdSection, number>();
+  // Keyed by section AND bucket: a shared counter lets six technical "nice to
+  // have" items starve every behavioural one, which is not what the cap is for.
+  const perSection = new Map<string, number>();
   const perBucket = new Map<KeywordBucket, number>();
   const bucketCap = { technical: MAX_TECHNICAL, soft: MAX_SOFT } as const;
 
   for (const kw of sorted) {
     const sectionCap = SECTION_CAPS[kw.section];
-    const sectionUsed = perSection.get(kw.section) ?? 0;
+    const sectionKey = `${kw.section}|${kw.bucket}`;
+    const sectionUsed = perSection.get(sectionKey) ?? 0;
     if (sectionCap !== undefined && sectionUsed >= sectionCap) continue;
     const bucketUsed = perBucket.get(kw.bucket) ?? 0;
     if (bucketUsed >= bucketCap[kw.bucket]) continue;
 
-    perSection.set(kw.section, sectionUsed + 1);
+    perSection.set(sectionKey, sectionUsed + 1);
     perBucket.set(kw.bucket, bucketUsed + 1);
     kept.push(kw);
   }
@@ -405,6 +444,12 @@ function buildOrGroups(
   const byTerm = new Map(keywords.map((k) => [k.term, k]));
   const out: JdOrGroup[] = [];
 
+  // A term belongs to at most one group. Without this, a model emitting two
+  // overlapping groups ("Python, Java or Go" and "Python or Ruby") leaves the
+  // shared member in both `members` lists while its `orGroupId` points at only
+  // the last — and the picker then renders it twice.
+  const claimed = new Set<string>();
+
   for (const raw of rawGroups) {
     const label = raw.label.trim();
     if (!label || out.length >= MAX_OR_GROUPS) continue;
@@ -412,9 +457,10 @@ function buildOrGroups(
     const members: string[] = [];
     for (const member of raw.members) {
       const term = normalizeTerm(member);
-      if (byTerm.has(term) && !members.includes(term)) members.push(term);
+      if (byTerm.has(term) && !claimed.has(term) && !members.includes(term)) members.push(term);
     }
     if (members.length < 2) continue;
+    for (const term of members) claimed.add(term);
 
     const id = `or-${out.length + 1}`;
     out.push({ id, label, members });
@@ -445,11 +491,21 @@ export function parseJdKeywordAnalysis(
   if (!match) throw new Error('No JSON object found in JD-keyword output');
   const parsed = analysisSchema.parse(JSON.parse(match[0]));
 
-  const rawKeywords = parsed.keywords.length > 0 ? parsed.keywords : upgradeLegacyShape(parsed);
+  const supplied = present(parsed.keywords);
+  const rawKeywords = supplied.length > 0 ? supplied : upgradeLegacyShape(parsed);
   const deduped = dedupe(rawKeywords);
+  // Everything `dedupe` threw away — noise, blanks, over-long terms, duplicates.
+  // Folded into `dropped` so the picker's "not shown" count is the whole truth
+  // rather than just the part the caps are responsible for.
+  const discarded = rawKeywords.length - deduped.length;
 
-  const haystack = stripForMatch(ctx.jdText).toLowerCase();
-  const title = stripForMatch(ctx.jobTitle ?? '').toLowerCase();
+  // Collapse ALL whitespace, not just spaces and tabs: a pasted posting wraps
+  // mid-phrase, and `stripForMatch` leaves newlines in place, so "distributed\n
+  // systems" would score zero repetitions for exactly the multi-word keywords
+  // this prompt was rewritten to mine.
+  const flatten = (text: string) => stripForMatch(text).replace(/\s+/g, ' ').toLowerCase();
+  const haystack = flatten(ctx.jdText);
+  const title = flatten(ctx.jobTitle ?? '');
 
   const weighted: JdKeyword[] = deduped.map((k) => {
     const repetitions = countRepetitions(haystack, k.term, k.aliases);
@@ -475,8 +531,8 @@ export function parseJdKeywordAnalysis(
   );
 
   const { kept, dropped } = applyCaps(weighted);
-  const orGroups = buildOrGroups(kept, parsed.orGroups);
-  return { keywords: kept, orGroups, dropped };
+  const orGroups = buildOrGroups(kept, present(parsed.orGroups));
+  return { keywords: kept, orGroups, dropped: dropped + discarded };
 }
 
 export async function extractJdKeywords(
