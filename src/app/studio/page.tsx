@@ -550,6 +550,23 @@ export default function StudioPage() {
             </div>
           )}
 
+          {/* What the plan check did and did not fix. Repairs are silent by
+              design (re-prompting for a dropped off-pool course would spend an
+              API call on arithmetic), so this is the only place they surface —
+              and a résumé that quietly lost a course is worth knowing about. */}
+          {tailor.data?.report && tailor.data.report.planIssues.length > 0 && (
+            <details className="border-border text-muted mt-2 rounded-lg border px-3 py-2 text-xs">
+              <summary className="cursor-pointer">
+                Build notes ({tailor.data.report.planIssues.length})
+              </summary>
+              <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
+                {tailor.data.report.planIssues.map((issue) => (
+                  <li key={`${issue.rule}:${issue.message}`}>{issue.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+
           {tailor.isError && <ErrorState message={tailor.error.message} />}
 
           {latex != null && (
