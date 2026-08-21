@@ -2,9 +2,10 @@
 
 /**
  * Settings — the fixed inputs the tailoring engine uses: the candidate profile
- * (identity + real metrics/stack), the skills superset, and the base résumé
- * LaTeX format. Résumés + bullets are uploaded in the Studio, not hand-entered
- * here. Plain Tailwind to match the current app.
+ * (identity + real metrics/stack + coursework pool) and the skills superset.
+ * Stored base résumés are reference/corpus material only; tailoring renders from
+ * the built-in template. Résumés + bullets are uploaded in the Studio, not
+ * hand-entered here. Plain Tailwind to match the current app.
  */
 import { useState } from 'react';
 import { Chip } from '@/components/chip';
@@ -296,10 +297,11 @@ function BaseResumesSection({ resumes }: { resumes: BaseResume[] }) {
     <section className="border-border rounded-lg border p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Base résumé format</h2>
+          <h2 className="text-lg font-semibold">Base résumé (reference)</h2>
           <p className="text-muted text-sm">
-            Optional LaTeX template. When set, the Studio uses it as the exact format to fill; leave
-            empty to use the built-in one-page template.
+            Kept for your reference and as corpus material. Tailoring no longer renders from it: the
+            Studio fills the built-in one-page template, because an arbitrary LaTeX document has no
+            slots to fill.
           </p>
         </div>
         <button type="button" className={btnCls} onClick={() => setAdding((v) => !v)}>
@@ -310,7 +312,7 @@ function BaseResumesSection({ resumes }: { resumes: BaseResume[] }) {
       {adding && <BaseResumeEditor onDone={() => setAdding(false)} />}
 
       {resumes.length === 0 && !adding ? (
-        <EmptyState title="No base résumé yet. Add your LaTeX template to enable tailoring." />
+        <EmptyState title="No base résumé stored. Tailoring works without one." />
       ) : (
         <ul className="flex flex-col gap-2">
           {resumes.map((r) => (

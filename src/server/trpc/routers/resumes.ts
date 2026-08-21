@@ -379,9 +379,12 @@ export const resumesRouter = createTRPCRouter({
   /**
    * Generate a résumé from the corpus for a pasted JD + the user-selected
    * keywords: retrieve the most relevant real bullets (semantic + keyword),
-   * then synthesize an aggressive-but-coherent one-page LaTeX résumé. Uses the
-   * base résumé as the format when one exists, else a default template. Without
-   * an OpenAI key it returns just the template (`source: 'base'`).
+   * then ask the model for a PLAN and render the document ourselves.
+   *
+   * The stored base résumé deliberately no longer drives this (#190): an
+   * arbitrary LaTeX document has no slots to render into, so the format is the
+   * fixed template and the base row is reference material the owner keeps.
+   * Without an OpenAI key the untailored template comes back (`source: 'base'`).
    */
   tailorFromCorpus: publicProcedure
     .input(tailorFromCorpusInput)
@@ -395,14 +398,8 @@ export const resumesRouter = createTRPCRouter({
       );
       const roleFamily = input.roleFamily ?? null;
 
-      const [[profileRow], [base], bulletRows, skillRows] = await Promise.all([
+      const [[profileRow], bulletRows, skillRows] = await Promise.all([
         ctx.db.select().from(resumeProfile).orderBy(asc(resumeProfile.id)).limit(1),
-        ctx.db
-          .select({ content: resumes.content })
-          .from(resumes)
-          .where(eq(resumes.kind, 'base'))
-          .orderBy(asc(resumes.id))
-          .limit(1),
         ctx.db
           .select({
             id: resumeBullets.id,
@@ -419,7 +416,6 @@ export const resumesRouter = createTRPCRouter({
       ]);
 
       const profile = withProfileDefaults(profileRow ?? null);
-      const baseTemplate = base?.content?.trim() ? base.content : buildDefaultTemplate(profile);
       const corpusBullets: CorpusBullet[] = bulletRows.map((r) => ({
         ...r,
         embedding: r.embedding ?? null,
@@ -458,7 +454,6 @@ export const resumesRouter = createTRPCRouter({
       if (chat) {
         try {
           const result = await tailorFromCorpus(
-            baseTemplate,
             { title: input.jobTitle, company: input.company },
             {
               selectedKeywords: selected,
@@ -482,7 +477,7 @@ export const resumesRouter = createTRPCRouter({
       }
       return {
         source: 'base' as const,
-        latex: baseTemplate,
+        latex: buildDefaultTemplate(profile),
         report: null,
         usedBullets: ranked.length,
       };
