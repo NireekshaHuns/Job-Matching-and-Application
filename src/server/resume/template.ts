@@ -42,6 +42,29 @@ export function latexEscape(s: string): string {
 }
 
 /**
+ * Reduce a model-supplied string to the words a reader will actually see.
+ *
+ * Keeps the words inside the common emphasis commands, drops every other command
+ * WITH its argument (dropping the command alone leaves the argument as prose, so
+ * `\usepackage{xcolor} Built services` would render as the literal words "xcolor
+ * Built services"), then collapses whitespace.
+ *
+ * Lives here, one level below both users, because the renderer escapes this text
+ * to emit it while the plan checker measures it against the footprint band — and
+ * a second definition of "what the reader sees" would let the band drift away
+ * from the document it is supposed to describe.
+ */
+export function stripPlanMarkup(s: string): string {
+  return s
+    .replace(/\\(?:textbf|textit|emph|underline|texttt|textsc)\s*\{([^{}]*)\}/g, '$1')
+    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?\s*\{[^{}]*\}/g, ' ')
+    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
+    .replace(/[{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Sanitize a URL for `\href{...}`: strip braces/backslashes/whitespace that would
  * break LaTeX. Query strings (& = ? #) are kept — they're fine inside `\href`.
  */

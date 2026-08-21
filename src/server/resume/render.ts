@@ -25,6 +25,7 @@ import {
   RESUME_ROLES,
   SKILL_CATEGORIES,
   sanitizeUrl,
+  stripPlanMarkup,
 } from './template';
 
 /**
@@ -47,19 +48,7 @@ import {
  * pdfTeX would otherwise render as "â€”".
  */
 export function sanitizePlanText(s: string): string {
-  const stripped = s
-    // Keep the words inside emphasis commands — those carry meaning.
-    .replace(/\\(?:textbf|textit|emph|underline|texttt|textsc)\s*\{([^{}]*)\}/g, '$1')
-    // Drop every other command WITH its argument. Dropping the command alone
-    // leaves the argument as prose, so "\\usepackage{xcolor} Built services"
-    // would render as the literal words "xcolor Built services".
-    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?\s*\{[^{}]*\}/g, ' ')
-    // Then any bare command and brace structure left behind.
-    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
-    .replace(/[{}]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return latexEscape(stripped);
+  return latexEscape(stripPlanMarkup(s));
 }
 
 /**
