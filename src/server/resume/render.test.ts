@@ -238,9 +238,11 @@ describe('buildDefaultTemplate', () => {
 
   it('ships exactly the one-page bullet budget', () => {
     const bullets = tex.match(/\\item /g) ?? [];
-    expect(TOTAL_BULLET_BUDGET).toBe(11);
+    // Ten, verified by `pnpm verify:latex`: eleven two-line bullets run to a
+    // second page whatever their length.
+    expect(TOTAL_BULLET_BUDGET).toBe(10);
     expect(bullets).toHaveLength(TOTAL_BULLET_BUDGET);
-    expect(BULLET_BUDGET.experience).toEqual([4, 5]);
+    expect(BULLET_BUDGET.experience).toEqual([4, 4]);
     expect(BULLET_BUDGET.projects).toBe(2);
   });
 
@@ -272,7 +274,7 @@ describe('placeholderPlan', () => {
     const p = placeholderPlan(profile);
     expect(p.roles.map((r) => [r.roleId, r.bullets.length])).toEqual([
       ['riskcast', 4],
-      ['lseg', 5],
+      ['lseg', 4],
     ]);
   });
 });

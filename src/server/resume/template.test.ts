@@ -85,7 +85,7 @@ describe('RESUME_ROLES', () => {
   it('keeps the employers, dates and per-role bullet budgets fixed', () => {
     expect(RESUME_ROLES.map((r) => [r.employer, r.dates, r.bullets])).toEqual([
       ['Riskcast Solutions', 'Jul 2025 -- Jan 2026', 4],
-      ['London Stock Exchange Group (LSEG)', 'Jan 2022 -- Aug 2024', 5],
+      ['London Stock Exchange Group (LSEG)', 'Jan 2022 -- Aug 2024', 4],
     ]);
   });
 });

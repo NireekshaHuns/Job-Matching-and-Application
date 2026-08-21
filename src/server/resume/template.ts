@@ -160,7 +160,13 @@ export const RESUME_ROLES = [
     employer: 'London Stock Exchange Group (LSEG)',
     location: 'Bangalore, India',
     dates: 'Jan 2022 -- Aug 2024',
-    bullets: 5,
+    // Four, not five. Measured with `pnpm verify:latex`: ten bullets of the
+    // owner's real length fit on one page at up to 220 characters each, and
+    // ELEVEN spill onto a second page even at 158. The old budget of five was
+    // only ever compile-checked against 58-character placeholders, which fit
+    // on one line and hid the problem. This also matches the owner's own
+    // résumé, which has four bullets here.
+    bullets: 4,
   },
 ] as const;
 
