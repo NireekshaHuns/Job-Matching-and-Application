@@ -32,7 +32,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DEFAULT_PROFILE_FACTS } from '@/server/resume/profile';
-import { buildDefaultTemplate } from '@/server/resume/template';
+import { buildDefaultTemplate } from '@/server/resume/render';
 
 const execFileAsync = promisify(execFile);
 

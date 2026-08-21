@@ -3,6 +3,7 @@
  * truth for BOTH the tailoring LLM prompt and the deterministic linter
  * (`quality.ts`), so what we ask for and what we check stay in sync.
  */
+import { COURSEWORK_SLOTS, TOTAL_BULLET_BUDGET } from './template';
 
 /**
  * Target resume length in words.
@@ -17,15 +18,44 @@ export const WORD_MIN = 380;
 export const WORD_MAX = 500;
 
 /**
- * Hard bullet ceiling for one page. Word count alone does not control page
- * count — bullets do, because each one costs a `\item` plus its own leading and
- * almost always wraps to 2–3 lines. 13 leaves a little slack over the owner's
- * 11 without spilling over.
+ * Hard bullet ceiling for one page.
+ *
+ * Word count alone does not control page count — bullets do, because each one
+ * costs a `\item` plus its own leading and, at the two-line footprint below,
+ * always wraps. Derived from the layout rather than guessed at: `pnpm
+ * verify:latex` shows the budget fits at up to 220 characters a bullet while one
+ * more spills onto a second page at any length. The old value of 13 was slack
+ * over a budget that was itself too high.
  */
-export const MAX_BULLETS = 13;
+export const MAX_BULLETS = TOTAL_BULLET_BUDGET;
 
 /** Fraction of bullets that should contain a concrete metric. */
 export const MIN_METRIC_RATIO = 0.5;
+
+/**
+ * "Two full lines, never a third", as a character band.
+ *
+ * MEASURED, not guessed — this file already records the cost of guessing once
+ * (see `WORD_MIN` above, where a band taken from a different layout made the
+ * linter report a too-long draft as too short). Two independent readings agree:
+ *
+ *  - the owner's real bullets run 147-184 characters (mean 158) for experience
+ *    and 111-151 for the project, and a rejected generation that spilled onto a
+ *    third line ran 230-247;
+ *  - `pnpm verify:latex --measure` measures the itemize `\linewidth` at
+ *    518.77pt and the average glyph of technical prose at 4.636pt, i.e. **111
+ *    characters per line**, so two lines is 222. Character count tracks measured
+ *    width to within 2.1% over that sample, which is why a plain count is a good
+ *    enough proxy and no per-character width table is needed.
+ *
+ * So the owner's real bullets sit at 1.3-1.7 lines and the rejected generation at
+ * 2.1-2.2 — which is what "spilled onto a third line" actually looked like.
+ *
+ * The project's bullets get a lower floor: the owner's own are shorter, and a
+ * project entry is not held to the same footprint as a job.
+ */
+export const BULLET_CHARS = { min: 178, max: 222 } as const;
+export const PROJECT_BULLET_CHARS = { min: 120, max: 222 } as const;
 
 /** Builder-voice verbs bullets should start with (non-exhaustive allowlist). */
 export const STRONG_VERBS = [
@@ -171,7 +201,7 @@ export const OWNER_TAILORING_METHOD = [
   '',
   'Step 3 — Write the bullets.',
   '- Google XYZ: "Accomplished X, as measured by Y, by doing Z." Every bullet gets a result, a real number where one exists, and the how.',
-  '- Fuller two-line footprint: each bullet should fill about two full lines. Do not let a bullet trail off with a near-empty second line, and do not spill onto a third. Add substance to fill; do not pad with filler.',
+  `- Fuller two-line footprint: each bullet should fill about two full lines — roughly ${BULLET_CHARS.min}-${BULLET_CHARS.max} characters. Do not let a bullet trail off with a near-empty second line, and do not spill onto a third. Add substance to fill; do not pad with filler.`,
   '- Open with strong ownership verbs: Built, Led, Architected, Engineered, Shipped, Scaled, Reduced, Automated, Delivered, Mentored, Secured, Migrated, Owned, Established, Drove.',
   '- Never use bystander verbs: "Designed" as a standalone opener, "helped", "assisted with", "worked on", "contributed to", "responsible for". Take credit as the builder.',
   '- Show hard concepts in the bullets, not only in the skills list. If the JD wants system design or CS fundamentals, demonstrate them — "applying system design and caching fundamentals to cut latency", "building distributed, event-driven pipelines applying concurrency fundamentals".',
@@ -190,7 +220,7 @@ export const OWNER_TAILORING_METHOD = [
   '',
   'Step 5 — Projects and other sections.',
   '- Any project should read like real, outcome-driven engineering with metrics and users, not a class assignment.',
-  '- You may REORDER an existing coursework/certs line to surface what this JD values (algorithms and systems courses first for a fundamentals-heavy role), but never add, remove or reword a course, certification, degree or institution. Education is a fixed fact, like employers and dates.',
+  `- Choose the coursework line from the COURSEWORK POOL you are given: SELECT ${COURSEWORK_SLOTS.min}-${COURSEWORK_SLOTS.max} courses and ORDER them so the ones this JD values come first. Use each course's exact wording from the pool. NEVER invent, rename, reword, or add a course that is not in the pool. The degree, institution and certification are fixed facts, like employers and dates.`,
   '',
   'Formatting: job title first, then employer; bold employer names and key terms. Consistent end-of-line punctuation. One page, no wasted whitespace, no objective/summary block unless asked. Preserve all existing hyperlinks. Keep the same clean font and template as the current résumé.',
 ].join('\n');

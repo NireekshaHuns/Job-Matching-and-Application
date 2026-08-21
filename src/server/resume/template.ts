@@ -4,9 +4,12 @@
  * under them, tight margins, no page numbers, and the section order
  * EDUCATION → EXPERIENCE → PROJECTS → TECHNICAL SKILLS.
  *
- * The tailoring model is handed this document and rewrites only the bullet
- * bodies, the project line and the skills values. Everything else — preamble,
- * header, employers, titles, dates, degree — is a fixed anchor.
+ * This module holds only what is FIXED: the preamble, the header, the education
+ * block, the role anchors and the one-page budgets. Turning a generated plan
+ * into a document lives in `render.ts`, which is the single function allowed to
+ * emit résumé LaTeX — so preamble drift, invented sections, reordered employers
+ * and fabricated degrees are not violations to be linted for, they are things
+ * the model has no field to express.
  *
  * Pure: the header and education lines are built from the candidate profile,
  * no DB or LLM here.
@@ -36,6 +39,29 @@ export function latexEscape(s: string): string {
           ? '\\textasciicircum{}'
           : `\\${m}`,
   );
+}
+
+/**
+ * Reduce a model-supplied string to the words a reader will actually see.
+ *
+ * Keeps the words inside the common emphasis commands, drops every other command
+ * WITH its argument (dropping the command alone leaves the argument as prose, so
+ * `\usepackage{xcolor} Built services` would render as the literal words "xcolor
+ * Built services"), then collapses whitespace.
+ *
+ * Lives here, one level below both users, because the renderer escapes this text
+ * to emit it while the plan checker measures it against the footprint band — and
+ * a second definition of "what the reader sees" would let the band drift away
+ * from the document it is supposed to describe.
+ */
+export function stripPlanMarkup(s: string): string {
+  return s
+    .replace(/\\(?:textbf|textit|emph|underline|texttt|textsc)\s*\{([^{}]*)\}/g, '$1')
+    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?\s*\{[^{}]*\}/g, ' ')
+    .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, ' ')
+    .replace(/[{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -91,7 +117,7 @@ export function buildHeader(p: ResumeProfileFacts): string {
  * each heading; the hyphenation penalties and `\emergencystretch` keep bullets
  * from breaking words across lines.
  */
-const PREAMBLE = [
+export const PREAMBLE = [
   '\\documentclass[11pt]{article}',
   '',
   '\\usepackage[top=0.5in, bottom=0.5in, left=0.6in, right=0.6in]{geometry}',
@@ -134,9 +160,17 @@ const PREAMBLE = [
 /**
  * Fixed employment history. Employers, titles, dates and locations are facts the
  * model must not touch; only the bullets underneath are rewritten per job.
+ *
+ * Each role carries a stable `id`, and that slug — not an array index, not the
+ * employer name — is how a generated plan addresses its bullets. An index
+ * invites an off-by-one that silently files Riskcast's bullets under LSEG while
+ * the JSON still looks correct; the employer name invites paraphrase ("LSEG",
+ * "London Stock Exchange Group") and therefore a fuzzy matcher, which is the
+ * same failure with more code. An unrecognised slug is unambiguously an error.
  */
-const EXPERIENCE = [
+export const RESUME_ROLES = [
   {
+    id: 'riskcast',
     title: 'Software Engineer',
     employer: 'Riskcast Solutions',
     location: 'New York, US',
@@ -144,64 +178,72 @@ const EXPERIENCE = [
     bullets: 4,
   },
   {
+    id: 'lseg',
     title: 'Software Engineer',
     employer: 'London Stock Exchange Group (LSEG)',
     location: 'Bangalore, India',
     dates: 'Jan 2022 -- Aug 2024',
-    bullets: 5,
+    // Four, not five. Measured with `pnpm verify:latex`: ten bullets of the
+    // owner's real length fit on one page at up to 220 characters each, and
+    // ELEVEN spill onto a second page even at 158. The old budget of five was
+    // only ever compile-checked against 58-character placeholders, which fit
+    // on one line and hid the problem. This also matches the owner's own
+    // résumé, which has four bullets here.
+    bullets: 4,
   },
 ] as const;
 
+export type RoleId = (typeof RESUME_ROLES)[number]['id'];
+
 /** Bullets in the owner's own résumé, per section — the one-page budget. */
 export const BULLET_BUDGET = {
-  experience: EXPERIENCE.map((e) => e.bullets),
+  experience: RESUME_ROLES.map((e) => e.bullets),
   projects: 2,
 } as const;
+
+/**
+ * How many courses the EDUCATION block holds. A property of the layout (one
+ * line) rather than of the owner's data, so it lives here and not in the DB.
+ */
+export const COURSEWORK_SLOTS = { min: 3, max: 4 } as const;
 
 /** Total bullets a one-page résumé in this template holds. */
 export const TOTAL_BULLET_BUDGET =
   BULLET_BUDGET.experience.reduce((a, b) => a + b, 0) + BULLET_BUDGET.projects;
 
-/** The six labelled skill rows, in the owner's order. */
+/**
+ * The six labelled skill rows, in the owner's order — the fallback when nothing
+ * has mirrored the posting's own category language yet.
+ *
+ * PLAIN TEXT, not pre-escaped LaTeX: the renderer escapes every label it is
+ * given, so an `&` stored as `\&` here would come out as `\textbackslash{}\&`.
+ */
 export const SKILL_CATEGORIES = [
   'Languages',
-  'Web \\& Mobile',
-  'Distributed \\& Backend',
-  'AI \\& Information Retrieval',
-  'Data \\& Storage',
-  'Cloud, Security \\& DevOps',
+  'Web & Mobile',
+  'Distributed & Backend',
+  'AI & Information Retrieval',
+  'Data & Storage',
+  'Cloud, Security & DevOps',
 ] as const;
 
-function placeholderItems(count: number): string[] {
-  return Array.from(
-    { length: count },
-    () => '    \\item Placeholder accomplishment bullet tailored to the target job',
-  );
-}
-
-function experienceBlock(): string[] {
-  const out: string[] = [];
-  for (const [i, role] of EXPERIENCE.entries()) {
-    out.push(
-      `\\textbf{${role.title}} \\hfill ${role.dates} \\\\`,
-      `\\textit{${role.employer}} --- ${role.location}`,
-      '\\begin{itemize}',
-      ...placeholderItems(role.bullets),
-      '\\end{itemize}',
-    );
-    if (i < EXPERIENCE.length - 1) out.push('', '\\vspace{2pt}', '');
-  }
-  return out;
-}
-
-function educationBlock(p: ResumeProfileFacts): string[] {
+/**
+ * The EDUCATION block. Degree, institution and certification are fixed facts;
+ * the coursework line is the one thing that changes per job, and it may only
+ * ever contain courses the profile's pool already lists.
+ */
+export function buildEducationBlock(
+  p: ResumeProfileFacts,
+  coursework: readonly string[],
+): string[] {
   const grad = latexEscape((p.gradDate ?? 'Dec 2026').trim());
+  const courses = coursework.map((c) => latexEscape(c)).join(', ');
   const lines = [
     '\\section*{EDUCATION}',
     '',
     `\\textbf{Master of Science in Computer Software Engineering Systems} \\hfill ${grad} \\\\`,
     'Northeastern University --- Boston, MA\\\\',
-    '\\textbf{Coursework:} Data Structures \\& Algorithms, Web Development and Design, Distributed Systems, Database Design',
+    `\\textbf{Coursework:} ${courses}`,
   ];
   if (p.certText?.trim()) {
     const cert = latexEscape(p.certText.trim());
@@ -212,58 +254,4 @@ function educationBlock(p: ResumeProfileFacts): string[] {
     );
   }
   return lines;
-}
-
-/**
- * The full, compilable template. EXPERIENCE / PROJECTS / TECHNICAL SKILLS bodies
- * carry placeholders the tailoring model replaces per JD; the header, employers,
- * dates and education are anchors it must preserve verbatim.
- */
-export function buildDefaultTemplate(p: ResumeProfileFacts): string {
-  const projectUrl = p.githubUrl ? sanitizeUrl(p.githubUrl) : '';
-  const projectTitle = projectUrl
-    ? `\\textbf{\\href{${projectUrl}}{Project Name}}`
-    : '\\textbf{Project Name}';
-
-  return [
-    PREAMBLE,
-    '',
-    '\\begin{document}',
-    '',
-    buildHeader(p),
-    '',
-    '\\vspace{-4pt}',
-    '',
-    '',
-    ...educationBlock(p),
-    '',
-    '\\vspace{2pt}',
-    '',
-    '\\section*{EXPERIENCE}',
-    '',
-    ...experienceBlock(),
-    '',
-    '\\section*{PROJECTS}',
-    '',
-    `${projectTitle} \\textbar\\ `,
-    '\\textit{Tech stack relevant to the target job}',
-    '\\begin{itemize}',
-    ...placeholderItems(BULLET_BUDGET.projects),
-    '\\end{itemize}',
-    '',
-    '\\vspace{2pt}',
-    '',
-    '\\section*{TECHNICAL SKILLS}',
-    // `\\` separates the rows; the LAST row must not have one, or LaTeX raises
-    // "There's no line here to end" against \end{document}.
-    ...SKILL_CATEGORIES.map(
-      (label, i) =>
-        `\\textbf{${label}:} Relevant items for the target job${
-          i < SKILL_CATEGORIES.length - 1 ? '\\\\' : ''
-        }`,
-    ),
-    '',
-    '\\end{document}',
-    '',
-  ].join('\n');
 }

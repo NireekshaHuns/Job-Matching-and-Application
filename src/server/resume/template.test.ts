@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PROFILE_FACTS } from './profile';
 import {
-  BULLET_BUDGET,
-  SKILL_CATEGORIES,
-  TOTAL_BULLET_BUDGET,
-  buildDefaultTemplate,
+  buildEducationBlock,
   buildHeader,
   latexEscape,
   normalizeDashes,
+  RESUME_ROLES,
   sanitizeUrl,
 } from './template';
 
@@ -76,66 +74,38 @@ describe('buildHeader', () => {
   });
 });
 
-describe('buildDefaultTemplate', () => {
-  const tex = buildDefaultTemplate(DEFAULT_PROFILE_FACTS);
-
-  it('uses the owner’s preamble', () => {
-    expect(tex).toContain('\\documentclass[11pt]{article}');
-    for (const pkg of [
-      'sourcesanspro',
-      'titlesec',
-      'ragged2e',
-      'microtype',
-      'enumitem',
-      'setspace',
-    ]) {
-      expect(tex).toContain(`{${pkg}}`);
-    }
-    expect(tex).toContain('\\hyphenpenalty=10000');
-    expect(tex).toContain('\\pagenumbering{gobble}');
-    // The rule under each heading comes from titlesec, not a custom macro.
-    expect(tex).toContain('\\rule{\\linewidth}{0.5pt}');
-    expect(tex).not.toContain('\\resumesection');
+describe('RESUME_ROLES', () => {
+  it('gives every role a stable slug', () => {
+    // The slug is how a generated plan addresses its bullets. Renaming one
+    // silently reassigns bullets to the wrong employer, so it is pinned here.
+    expect(RESUME_ROLES.map((r) => r.id)).toEqual(['riskcast', 'lseg']);
+    expect(new Set(RESUME_ROLES.map((r) => r.id)).size).toBe(RESUME_ROLES.length);
   });
 
-  it('keeps the section order EDUCATION → EXPERIENCE → PROJECTS → TECHNICAL SKILLS', () => {
-    const order = [...tex.matchAll(/\\section\*\{([A-Z ]+)\}/g)].map((m) => m[1]);
-    expect(order).toEqual(['EDUCATION', 'EXPERIENCE', 'PROJECTS', 'TECHNICAL SKILLS']);
+  it('keeps the employers, dates and per-role bullet budgets fixed', () => {
+    expect(RESUME_ROLES.map((r) => [r.employer, r.dates, r.bullets])).toEqual([
+      ['Riskcast Solutions', 'Jul 2025 -- Jan 2026', 4],
+      ['London Stock Exchange Group (LSEG)', 'Jan 2022 -- Aug 2024', 4],
+    ]);
   });
+});
 
-  it('anchors the education, employers and dates', () => {
-    expect(tex).toContain('Master of Science in Computer Software Engineering Systems');
-    expect(tex).toContain('Northeastern University');
-    expect(tex).toContain('\\textbf{Coursework:}');
-    expect(tex).toContain('Riskcast Solutions');
-    expect(tex).toContain('Jul 2025 -- Jan 2026');
-    expect(tex).toContain('London Stock Exchange Group (LSEG)');
-    expect(tex).toContain('Jan 2022 -- Aug 2024');
-  });
-
-  it('lays out the six labelled skill rows without a trailing line break', () => {
-    for (const label of SKILL_CATEGORIES) expect(tex).toContain(`\\textbf{${label}:}`);
-    // A `\\` on the final row would make LaTeX fail with "There's no line here
-    // to end" at \end{document}.
-    expect(tex).not.toMatch(/\\\\\s*\n\s*\n?\\end\{document\}/);
-  });
-
-  it('ships exactly the one-page bullet budget', () => {
-    const bullets = tex.match(/\\item /g) ?? [];
-    expect(TOTAL_BULLET_BUDGET).toBe(11);
-    expect(bullets).toHaveLength(TOTAL_BULLET_BUDGET);
-    expect(BULLET_BUDGET.experience).toEqual([4, 5]);
-    expect(BULLET_BUDGET.projects).toBe(2);
-  });
-
-  it('includes the certification only when the profile has one', () => {
-    expect(buildDefaultTemplate(DEFAULT_PROFILE_FACTS)).toContain('\\textbf{Certification:}');
-    expect(buildDefaultTemplate({ ...DEFAULT_PROFILE_FACTS, certText: null })).not.toContain(
-      '\\textbf{Certification:}',
+describe('buildEducationBlock', () => {
+  it('renders only the coursework it is handed, escaped', () => {
+    const block = buildEducationBlock(DEFAULT_PROFILE_FACTS, [
+      'Distributed Systems',
+      'Data Structures & Algorithms',
+    ]).join('\n');
+    expect(block).toContain(
+      '\\textbf{Coursework:} Distributed Systems, Data Structures \\& Algorithms',
     );
+    // The degree and institution are not parameterized at all.
+    expect(block).toContain('Master of Science in Computer Software Engineering Systems');
+    expect(block).toContain('Northeastern University');
   });
 
-  it('escapes a name containing LaTeX specials', () => {
-    expect(buildDefaultTemplate({ ...DEFAULT_PROFILE_FACTS, name: 'A & B' })).toContain('A \\& B');
+  it('keeps the coursework line present but empty when nothing is selected', () => {
+    const block = buildEducationBlock(DEFAULT_PROFILE_FACTS, []).join('\n');
+    expect(block).toContain('\\textbf{Coursework:}');
   });
 });

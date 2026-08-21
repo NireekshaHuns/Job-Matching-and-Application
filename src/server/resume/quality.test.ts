@@ -79,10 +79,11 @@ const SCAFFOLD = [
 
 /**
  * A whole résumé of `n` full-length bullets plus the usual scaffolding. The
- * default of 12 sits inside both the word band and the one-page bullet budget,
- * like the owner's real résumé (442 words / 11 bullets).
+ * default is the one-page bullet budget itself, so the fixture stays a passing
+ * résumé as the measured budget moves — it was pinned at 12 and started failing
+ * the moment the budget was recalibrated down to what actually fits.
  */
-function goodResume(n = 12): string {
+function goodResume(n = MAX_BULLETS): string {
   const lines: string[] = [SCAFFOLD];
   for (let i = 0; i < n; i++) lines.push(GOOD_BULLETS[i % GOOD_BULLETS.length]);
   return lines.join('\n');
@@ -94,7 +95,7 @@ describe('lintResume', () => {
     expect(report.ok).toBe(true);
     expect(report.wordCount).toBeGreaterThanOrEqual(WORD_MIN);
     expect(report.wordCount).toBeLessThanOrEqual(WORD_MAX);
-    expect(report.bulletCount).toBe(12);
+    expect(report.bulletCount).toBe(MAX_BULLETS);
   });
 
   it('flags a resume with too many bullets to fit one page', () => {

@@ -21,8 +21,15 @@ import { countByGrade, gradeKeywords, type EvidenceBullet } from '@/server/resum
 import { withProfileDefaults } from '@/server/resume/profile';
 import { stripLatex } from '@/server/resume/quality';
 import { rankCorpusBullets, type CorpusBullet } from '@/server/resume/retrieve';
-import { tailorFromCorpus, type CorpusSourceBullet } from '@/server/resume/tailor';
-import { buildDefaultTemplate } from '@/server/resume/template';
+import { resumeOutlineSchema } from '@/server/resume/plan';
+import {
+  outlineFromCorpus,
+  tailorFromCorpus,
+  type CorpusSourceBullet,
+  type CorpusTailorInputs,
+} from '@/server/resume/tailor';
+import { buildDefaultTemplate, placeholderPlan } from '@/server/resume/render';
+import type { DB } from '@/server/db';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
 /** Default models: quality tailoring on gpt-4.1, cheap structured work on mini. */
@@ -60,7 +67,8 @@ export const extractJdKeywordsInput = z.object({
   roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
 });
 
-export const tailorFromCorpusInput = z.object({
+/** Everything both stages need: the target, the keywords, the retrieval lens. */
+export const corpusTargetInput = z.object({
   jobTitle: z.string().trim().min(1).max(200),
   company: z.string().trim().max(200).default(''),
   selectedKeywords: z.array(z.string().trim().min(1)).default([]),
@@ -68,6 +76,18 @@ export const tailorFromCorpusInput = z.object({
   adjacentKeywords: z.array(z.string().trim().min(1)).default([]),
   roleFamily: z.enum(roleFamilyEnum.enumValues).nullish(),
   maxAttempts: z.number().int().min(1).max(5).optional(),
+});
+
+export const outlineFromCorpusInput = corpusTargetInput;
+
+/**
+ * Stage B takes the outline the owner APPROVED, edits included. Re-validated
+ * server-side (`checkResumePlan`) rather than trusted: the client may have
+ * changed a slot or a course, and the checker is the only thing that decides
+ * what is renderable.
+ */
+export const tailorFromCorpusInput = corpusTargetInput.extend({
+  outline: resumeOutlineSchema,
 });
 
 export const saveTailoredInput = z.object({
@@ -92,8 +112,25 @@ export const setResumeProfileInput = z.object({
   certUrl: nullableText(300),
   knownMetrics: nullableText(4000),
   stackNotes: nullableText(4000),
+  coursework: z.array(z.string().trim().min(1).max(120)).max(30).optional(),
+  projectName: nullableText(160),
+  projectUrl: nullableText(300),
 });
 type SetResumeProfileInput = z.infer<typeof setResumeProfileInput>;
+
+/** Trim, drop blanks, dedupe case-insensitively — but keep the owner's order. */
+export function normalizeCourseList(courses: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of courses) {
+    const course = c.trim().replace(/\s+/g, ' ');
+    const key = course.toLowerCase();
+    if (!course || seen.has(key)) continue;
+    seen.add(key);
+    out.push(course);
+  }
+  return out;
+}
 
 /** Normalize the profile input so every field is written (undefined → null). */
 function normalizeProfile(input: SetResumeProfileInput) {
@@ -108,6 +145,9 @@ function normalizeProfile(input: SetResumeProfileInput) {
     certUrl: input.certUrl ?? null,
     knownMetrics: input.knownMetrics ?? null,
     stackNotes: input.stackNotes ?? null,
+    coursework: normalizeCourseList(input.coursework ?? []),
+    projectName: input.projectName ?? null,
+    projectUrl: input.projectUrl ?? null,
   };
 }
 
@@ -184,6 +224,90 @@ export function normalizeSkillList(skills: string[]): string[] {
     }
   }
   return out;
+}
+
+/**
+ * Everything a generation stage needs from the database, gathered once.
+ *
+ * Both stages call this rather than one passing its material to the other: the
+ * corpus is the source of truth, and a client round-trip carrying retrieved
+ * bullets would let the approved outline be judged against material the server
+ * never chose. The cost is one embed call per stage, which is the cheapest part
+ * of the flow.
+ */
+async function gatherCorpusMaterial(
+  db: DB,
+  input: z.infer<typeof corpusTargetInput>,
+): Promise<{ inputs: CorpusTailorInputs; usedBullets: number }> {
+  const selected = normalizeSkillList(input.selectedKeywords);
+  // Disjoint even if the client sends overlap: a keyword the corpus backs is
+  // claimable, and being in both lists would tell the model two things.
+  const selectedSet = new Set(selected);
+  const adjacent = normalizeSkillList(input.adjacentKeywords).filter((k) => !selectedSet.has(k));
+  const roleFamily = input.roleFamily ?? null;
+
+  const [[profileRow], bulletRows, skillRows] = await Promise.all([
+    db.select().from(resumeProfile).orderBy(asc(resumeProfile.id)).limit(1),
+    db
+      .select({
+        id: resumeBullets.id,
+        text: resumeBullets.text,
+        skills: resumeBullets.skills,
+        roleFamily: resumeBullets.roleFamily,
+        company: resumeBullets.company,
+        embedding: resumeBullets.embedding,
+      })
+      .from(resumeBullets),
+    // For the post-generation defence notes: anything the résumé claims that
+    // this list does not support is worth checking before submitting.
+    db.select({ skill: masterSkills.skill }).from(masterSkills),
+  ]);
+
+  const profile = withProfileDefaults(profileRow ?? null);
+  const corpusBullets: CorpusBullet[] = bulletRows.map((r) => ({
+    ...r,
+    embedding: r.embedding ?? null,
+  }));
+
+  // Retrieval sees BOTH lists. An adjacent-only keyword still pulls the nearest
+  // real bullet, and that bullet is exactly the adjacent experience the
+  // generator has to write about instead of the technology.
+  const retrievalKeywords = [...selected, ...adjacent];
+
+  // Embed the keywords as the retrieval query (best-effort).
+  let jdEmbedding: number[] | null = null;
+  if (retrievalKeywords.length > 0) {
+    const embedder = await llmEmbedder();
+    if (embedder) {
+      try {
+        jdEmbedding = await embedder.embed(retrievalKeywords.join(', '));
+      } catch {
+        jdEmbedding = null;
+      }
+    }
+  }
+
+  const ranked = rankCorpusBullets({
+    bullets: corpusBullets,
+    jdEmbedding,
+    selectedKeywords: retrievalKeywords,
+    roleFamily,
+  });
+  const sourceBullets: CorpusSourceBullet[] = ranked.map((r) => ({
+    text: r.text,
+    company: r.company,
+  }));
+
+  return {
+    inputs: {
+      selectedKeywords: selected,
+      adjacentKeywords: adjacent,
+      bullets: sourceBullets,
+      profile,
+      masterSkills: skillRows.map((r) => r.skill),
+    },
+    usedBullets: ranked.length,
+  };
 }
 
 export const resumesRouter = createTRPCRouter({
@@ -357,96 +481,77 @@ export const resumesRouter = createTRPCRouter({
     }),
 
   /**
-   * Generate a résumé from the corpus for a pasted JD + the user-selected
-   * keywords: retrieve the most relevant real bullets (semantic + keyword),
-   * then synthesize an aggressive-but-coherent one-page LaTeX résumé. Uses the
-   * base résumé as the format when one exists, else a default template. Without
-   * an OpenAI key it returns just the template (`source: 'base'`).
+   * STAGE A — plan the résumé for a pasted JD + the user-selected keywords, and
+   * hand the plan back for approval before any prose exists.
+   *
+   * Cheap by design: one small call that says which courses to show, what the
+   * skills rows are called, and where each keyword is going to live. Finding out
+   * here that a keyword has no honest home beats generating a whole résumé the
+   * owner then rejects.
+   */
+  outlineFromCorpus: publicProcedure
+    .input(outlineFromCorpusInput)
+    .mutation(async ({ ctx, input }) => {
+      const material = await gatherCorpusMaterial(ctx.db, input);
+      const coursePool = material.inputs.profile.coursework;
+      const chat = await tailorChat();
+      // No key: hand back the template's own outline rather than an error, so the
+      // checkpoint — and the untailored draft behind it — still works on a fresh
+      // clone. Stage B answers the same way, so the flow stays whole.
+      if (!chat) {
+        const fallback = placeholderPlan(material.inputs.profile, material.inputs.masterSkills);
+        return {
+          source: 'base' as const,
+          outline: {
+            coursework: fallback.coursework,
+            skills: fallback.skills,
+            placements: [],
+          },
+          issues: [],
+          repairs: [],
+          attempts: 0,
+          usedBullets: material.usedBullets,
+          coursePool,
+        };
+      }
+      const result = await outlineFromCorpus(
+        { title: input.jobTitle, company: input.company },
+        material.inputs,
+        chat,
+        { maxAttempts: input.maxAttempts },
+      );
+      return {
+        source: 'llm' as const,
+        outline: result.outline,
+        issues: result.issues,
+        repairs: result.repairs,
+        attempts: result.attempts,
+        usedBullets: material.usedBullets,
+        /** The pool the owner may re-pick from while reviewing. */
+        coursePool,
+      };
+    }),
+
+  /**
+   * STAGE B — write the bullets for an approved outline and render the document
+   * ourselves.
+   *
+   * The stored base résumé deliberately no longer drives this (#190): an
+   * arbitrary LaTeX document has no slots to render into, so the format is the
+   * fixed template and the base row is reference material the owner keeps.
+   * Without an OpenAI key the untailored template comes back (`source: 'base'`).
    */
   tailorFromCorpus: publicProcedure
     .input(tailorFromCorpusInput)
     .mutation(async ({ ctx, input }) => {
-      const selected = normalizeSkillList(input.selectedKeywords);
-      // Disjoint even if the client sends overlap: a keyword the corpus backs is
-      // claimable, and being in both lists would tell the model two things.
-      const selectedSet = new Set(selected);
-      const adjacent = normalizeSkillList(input.adjacentKeywords).filter(
-        (k) => !selectedSet.has(k),
-      );
-      const roleFamily = input.roleFamily ?? null;
-
-      const [[profileRow], [base], bulletRows, skillRows] = await Promise.all([
-        ctx.db.select().from(resumeProfile).orderBy(asc(resumeProfile.id)).limit(1),
-        ctx.db
-          .select({ content: resumes.content })
-          .from(resumes)
-          .where(eq(resumes.kind, 'base'))
-          .orderBy(asc(resumes.id))
-          .limit(1),
-        ctx.db
-          .select({
-            id: resumeBullets.id,
-            text: resumeBullets.text,
-            skills: resumeBullets.skills,
-            roleFamily: resumeBullets.roleFamily,
-            company: resumeBullets.company,
-            embedding: resumeBullets.embedding,
-          })
-          .from(resumeBullets),
-        // For the post-generation defence notes: anything the résumé claims
-        // that this list does not support is worth checking before submitting.
-        ctx.db.select({ skill: masterSkills.skill }).from(masterSkills),
-      ]);
-
-      const profile = withProfileDefaults(profileRow ?? null);
-      const baseTemplate = base?.content?.trim() ? base.content : buildDefaultTemplate(profile);
-      const corpusBullets: CorpusBullet[] = bulletRows.map((r) => ({
-        ...r,
-        embedding: r.embedding ?? null,
-      }));
-
-      // Retrieval sees BOTH lists. An adjacent-only keyword still pulls the
-      // nearest real bullet, and that bullet is exactly the adjacent experience
-      // the generator has to write about instead of the technology.
-      const retrievalKeywords = [...selected, ...adjacent];
-
-      // Embed the keywords as the retrieval query (best-effort).
-      let jdEmbedding: number[] | null = null;
-      if (retrievalKeywords.length > 0) {
-        const embedder = await llmEmbedder();
-        if (embedder) {
-          try {
-            jdEmbedding = await embedder.embed(retrievalKeywords.join(', '));
-          } catch {
-            jdEmbedding = null;
-          }
-        }
-      }
-
-      const ranked = rankCorpusBullets({
-        bullets: corpusBullets,
-        jdEmbedding,
-        selectedKeywords: retrievalKeywords,
-        roleFamily,
-      });
-      const sourceBullets: CorpusSourceBullet[] = ranked.map((r) => ({
-        text: r.text,
-        company: r.company,
-      }));
-
+      const material = await gatherCorpusMaterial(ctx.db, input);
       const chat = await tailorChat();
       if (chat) {
         try {
           const result = await tailorFromCorpus(
-            baseTemplate,
             { title: input.jobTitle, company: input.company },
-            {
-              selectedKeywords: selected,
-              adjacentKeywords: adjacent,
-              bullets: sourceBullets,
-              profile,
-              masterSkills: skillRows.map((r) => r.skill),
-            },
+            material.inputs,
+            input.outline,
             chat,
             { maxAttempts: input.maxAttempts },
           );
@@ -454,7 +559,7 @@ export const resumesRouter = createTRPCRouter({
             source: 'llm' as const,
             latex: result.latex,
             report: result.report,
-            usedBullets: ranked.length,
+            usedBullets: material.usedBullets,
           };
         } catch (err) {
           console.warn('resumes.tailorFromCorpus: LLM generation failed, returning template', err);
@@ -462,9 +567,9 @@ export const resumesRouter = createTRPCRouter({
       }
       return {
         source: 'base' as const,
-        latex: baseTemplate,
+        latex: buildDefaultTemplate(material.inputs.profile),
         report: null,
-        usedBullets: ranked.length,
+        usedBullets: material.usedBullets,
       };
     }),
 

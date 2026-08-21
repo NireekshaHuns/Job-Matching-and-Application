@@ -388,7 +388,10 @@ export default function JobsPage() {
               onRetry={() => jobsQuery.refetch()}
             />
           )}
-          {!loading && jobs.length === 0 && (
+          {/* Only when the query actually succeeded: a failed load has no idea
+              whether the filters match anything, and saying so blames the user
+              for the outage sitting right above it. */}
+          {!loading && !jobsQuery.isError && jobs.length === 0 && (
             <EmptyState title="No jobs match your filters yet.">
               Widen the date range or clear a filter — or hit <strong>Find new jobs</strong> to
               fetch fresh postings.

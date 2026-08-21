@@ -2,9 +2,10 @@
 
 /**
  * Settings — the fixed inputs the tailoring engine uses: the candidate profile
- * (identity + real metrics/stack), the skills superset, and the base résumé
- * LaTeX format. Résumés + bullets are uploaded in the Studio, not hand-entered
- * here. Plain Tailwind to match the current app.
+ * (identity + real metrics/stack + coursework pool) and the skills superset.
+ * Stored base résumés are reference/corpus material only; tailoring renders from
+ * the built-in template. Résumés + bullets are uploaded in the Studio, not
+ * hand-entered here. Plain Tailwind to match the current app.
  */
 import { useState } from 'react';
 import { Chip } from '@/components/chip';
@@ -76,12 +77,16 @@ const PROFILE_FIELDS = [
   ['Graduation', 'gradDate', false],
   ['Certification text', 'certText', false],
   ['Certification URL', 'certUrl', false],
+  ['Project name', 'projectName', false],
+  ['Project URL', 'projectUrl', false],
   ['Real / verified metrics (preferred before inventing)', 'knownMetrics', true],
   ['Confirmed stack & domain notes', 'stackNotes', true],
 ] as const;
 
 type ProfileKey = (typeof PROFILE_FIELDS)[number][1];
 type ProfileValues = Record<ProfileKey, string>;
+/** Coursework is a list, not a text field, so it rides alongside `ProfileValues`. */
+type ProfileSave = ProfileValues & { coursework: string[] };
 
 function ProfileSection() {
   const utils = trpc.useUtils();
@@ -103,6 +108,7 @@ function ProfileSection() {
       ) : profile.data ? (
         <ProfileForm
           initial={profile.data}
+          initialCoursework={profile.data.coursework}
           saving={save.isPending}
           error={save.error?.message}
           onSave={(values) => save.mutate(values)}
@@ -116,18 +122,23 @@ function ProfileSection() {
 
 function ProfileForm({
   initial,
+  initialCoursework,
   onSave,
   saving,
   error,
 }: {
   initial: Record<ProfileKey, string | null>;
-  onSave: (values: ProfileValues) => void;
+  initialCoursework: string[];
+  onSave: (values: ProfileSave) => void;
   saving: boolean;
   error?: string;
 }) {
   const seed = () =>
     Object.fromEntries(PROFILE_FIELDS.map(([, key]) => [key, initial[key] ?? ''])) as ProfileValues;
   const [values, setValues] = useState<ProfileValues>(seed);
+  // One course per line. A chip editor would look better, but this matches how
+  // the metrics and stack notes are edited and it is the honest ten lines.
+  const [courses, setCourses] = useState(() => initialCoursework.join('\n'));
 
   return (
     <div className="flex flex-col gap-2">
@@ -154,8 +165,30 @@ function ProfileForm({
           </label>
         ))}
       </div>
+
+      <label className="text-muted flex flex-col gap-1 text-xs">
+        Coursework pool — every course you actually took, one per line
+        <textarea
+          className={`${inputCls} min-h-32`}
+          value={courses}
+          onChange={(e) => setCourses(e.target.value)}
+          placeholder={'Distributed Systems\nOperating Systems\nData Structures & Algorithms'}
+        />
+        <span className="text-faint">
+          Tailoring picks and orders the most relevant few of these per job and can never invent
+          one. The order here is only the fallback.
+        </span>
+      </label>
+
       <div className="flex items-center gap-2">
-        <button type="button" className={btnCls} onClick={() => onSave(values)} disabled={saving}>
+        <button
+          type="button"
+          className={btnCls}
+          onClick={() =>
+            onSave({ ...values, coursework: courses.split('\n').filter((c) => c.trim() !== '') })
+          }
+          disabled={saving}
+        >
           {saving ? 'Saving…' : 'Save profile'}
         </button>
         <MutationError message={error} />
@@ -264,10 +297,11 @@ function BaseResumesSection({ resumes }: { resumes: BaseResume[] }) {
     <section className="border-border rounded-lg border p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Base résumé format</h2>
+          <h2 className="text-lg font-semibold">Base résumé (reference)</h2>
           <p className="text-muted text-sm">
-            Optional LaTeX template. When set, the Studio uses it as the exact format to fill; leave
-            empty to use the built-in one-page template.
+            Kept for your reference and as corpus material. Tailoring no longer renders from it: the
+            Studio fills the built-in one-page template, because an arbitrary LaTeX document has no
+            slots to fill.
           </p>
         </div>
         <button type="button" className={btnCls} onClick={() => setAdding((v) => !v)}>
@@ -278,7 +312,7 @@ function BaseResumesSection({ resumes }: { resumes: BaseResume[] }) {
       {adding && <BaseResumeEditor onDone={() => setAdding(false)} />}
 
       {resumes.length === 0 && !adding ? (
-        <EmptyState title="No base résumé yet. Add your LaTeX template to enable tailoring." />
+        <EmptyState title="No base résumé stored. Tailoring works without one." />
       ) : (
         <ul className="flex flex-col gap-2">
           {resumes.map((r) => (
