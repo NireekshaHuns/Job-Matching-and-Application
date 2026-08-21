@@ -13,6 +13,7 @@ import { KeywordPicker } from '@/components/keyword-picker';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState, ErrorState } from '@/components/page-state';
 import { ResumeSplit } from '@/components/resume-split';
+import { PlanReview } from '@/components/plan-review';
 import { TailoringReport } from '@/components/tailoring-report';
 import {
   buildPickerGroups,
@@ -92,7 +93,9 @@ export default function StudioPage() {
   // it stays the user's choice rather than a refetch.
   const [gradedFor, setGradedFor] = useState<RoleFamily | ''>('');
 
-  // Step 3 — generate + preview
+  // Step 3 — plan, approve, generate + preview
+  const outlineM = trpc.resumes.outlineFromCorpus.useMutation();
+  type Outline = NonNullable<typeof outlineM.data>['outline'];
   const tailor = trpc.resumes.tailorFromCorpus.useMutation();
   const [latex, setLatex] = useState<string | null>(null);
   const [genId, setGenId] = useState(0);
@@ -210,15 +213,25 @@ export default function StudioPage() {
     );
   }
 
-  function onGenerate() {
+  /** The target both stages are generated against. */
+  const target = () => ({
+    jobTitle,
+    company,
+    selectedKeywords: split.defensible,
+    adjacentKeywords: split.adjacentOnly,
+    roleFamily: roleFamily || undefined,
+  });
+
+  /** Stage A. Clears any previous résumé: it belongs to the old plan. */
+  function onPlan() {
+    setLatex(null);
+    outlineM.mutate(target());
+  }
+
+  /** Stage B, against the outline as approved (edits included). */
+  function onApprove(outline: Outline) {
     tailor.mutate(
-      {
-        jobTitle,
-        company,
-        selectedKeywords: split.defensible,
-        adjacentKeywords: split.adjacentOnly,
-        roleFamily: roleFamily || undefined,
-      },
+      { ...target(), outline },
       {
         onSuccess: (data) => {
           setLatex(data.latex);
@@ -498,16 +511,26 @@ export default function StudioPage() {
           )}
         </Section>
 
-        {/* Step 3 — generate */}
-        <Section step={3} title="Generate & preview" hint="One page, ATS-ready, yours to edit.">
+        {/* Step 3 — plan, approve, generate */}
+        <Section
+          step={3}
+          title="Plan, approve & generate"
+          hint="You see where every keyword lands before a word is written."
+        >
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               className={primaryBtn}
-              disabled={tailor.isPending || jobTitle.trim() === '' || !hasCorpus || staleGrades}
-              onClick={onGenerate}
+              disabled={
+                outlineM.isPending ||
+                tailor.isPending ||
+                jobTitle.trim() === '' ||
+                !hasCorpus ||
+                staleGrades
+              }
+              onClick={onPlan}
             >
-              {tailor.isPending ? 'Tailoring your résumé…' : '✦ Generate résumé'}
+              {outlineM.isPending ? 'Planning your résumé…' : '✦ Plan résumé'}
             </button>
             {!hasCorpus && (
               <span className="text-muted text-xs">Upload at least one résumé first.</span>
@@ -525,6 +548,23 @@ export default function StudioPage() {
               </span>
             )}
           </div>
+
+          {outlineM.isError && <ErrorState message={outlineM.error.message} />}
+
+          {/* The approval checkpoint. Keyed on the outline so a re-plan starts
+              from the new plan rather than keeping edits made to the old one. */}
+          {outlineM.data && (
+            <PlanReview
+              key={outlineM.data.attempts + JSON.stringify(outlineM.data.outline.placements)}
+              outline={outlineM.data.outline}
+              coursePool={outlineM.data.coursePool}
+              mustHave={split.defensible}
+              issues={outlineM.data.issues}
+              pending={tailor.isPending}
+              onApprove={onApprove}
+              onReplan={onPlan}
+            />
+          )}
 
           {/* Celebratory confirmation once a résumé comes back. */}
           {tailor.data && latex != null && (

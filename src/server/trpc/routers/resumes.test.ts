@@ -6,6 +6,7 @@ import {
   addSkillInput,
   extractJdKeywordsInput,
   normalizeSkillList,
+  outlineFromCorpusInput,
   tailorFromCorpusInput,
   upsertBaseResumeInput,
 } from './resumes';
@@ -90,12 +91,24 @@ describe('settings input schemas', () => {
     expect(extractJdKeywordsInput.safeParse({ jdText: '' }).success).toBe(false);
   });
 
-  it('tailorFromCorpusInput defaults adjacentKeywords to empty', () => {
+  it('outlineFromCorpusInput defaults adjacentKeywords to empty', () => {
     // The generator treats a missing list as "nothing to gesture at", so the
     // default has to be the empty list and not undefined.
-    const parsed = tailorFromCorpusInput.parse({ jobTitle: 'SWE' });
+    const parsed = outlineFromCorpusInput.parse({ jobTitle: 'SWE' });
     expect(parsed.adjacentKeywords).toEqual([]);
     expect(parsed.selectedKeywords).toEqual([]);
+  });
+
+  it('tailorFromCorpusInput demands the approved outline', () => {
+    // Stage B without an outline is the one-shot generator this ticket removed;
+    // the schema is what stops it coming back by accident.
+    expect(tailorFromCorpusInput.safeParse({ jobTitle: 'SWE' }).success).toBe(false);
+    const withOutline = tailorFromCorpusInput.parse({
+      jobTitle: 'SWE',
+      outline: { skills: [{ label: 'Languages', items: ['python'] }] },
+    });
+    expect(withOutline.outline.coursework).toEqual([]);
+    expect(withOutline.outline.placements).toEqual([]);
   });
 
   it('upsertBaseResumeInput requires label + content; id optional', () => {

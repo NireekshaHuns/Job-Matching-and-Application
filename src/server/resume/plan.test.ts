@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPlanCoverage,
+  checkResumeOutline,
   checkResumePlan,
   describeSlot,
-  parseResumePlan,
+  mergeOutline,
+  parseBulletsPlan,
+  parseResumeOutline,
   SKILL_ROW_RANGE,
   type PlanContext,
+  type ResumeOutline,
   type ResumePlan,
 } from './plan';
 import { BULLET_CHARS, PROJECT_BULLET_CHARS } from './rubric';
@@ -71,36 +75,162 @@ const rules = (check: ReturnType<typeof checkResumePlan>) => check.issues.map((i
 const errors = (check: ReturnType<typeof checkResumePlan>) =>
   check.issues.filter((i) => i.severity === 'error');
 
-describe('parseResumePlan', () => {
-  const minimal = {
-    roles: RESUME_ROLES.map((r) => ({ roleId: r.id, bullets: ['Shipped a thing.'] })),
-    project: { stack: 'Next.js', bullets: ['Built a thing.'] },
-    skills: [{ label: 'Languages', items: ['Python'] }],
-  };
+/** A valid outline: the stage-A half of the fixture above. */
+function validOutline(over: Partial<ResumeOutline> = {}): ResumeOutline {
+  const plan = validPlan();
+  return { coursework: plan.coursework, skills: plan.skills, placements: [], ...over };
+}
 
-  it('finds the plan inside fences and chatter', () => {
-    const plan = parseResumePlan(
+describe('parseResumeOutline', () => {
+  const minimal = { skills: [{ label: 'Languages', items: ['Python'] }] };
+
+  it('finds the outline inside fences and chatter', () => {
+    const outline = parseResumeOutline(
       `Sure! Here is the plan:\n\`\`\`json\n${JSON.stringify(minimal)}\n\`\`\`\nHope that helps.`,
     );
-    expect(plan.roles).toHaveLength(RESUME_ROLES.length);
     // Absent optional fields become empty, so the checker never sees undefined.
-    expect(plan.coursework).toEqual([]);
-    expect(plan.placements).toEqual([]);
+    expect(outline.coursework).toEqual([]);
+    expect(outline.placements).toEqual([]);
   });
 
   it('throws when there is no JSON object at all', () => {
-    expect(() => parseResumePlan('I cannot help with that.')).toThrow(/No JSON object/);
+    expect(() => parseResumeOutline('I cannot help with that.')).toThrow(/No JSON object/);
   });
 
-  it('rejects a key the plan has no slot for', () => {
+  it('rejects a key the outline has no slot for', () => {
     // The exact failure this design exists to prevent: an invented section is a
     // loud parse error rather than a field that is quietly ignored.
-    const raw = JSON.stringify({ ...minimal, certifications: ['AWS SAA'] });
-    expect(() => parseResumePlan(raw)).toThrow();
+    expect(() =>
+      parseResumeOutline(JSON.stringify({ ...minimal, certifications: ['AWS SAA'] })),
+    ).toThrow();
+  });
+
+  it('rejects bullet prose, which belongs to the next stage', () => {
+    const withBullets = {
+      ...minimal,
+      roles: [{ roleId: 'riskcast', bullets: ['Shipped a thing'] }],
+    };
+    expect(() => parseResumeOutline(JSON.stringify(withBullets))).toThrow();
+  });
+});
+
+describe('parseBulletsPlan', () => {
+  const minimal = {
+    roles: RESUME_ROLES.map((r) => ({ roleId: r.id, bullets: ['Shipped a thing.'] })),
+    project: { stack: 'Next.js', bullets: ['Built a thing.'] },
+  };
+
+  it('parses the prose half', () => {
+    expect(parseBulletsPlan(JSON.stringify(minimal)).roles).toHaveLength(RESUME_ROLES.length);
+  });
+
+  it('rejects an attempt to re-decide the outline', () => {
+    // Stage B is handed an approved outline; a coursework line coming back from
+    // it is either noise or a silent override, and neither is welcome.
+    const withCoursework = { ...minimal, coursework: ['Distributed Systems'] };
+    expect(() => parseBulletsPlan(JSON.stringify(withCoursework))).toThrow();
   });
 
   it('rejects a plan with no roles', () => {
-    expect(() => parseResumePlan(JSON.stringify({ ...minimal, roles: [] }))).toThrow();
+    expect(() => parseBulletsPlan(JSON.stringify({ ...minimal, roles: [] }))).toThrow();
+  });
+});
+
+describe('mergeOutline', () => {
+  it('lets the approved outline win every field it owns', () => {
+    const outline = validOutline({ coursework: [POOL[1]] });
+    const bullets = parseBulletsPlan(
+      JSON.stringify({
+        roles: [{ roleId: RESUME_ROLES[0].id, bullets: ['Shipped a thing.'] }],
+        project: { stack: 'Next.js', bullets: ['Built a thing.'] },
+      }),
+    );
+    const merged = mergeOutline(outline, bullets);
+    expect(merged.coursework).toEqual([POOL[1]]);
+    expect(merged.skills).toEqual(outline.skills);
+    expect(merged.roles).toEqual(bullets.roles);
+  });
+});
+
+describe('checkResumeOutline', () => {
+  const home = (keyword: string, slot: ResumeOutline['placements'][number]['slot']) => ({
+    keyword,
+    slot,
+  });
+
+  it('passes an outline that gives every must-have keyword a home', () => {
+    const check = checkResumeOutline(
+      validOutline({
+        placements: [home('kafka', { kind: 'role', roleId: RESUME_ROLES[0].id, bulletIndex: 0 })],
+      }),
+      context({ mustHaveKeywords: ['kafka'] }),
+    );
+    expect(check.issues).toEqual([]);
+  });
+
+  it('re-prompts when a must-have keyword has no planned home', () => {
+    // The point of the checkpoint: this costs one cheap outline call instead of
+    // a whole generation the owner then has to reject.
+    const check = checkResumeOutline(
+      validOutline({ placements: [home('kafka', { kind: 'none', reason: 'no evidence' })] }),
+      context({ mustHaveKeywords: ['kafka', 'redis'] }),
+    );
+    const issue = check.issues.find((i) => i.rule === 'keyword-unplanned');
+    expect(issue?.retryable).toBe(true);
+    expect(issue?.message).toContain('kafka');
+    expect(issue?.message).toContain('redis');
+  });
+
+  it('drops a placement pointing at a role or row that does not exist', () => {
+    const check = checkResumeOutline(
+      validOutline({
+        placements: [
+          home('kafka', { kind: 'role', roleId: 'google', bulletIndex: 0 }),
+          home('redis', { kind: 'skills', label: 'Imaginary Row' }),
+        ],
+      }),
+      context(),
+    );
+    expect(check.issues.map((i) => i.rule)).toContain('placement-unknown-role');
+    expect(check.issues.map((i) => i.rule)).toContain('placement-unknown-row');
+    expect(check.outline.placements).toEqual([]);
+  });
+
+  it('clamps a bullet index past the end rather than losing the keyword', () => {
+    const check = checkResumeOutline(
+      validOutline({
+        placements: [
+          home('kafka', { kind: 'role', roleId: RESUME_ROLES[0].id, bulletIndex: 8 }),
+          home('redis', { kind: 'project', bulletIndex: 7 }),
+        ],
+      }),
+      context({ mustHaveKeywords: ['kafka', 'redis'] }),
+    );
+    expect(check.outline.placements[0].slot).toEqual({
+      kind: 'role',
+      roleId: RESUME_ROLES[0].id,
+      bulletIndex: RESUME_ROLES[0].bullets - 1,
+    });
+    expect(check.outline.placements[1].slot).toEqual({
+      kind: 'project',
+      bulletIndex: BULLET_BUDGET.projects - 1,
+    });
+    // Clamped, so both keywords still count as planned.
+    expect(check.issues.map((i) => i.rule)).not.toContain('keyword-unplanned');
+    expect(check.repairs).toHaveLength(2);
+  });
+
+  it('repairs the coursework and skills halves the same way a full plan does', () => {
+    const check = checkResumeOutline(
+      validOutline({
+        coursework: ['Advanced Machine Learning'],
+        skills: [{ label: 'Languages', items: ['python', 'rust'] }, ...validPlan().skills.slice(1)],
+      }),
+      context(),
+    );
+    expect(check.issues.map((i) => i.rule)).toContain('coursework-off-pool');
+    expect(check.issues.map((i) => i.rule)).toContain('skills-unsupported');
+    expect(check.outline.coursework).toHaveLength(COURSEWORK_SLOTS.min);
   });
 });
 
