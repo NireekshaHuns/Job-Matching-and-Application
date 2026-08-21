@@ -97,6 +97,9 @@ export default function StudioPage() {
   const outlineM = trpc.resumes.outlineFromCorpus.useMutation();
   type Outline = NonNullable<typeof outlineM.data>['outline'];
   const tailor = trpc.resumes.tailorFromCorpus.useMutation();
+  // Bumped on every plan, so re-planning starts from the new plan rather than
+  // keeping edits that were made to the old one.
+  const [planId, setPlanId] = useState(0);
   const [latex, setLatex] = useState<string | null>(null);
   const [genId, setGenId] = useState(0);
   const save = trpc.resumes.saveTailored.useMutation();
@@ -225,7 +228,7 @@ export default function StudioPage() {
   /** Stage A. Clears any previous résumé: it belongs to the old plan. */
   function onPlan() {
     setLatex(null);
-    outlineM.mutate(target());
+    outlineM.mutate(target(), { onSuccess: () => setPlanId((n) => n + 1) });
   }
 
   /** Stage B, against the outline as approved (edits included). */
@@ -555,7 +558,7 @@ export default function StudioPage() {
               from the new plan rather than keeping edits made to the old one. */}
           {outlineM.data && (
             <PlanReview
-              key={outlineM.data.attempts + JSON.stringify(outlineM.data.outline.placements)}
+              key={planId}
               outline={outlineM.data.outline}
               coursePool={outlineM.data.coursePool}
               mustHave={split.defensible}
@@ -563,6 +566,11 @@ export default function StudioPage() {
               pending={tailor.isPending}
               onApprove={onApprove}
               onReplan={onPlan}
+              note={
+                outlineM.data.source === 'base'
+                  ? 'No tailoring key set — approving shows the built-in template rather than generated bullets.'
+                  : null
+              }
             />
           )}
 

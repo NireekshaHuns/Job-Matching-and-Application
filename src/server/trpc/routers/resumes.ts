@@ -28,7 +28,7 @@ import {
   type CorpusSourceBullet,
   type CorpusTailorInputs,
 } from '@/server/resume/tailor';
-import { buildDefaultTemplate } from '@/server/resume/render';
+import { buildDefaultTemplate, placeholderPlan } from '@/server/resume/render';
 import type { DB } from '@/server/db';
 import { createTRPCRouter, publicProcedure } from '../trpc';
 
@@ -493,12 +493,26 @@ export const resumesRouter = createTRPCRouter({
     .input(outlineFromCorpusInput)
     .mutation(async ({ ctx, input }) => {
       const material = await gatherCorpusMaterial(ctx.db, input);
+      const coursePool = material.inputs.profile.coursework;
       const chat = await tailorChat();
+      // No key: hand back the template's own outline rather than an error, so the
+      // checkpoint — and the untailored draft behind it — still works on a fresh
+      // clone. Stage B answers the same way, so the flow stays whole.
       if (!chat) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: 'No tailoring key set — add OPENAI_TAILOR_API_KEY or OPENAI_API_KEY.',
-        });
+        const fallback = placeholderPlan(material.inputs.profile, material.inputs.masterSkills);
+        return {
+          source: 'base' as const,
+          outline: {
+            coursework: fallback.coursework,
+            skills: fallback.skills,
+            placements: [],
+          },
+          issues: [],
+          repairs: [],
+          attempts: 0,
+          usedBullets: material.usedBullets,
+          coursePool,
+        };
       }
       const result = await outlineFromCorpus(
         { title: input.jobTitle, company: input.company },
@@ -507,13 +521,14 @@ export const resumesRouter = createTRPCRouter({
         { maxAttempts: input.maxAttempts },
       );
       return {
+        source: 'llm' as const,
         outline: result.outline,
         issues: result.issues,
         repairs: result.repairs,
         attempts: result.attempts,
         usedBullets: material.usedBullets,
         /** The pool the owner may re-pick from while reviewing. */
-        coursePool: material.inputs.profile.coursework,
+        coursePool,
       };
     }),
 

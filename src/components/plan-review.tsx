@@ -64,6 +64,8 @@ export interface PlanReviewProps {
   pending: boolean;
   onApprove: (outline: ResumeOutline) => void;
   onReplan: () => void;
+  /** Caveat worth stating before approval, e.g. no tailoring key is set. */
+  note?: string | null;
 }
 
 export function PlanReview({
@@ -74,6 +76,7 @@ export function PlanReview({
   pending,
   onApprove,
   onReplan,
+  note = null,
 }: PlanReviewProps) {
   const [coursework, setCoursework] = useState<string[]>(outline.coursework);
   // One home per keyword: the model may list a keyword twice, but a review UI
@@ -189,6 +192,8 @@ export function PlanReview({
           ))}
         </ul>
       </div>
+
+      {note && <p className="mb-3 text-xs text-amber-700 dark:text-amber-400">{note}</p>}
 
       {issues.length > 0 && (
         <details className="border-border text-muted mb-3 rounded-lg border px-3 py-2 text-xs">
