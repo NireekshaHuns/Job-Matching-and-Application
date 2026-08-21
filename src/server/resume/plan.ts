@@ -12,7 +12,8 @@
  */
 import { z } from 'zod';
 import { containsKeyword } from './quality';
-import { COURSEWORK_SLOTS, RESUME_ROLES } from './template';
+import { BULLET_CHARS, PROJECT_BULLET_CHARS } from './rubric';
+import { BULLET_BUDGET, COURSEWORK_SLOTS, RESUME_ROLES, stripPlanMarkup } from './template';
 
 /** A model-supplied string: prose, sanitized and escaped at render time. */
 const planText = (max: number) => z.string().trim().min(1).max(max);
@@ -155,6 +156,16 @@ function skillSupported(known: readonly string[], item: string): boolean {
 }
 
 /**
+ * Printed length of a bullet: what the reader sees, not what the model sent.
+ * Markup is stripped because the renderer strips it too — a bullet padded to the
+ * band with `\textbf{}` wrappers is a short bullet, and the band is a proxy for
+ * how much of the line the words fill.
+ */
+function bulletLength(text: string): number {
+  return stripPlanMarkup(text).length;
+}
+
+/**
  * Repair what can be repaired, report what cannot.
  *
  * The split matters: a coursework entry outside the pool can simply be dropped,
@@ -172,6 +183,9 @@ export function checkResumePlan(plan: ResumePlan, ctx: PlanContext): PlanCheck {
   };
   const retry = (rule: string, message: string) =>
     issues.push({ rule, severity: 'error', retryable: true, message });
+  /** Worth saying, worth nothing to re-prompt on. Not a repair — nothing changed. */
+  const note = (rule: string, message: string) =>
+    issues.push({ rule, severity: 'warn', retryable: false, message });
 
   // --- coursework: canonicalize to the pool, top up, never retry ------------
   const poolByNormal = new Map(ctx.coursePool.map((c) => [normalizeCourse(c), c]));
@@ -244,7 +258,7 @@ export function checkResumePlan(plan: ResumePlan, ctx: PlanContext): PlanCheck {
   }
 
   // --- project -------------------------------------------------------------
-  const projectBudget = 2;
+  const projectBudget = BULLET_BUDGET.projects;
   if (plan.project.bullets.length > projectBudget) {
     repair('project-bullet-count', `Trimmed the project to ${projectBudget} bullets.`);
   } else if (plan.project.bullets.length < projectBudget) {
@@ -296,11 +310,64 @@ export function checkResumePlan(plan: ResumePlan, ctx: PlanContext): PlanCheck {
     );
   }
 
-  return {
-    plan: { coursework, roles, project, skills, placements: plan.placements },
-    issues,
-    repairs,
-  };
+  const checked: ResumePlan = { coursework, roles, project, skills, placements: plan.placements };
+
+  // --- footprint: two full lines, never a third -----------------------------
+  //
+  // Asymmetric on purpose. Over the band the bullet wraps to a third line and
+  // the page count is decided for us, so only the model can fix it — retry. Under
+  // the band the bullet just reads thin, and it still fits, so it is reported and
+  // not retried: a retry costs an API call, and the loop keeps the best attempt
+  // anyway, so re-prompting over a short bullet risks losing a good one.
+  const measured = [
+    ...checked.roles.flatMap((r) =>
+      r.bullets.map((text, i) => ({
+        where: `${r.roleId} bullet ${i + 1}`,
+        text,
+        band: BULLET_CHARS,
+      })),
+    ),
+    // The project's own floor is lower: the owner's real project bullets are
+    // shorter than the job ones, and a project entry is not held to the same
+    // footprint as a job.
+    ...checked.project.bullets.map((text, i) => ({
+      where: `project bullet ${i + 1}`,
+      text,
+      band: PROJECT_BULLET_CHARS,
+    })),
+  ];
+  for (const m of measured) {
+    const len = bulletLength(m.text);
+    if (len > m.band.max) {
+      retry(
+        'bullet-too-long',
+        `${m.where} is ${len} characters; ${m.band.max} is two full lines. Cut words, do not cut the achievement.`,
+      );
+    } else if (len < m.band.min) {
+      note(
+        'bullet-too-short',
+        `${m.where} is ${len} characters; ${m.band.min}-${m.band.max} fills the second line. Add substance, not filler.`,
+      );
+    }
+  }
+
+  // --- keywords: every corpus-backed must-have has to actually land ---------
+  //
+  // The old check was a warning on a coverage RATIO, which a résumé could pass
+  // while dropping the one keyword that mattered. Read off the plan's structure
+  // instead (see `buildPlanCoverage`), and gate on it — safe only because
+  // `mustHaveKeywords` arrives pre-filtered to what the corpus can defend.
+  const unplaced = buildPlanCoverage(checked, ctx.mustHaveKeywords)
+    .filter((p) => p.slots.length === 0)
+    .map((p) => p.keyword);
+  if (unplaced.length > 0) {
+    retry(
+      'keyword-missing',
+      `Never placed: ${unplaced.join(', ')}. Work each one into a bullet where the experience is real, or into a skills row.`,
+    );
+  }
+
+  return { plan: checked, issues, repairs };
 }
 
 // ---------------------------------------------------------------------------
